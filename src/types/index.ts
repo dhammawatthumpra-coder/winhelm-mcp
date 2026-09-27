@@ -86,6 +86,7 @@ export interface ServerConfig {
   customTools?: string[];
   corsOrigins?: string[] | boolean | string;
   searchExcludeDirs?: string[];
+  preferPwsh?: boolean;
 }
 
 // Group 1: File Safety & Archives

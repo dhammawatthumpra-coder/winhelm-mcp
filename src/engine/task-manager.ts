@@ -2,6 +2,7 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
+import { getPowerShellExecutable } from "./powershell-runner.js";
 
 export interface BackgroundTask {
   id: string;
@@ -72,9 +73,11 @@ export class TaskManager {
       "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new(); " +
       "$OutputEncoding = [System.Text.UTF8Encoding]::new(); ";
     const fullCommand = utf8Setup + command;
+    const preferPwsh = config.preferPwsh !== false;
+    const executable = getPowerShellExecutable(preferPwsh);
 
     const child = spawn(
-      "powershell.exe",
+      executable,
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", fullCommand],
       {
         cwd,

@@ -43,5 +43,6 @@ export const DEFAULT_CONFIG: ServerConfig = {
   rateLimitPerMinute: 120,
   profile: "full",
   searchExcludeDirs: ["dist", "logs", "build", "out"],
+  preferPwsh: true,
 };
 
