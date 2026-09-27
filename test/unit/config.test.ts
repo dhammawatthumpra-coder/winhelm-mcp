@@ -200,4 +200,32 @@ describe("ConfigManager and Security Policy", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
     ConfigManager.resetInstance();
   });
+
+  it("should have start.ps1 default to 127.0.0.1 and block non-loopback bindings without auth", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { execSync } = await import("node:child_process");
+
+    const startPs1Path = path.resolve("./start.ps1");
+    const content = await fs.readFile(startPs1Path, "utf-8");
+
+    // 1. Verify default parameter is 127.0.0.1
+    assert.match(content, /\[string\]\$HostAddr\s*=\s*["']127\.0\.0\.1["']/);
+
+    // 2. Verify security gate exists
+    assert.match(content, /\$isLoopback\s*=/);
+    assert.match(content, /SECURITY ERROR.*Binding to non-loopback host/);
+
+    // 3. Execute powershell test without auth -> must exit 1
+    try {
+      execSync("powershell.exe -ExecutionPolicy Bypass -File .\\start.ps1 -HostAddr 0.0.0.0", {
+        stdio: "pipe",
+      });
+      assert.fail("Expected start.ps1 with 0.0.0.0 and no auth to exit with non-zero code");
+    } catch (err: any) {
+      assert.strictEqual(err.status, 1);
+      const output = (err.stdout?.toString() || "") + (err.stderr?.toString() || "");
+      assert.ok(output.includes("SECURITY ERROR"));
+    }
+  });
 });
