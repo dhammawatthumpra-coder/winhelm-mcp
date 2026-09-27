@@ -40,6 +40,8 @@ Thumbs.db
 .DS_Store
 Desktop.ini
 
-# Local personal scripts
+# Local personal scripts and configs
 start-funnel.ps1
 *.local.ps1
+*.local.json
+winhelm.local.json

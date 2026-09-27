@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CORS Hardening**: Restricted CORS default origins to localhost / loopback interfaces (`127.0.0.1`, `[::1]`, and active port origins) instead of wildcard `*`.
 - **Console Request Log Sanitization**: Updated `Logger.req()` to mask sensitive tokens and credentials in URL query parameters using `sanitizeText()` prior to log string assembly, preserving ANSI color codes in console output.
 - **Hardened `start.ps1` & Host Safety Gate**: Changed default `$HostAddr` parameter in `start.ps1` from `0.0.0.0` to `127.0.0.1`. Added a mandatory security validation gate that blocks execution with exit code 1 if a non-loopback interface (e.g. `0.0.0.0`) is requested without an authentication token (via `-Auth`, environment variable, or config file).
+- **Reverse Proxy Support (`trust proxy: loopback`)**: Configured Express `trust proxy` to `"loopback"` so rate limiting and request logging receive client's real IP via `X-Forwarded-For` through Tailscale Funnel and local tunnel reverse proxies.
+- **Timing Attack Mitigation**: Replaced standard string equality comparison for Bearer token and browser authentication with `crypto.timingSafeEqual` with buffer length validation (`safeCompare`) to eliminate timing side-channel attacks.
+- **Markdown Link & XSS Sanitization**: Hardened `formatInline()` across PDF generation and interactive file preview by sanitizing and neutralizing dangerous link schemes (`javascript:`, `vbscript:`, `data:`).
+- **Request Logger Ingestion for Document Previews**: Removed `/preview` endpoint from internal polling filter so document preview access is captured in terminal and file request logs.
+- **Local Personal Config Isolation**: Added `.gitignore` pattern for `*.local.json` and `winhelm.local.json`, allowing machines to configure full-drive access without risking accidental commits to public repositories.
 
 ### Added
 - **`--config <path>` Flag**: Added ability to load configuration directly from any specified JSON path, bypassing default search candidates for multi-project isolation. Includes automatic UTF-8 BOM stripping.
