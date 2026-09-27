@@ -23,12 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--config <path>` Flag**: Added ability to load configuration directly from any specified JSON path, bypassing default search candidates for multi-project isolation. Includes automatic UTF-8 BOM stripping.
 - **Session Non-Persistence Mode**: CLI overrides (`--allowed-dirs`, `--auth`, `--profile`, `--tools`, `--read-only`) now default to in-memory application without mutating configuration files on disk (`persist = false`). Added `--persist` flag for opt-in disk persistence.
 - **Enhanced `start.ps1` Parameters**: Added `-Config`, `-Tools`, `-ReadOnly`, and `-NoPersist` switches for complete parity with CLI options.
+- **PowerShell 7+ (`pwsh`) Fast Fallback**: Automatically detects and leverages `pwsh.exe` for reduced process spawn overhead while preserving 100% backward compatibility via cached fallback to Windows PowerShell (`powershell.exe`). Configurable via `preferPwsh` config option.
+- **Build & Log Artifact Search Exclusion**: Automatically excludes `dist/`, `logs/`, `build/`, `out/`, and dot-folders (`.serena/`, `.git/`) from `file_search` and recursive directory scans, with configurable override via `searchExcludeDirs`.
+- **Gateway Session Lifecycle & LRU Eviction**: Added idle session eviction (`sessionIdleTimeoutMs`, default 45m) and maximum concurrent session cap (`maxConcurrentSessions`, default 100) with least-recently-used (LRU) pruning in both Streamable HTTP and SSE gateways.
 
 ### Changed
 - Refactored `ConfigManager.updateConfig()` to default to `persist = false` for safer runtime overrides and test execution.
 
 ### Tests
-- Expanded automated test coverage from 68 tests across 25 suites to **79 automated tests across 26 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, and `start.ps1` loopback defaults and safety enforcement.
+- Expanded automated test coverage from 68 tests across 25 suites to **86 automated tests across 27 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, `start.ps1` loopback defaults and safety enforcement, pwsh detection and fallback, file search directory exclusion, and gateway session idle/LRU lifecycle eviction.
 
 ---
 
