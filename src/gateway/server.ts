@@ -67,8 +67,26 @@ export function createServer(options: ServerOptions): {
     return cachedGpuInfo;
   }
 
-  // CORS for remote clients and web frontends
-  app.use(cors({ origin: "*" }));
+  // CORS configuration: restrict external web origins by default to prevent DNS-rebinding
+  const corsOption = config.corsOrigins;
+  if (corsOption === true || corsOption === "*") {
+    app.use(cors({ origin: "*" }));
+  } else if (Array.isArray(corsOption) || typeof corsOption === "string") {
+    app.use(cors({ origin: corsOption }));
+  } else {
+    // Default: permit local requests and loopback origins, preventing external DNS-rebinding attacks
+    app.use(
+      cors({
+        origin: (origin, callback) => {
+          if (!origin) return callback(null, true);
+          if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            return callback(null, true);
+          }
+          return callback(new Error("CORS origin not allowed by WinHelm security policy"));
+        },
+      })
+    );
+  }
 
   // Detailed Request Logger Middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -99,24 +117,35 @@ export function createServer(options: ServerOptions): {
   if (authToken) {
     logger.security("Bearer authentication guard is ACTIVE");
     app.use((req: Request, res: Response, next: NextFunction) => {
-      // Allow health check and web dashboard to be viewed locally
-      if (
-        req.path === "/health" ||
-        req.path === "/" ||
-        req.path === "/dashboard" ||
-        req.path === "/preview" ||
-        req.path.startsWith("/api/monitor")
-      ) {
+      // Allow only lightweight public endpoints: health check and basic dashboard shell
+      if (req.path === "/health" || req.path === "/" || req.path === "/dashboard") {
         return next();
       }
 
+      // 1. Check standard Authorization header
       const authHeader = req.headers.authorization;
-      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
-        logger.security("Unauthorized request blocked", `Path: ${req.path} | IP: ${req.ip}`);
-        res.status(401).json({ error: "Unauthorized: Invalid or missing Bearer token" });
-        return;
+      if (authHeader && authHeader === `Bearer ${authToken}`) {
+        return next();
       }
-      next();
+
+      // 2. Fallback for browser dashboard & preview: read token from query param (?token=... or ?auth=...) or cookie
+      const queryToken = (req.query.token || req.query.auth) as string | undefined;
+      const cookieHeader = req.headers.cookie;
+      let cookieToken: string | undefined;
+      if (cookieHeader) {
+        const match = cookieHeader.match(/(?:^|;\s*)(?:authToken|token|auth)=([^;]+)/);
+        if (match) {
+          cookieToken = decodeURIComponent(match[1]);
+        }
+      }
+
+      const browserToken = queryToken || cookieToken;
+      if (browserToken && browserToken === authToken) {
+        return next();
+      }
+
+      logger.security("Unauthorized request blocked", `Path: ${req.path} | IP: ${req.ip}`);
+      res.status(401).json({ error: "Unauthorized: Invalid or missing Bearer token" });
     });
   } else {
     logger.info("Public network mode active (No auth token set)");

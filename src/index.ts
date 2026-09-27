@@ -24,8 +24,9 @@ Usage:
   winhelm [options]
 
 Options:
+  --config <path>       Load configuration from a specific JSON file (e.g. project-specific config)
   --port <number>       Port to listen on (default: 8788 or PORT env)
-  --host <string>       Host interface (default: 0.0.0.0 or HOST env)
+  --host <string>       Host interface (default: 127.0.0.1 or HOST env)
   --profile, -p <name>  Tool profile: minimal (6), core (15), dev (28), sysadmin (37), full (38) (default: full)
   --stdio               Run in stdio mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor)
   --transport <type>    Transport mode: http (default) or stdio
@@ -33,6 +34,8 @@ Options:
   --read-only           Enable read-only mode (block mutating actions)
   --allowed-dirs <list> Comma-separated allowed directories (e.g. "D:\\mcp,C:\\Projects")
   --tools <list>        Explicit comma-separated tools to load or +tool/-tool modifiers
+  --no-persist          Do not persist CLI overrides to config file (default behavior)
+  --persist             Persist CLI overrides back to config file
   --help, -h            Show this help message
 `);
   process.exit(0);
@@ -45,11 +48,13 @@ async function main() {
     console.log = (...a: any[]) => console.error(...a);
   }
 
-  const configManager = ConfigManager.getInstance();
-  await configManager.init();
+  const CONFIG_ARG = getArg("--config");
+  const NO_PERSIST = args.includes("--no-persist");
+  const configManager = ConfigManager.getInstance(CONFIG_ARG);
+  await configManager.init(CONFIG_ARG);
 
   const PORT = parseInt(getArg("--port", process.env.PORT || "8788")!, 10);
-  const HOST = getArg("--host", process.env.HOST || "0.0.0.0")!;
+  const HOST = getArg("--host", process.env.HOST || "127.0.0.1")!;
   const AUTH_TOKEN = getArg("--auth", process.env.MCP_AUTH_TOKEN || undefined);
   const ALLOWED_DIRS = getArg("--allowed-dirs", process.env.MCP_ALLOWED_DIRECTORIES || undefined);
   const READ_ONLY = args.includes("--read-only") || process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1";
@@ -78,7 +83,21 @@ async function main() {
       .filter(Boolean);
   }
   if (Object.keys(updates).length > 0) {
-    await configManager.updateConfig(updates);
+    // By default, CLI overrides are in-memory session-only unless --persist is explicitly passed
+    const shouldPersist = args.includes("--persist") && !NO_PERSIST;
+    await configManager.updateConfig(updates, shouldPersist);
+  }
+
+  // Security warning if bound to non-loopback with no authentication token
+  const isLoopback = HOST === "127.0.0.1" || HOST.toLowerCase() === "localhost" || HOST === "::1";
+  const effectiveAuthToken = AUTH_TOKEN || configManager.getConfig().authToken;
+  if (!isLoopback && !effectiveAuthToken && !IS_STDIO) {
+    console.warn("\n" + "=".repeat(78));
+    console.warn("⚠️  WARNING: Server is bound to a non-loopback address with NO authentication token.");
+    console.warn(`   Interface: ${HOST}:${PORT}`);
+    console.warn("   Anyone on this network can execute commands on this machine.");
+    console.warn("   To protect your system, specify --auth <token> or set MCP_AUTH_TOKEN in environment.");
+    console.warn("=".repeat(78) + "\n");
   }
 
   if (IS_STDIO) {

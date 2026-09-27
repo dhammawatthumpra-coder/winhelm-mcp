@@ -89,6 +89,50 @@ describe("New Enterprise Tools (Groups 1-4)", () => {
       assert.strictEqual(res.movedToRecycleBin, true);
       assert.strictEqual(existsSync(target), false);
     });
+
+    it("should reject copyFileOrDir and createZip when source is forbidden by allowedDirectories", async () => {
+      // Temporarily enforce allowedDirectories: [testDir]
+      await configManager.updateConfig({ allowedDirectories: [testDir] }, false);
+
+      const forbiddenSrc = "C:\\Windows\\System32\\drivers\\etc\\hosts";
+      const dstFile = path.join(testDir, "copied-hosts.txt");
+
+      // copyFileOrDir should reject forbidden source
+      await assert.rejects(
+        async () => {
+          await copyFileOrDir(forbiddenSrc, dstFile);
+        },
+        (err: Error) => {
+          return err.message.includes("forbidden by allowedDirectories policy");
+        }
+      );
+
+      // createZip should reject forbidden source directory
+      const forbiddenDir = "C:\\Windows\\System32";
+      const zipDst = path.join(testDir, "forbidden.zip");
+      await assert.rejects(
+        async () => {
+          await createZip(forbiddenDir, zipDst);
+        },
+        (err: Error) => {
+          return err.message.includes("forbidden by allowedDirectories policy");
+        }
+      );
+
+      // extractZip should reject forbidden zipPath
+      const forbiddenZip = "C:\\Windows\\forbidden.zip";
+      await assert.rejects(
+        async () => {
+          await extractZip(forbiddenZip, testDir);
+        },
+        (err: Error) => {
+          return err.message.includes("forbidden by allowedDirectories policy");
+        }
+      );
+
+      // Restore unrestricted config
+      await configManager.updateConfig({ allowedDirectories: [] }, false);
+    });
   });
 
   describe("Group 2: GPU & Machine Learning", () => {

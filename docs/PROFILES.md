@@ -295,6 +295,32 @@ winhelm --profile full --tools "-screen_capture,-clipboard_set"
 
 ---
 
+## Multi-Project Isolation (`--config <path>` & Session Non-Persistence)
+
+When running multiple AI agents or projects concurrently with different security scopes or profiles:
+
+1. **Dedicated Config File per Project (`--config`)**:
+   Point WinHelm to an explicit project configuration file:
+   ```powershell
+   winhelm --config "D:\mcp\configs\project-a.json"
+   ```
+   Or in Claude Desktop configuration:
+   ```json
+   {
+     "mcpServers": {
+       "project-a": {
+         "command": "winhelm",
+         "args": ["--stdio", "--config", "D:\\mcp\\configs\\project-a.json"]
+       }
+     }
+   }
+   ```
+
+2. **Session-Only CLI Overrides (`--no-persist`)**:
+   By default, CLI flags (`--allowed-dirs`, `--auth`, `--profile`, `--tools`, `--read-only`) apply **only to that running instance** without overwriting the config file on disk (`persist = false`). This ensures that multiple instances running in parallel will not clobber each other's settings. To permanently save CLI flags back to disk, explicitly pass `--persist`.
+
+---
+
 ## Use Case Recipes
 
 ### Recipe 1: Claude Haiku on a Budget

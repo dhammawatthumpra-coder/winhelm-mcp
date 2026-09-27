@@ -281,6 +281,19 @@ Path: `%APPDATA%\Claude\claude_desktop_config.json`
 }
 ```
 
+#### Option D: Per-Project Dedicated Config File (Isolated Profiles & Roots)
+```json
+{
+  "mcpServers": {
+    "winhelm-project-a": {
+      "command": "winhelm",
+      "args": ["--stdio", "--config", "D:\\mcp\\configs\\project-a.json"]
+    }
+  }
+}
+```
+> **Multi-Instance Isolation:** Each project config file maintains its own isolated `allowedDirectories`, `profile`, and security rules without modifying the shared default `winhelm.config.json`. CLI overrides are session-only (`--no-persist` by default) to prevent instances from colliding.
+
 ---
 
 ### 2. Cursor IDE
@@ -335,7 +348,7 @@ mcp:
 
 ### 4. Remote & Tailscale Connection
 
-WinHelm binds by default to `0.0.0.0`, allowing secure cross-device access over private networks like Tailscale or WireGuard:
+WinHelm binds by default to `127.0.0.1` (localhost only). To allow secure cross-device access over private networks like Tailscale or WireGuard, bind to `0.0.0.0` or your Tailscale IP:
 
 1. Retrieve your machine's Tailscale IP (e.g. `100.80.20.10`).
 2. Start WinHelm with a strong token:
@@ -405,14 +418,18 @@ WinHelm loads configuration in the following order of precedence:
 
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `--config <path>` | *N/A* | *auto* | Load configuration from a specific JSON file (for per-project multi-agent isolation). |
 | `--stdio` | *N/A* | `false` | Run in standard I/O mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor). |
 | `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `minimal` (6), `core` (15), `dev` (28), `sysadmin` (37), or `full` (38). |
+| `--tools <list>` | *N/A* | *auto* | Explicit comma-separated tools to load or `+tool`/`-tool` modifiers. |
 | `--transport <type>` | `WINHELM_TRANSPORT` | `http` | Transport mode: `http` (Web Gateway + SSE) or `stdio`. |
 | `--port <number>` | `PORT` | `8788` | Port number for the Web Gateway and MCP server. |
-| `--host <string>` | `HOST` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for LAN/Tailscale, `127.0.0.1` for local only). |
+| `--host <string>` | `HOST` | `127.0.0.1` | Network interface to bind (`127.0.0.1` loopback default, `0.0.0.0` for LAN/Tailscale). |
 | `--auth <token>` | `MCP_AUTH_TOKEN` | *none* | Bearer token for authentication. Rejects unauthenticated requests with HTTP 401. |
 | `--read-only` | `MCP_READ_ONLY` | `false` | Enables read-only mode (blocks file writing, safe deletion, process killing, and service changes). |
 | `--allowed-dirs <list>`| `MCP_ALLOWED_DIRECTORIES` | `[]` *(all)* | Comma-separated directory paths permitted for file access (e.g. `"D:\mcp,C:\Workspace"`). |
+| `--no-persist` | *N/A* | `true` | Keep CLI overrides session-only without writing to `winhelm.config.json` (default). |
+| `--persist` | *N/A* | `false` | Persist CLI overrides back to the active configuration file. |
 | *N/A* | `MCP_BLOCKED_COMMANDS` | *(see below)* | Additional comma-separated commands to block from execution. |
 
 ### `winhelm.config.json`

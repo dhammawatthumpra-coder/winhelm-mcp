@@ -367,6 +367,11 @@ export async function copyFileOrDir(
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
+  const srcCheck = configManager.isPathAllowed(sourcePath);
+  if (!srcCheck.allowed) {
+    throw new Error(srcCheck.reason);
+  }
+
   const dstCheck = configManager.isPathAllowed(destPath);
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
@@ -396,6 +401,11 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
   const configManager = ConfigManager.getInstance();
   if (configManager.isReadOnly()) {
     throw new Error("Operation blocked: Server is running in read-only mode.");
+  }
+
+  const srcCheck = configManager.isPathAllowed(sourceDir);
+  if (!srcCheck.allowed) {
+    throw new Error(srcCheck.reason);
   }
 
   const dstCheck = configManager.isPathAllowed(zipPath);
@@ -443,6 +453,11 @@ export async function extractZip(
   const configManager = ConfigManager.getInstance();
   if (configManager.isReadOnly()) {
     throw new Error("Operation blocked: Server is running in read-only mode.");
+  }
+
+  const zipCheck = configManager.isPathAllowed(zipPath);
+  if (!zipCheck.allowed) {
+    throw new Error(zipCheck.reason);
   }
 
   const dstCheck = configManager.isPathAllowed(targetDir);

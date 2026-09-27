@@ -159,3 +159,66 @@ describe("Unified Gateway Server Integration", () => {
   });
 });
 
+describe("Server Authentication and Protected Endpoints", () => {
+  const AUTH_PORT = 8794;
+  const AUTH_BASE_URL = `http://127.0.0.1:${AUTH_PORT}`;
+  const TEST_TOKEN = "mytoken";
+  let authServer: Server;
+  let stopAuthServer: (s: Server) => Promise<void>;
+
+  before(async () => {
+    const { start, stop } = createServer({
+      port: AUTH_PORT,
+      host: "127.0.0.1",
+      authToken: TEST_TOKEN,
+    });
+    stopAuthServer = stop;
+    authServer = await start();
+  });
+
+  after(async () => {
+    await stopAuthServer(authServer);
+  });
+
+  it("should block unauthenticated GET /preview and GET /api/monitor/logs with 401", async () => {
+    // Unauthenticated GET /preview
+    const previewRes = await fetch(`${AUTH_BASE_URL}/preview?path=C:\\Windows\\win.ini`);
+    assert.strictEqual(previewRes.status, 401);
+    const previewBody = (await previewRes.json()) as any;
+    assert.ok(previewBody.error?.includes("Unauthorized"));
+
+    // Unauthenticated GET /api/monitor/logs
+    const logsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/logs`);
+    assert.strictEqual(logsRes.status, 401);
+    const logsBody = (await logsRes.json()) as any;
+    assert.ok(logsBody.error?.includes("Unauthorized"));
+
+    // Unauthenticated GET /api/monitor/stats
+    const statsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`);
+    assert.strictEqual(statsRes.status, 401);
+  });
+
+  it("should allow unauthenticated access to /health and /dashboard", async () => {
+    const healthRes = await fetch(`${AUTH_BASE_URL}/health`);
+    assert.strictEqual(healthRes.status, 200);
+
+    const dashRes = await fetch(`${AUTH_BASE_URL}/dashboard`);
+    assert.strictEqual(dashRes.status, 200);
+  });
+
+  it("should allow access to protected endpoints with Bearer Authorization header", async () => {
+    const logsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/logs`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    assert.strictEqual(logsRes.status, 200);
+  });
+
+  it("should allow access to protected endpoints with ?token= query parameter", async () => {
+    const logsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/logs?token=${TEST_TOKEN}`);
+    assert.strictEqual(logsRes.status, 200);
+
+    const previewRes = await fetch(`${AUTH_BASE_URL}/preview?path=README.md&token=${TEST_TOKEN}`);
+    assert.strictEqual(previewRes.status, 200);
+  });
+});
+
