@@ -10,19 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-09-27
 
 ### Added
-- **Unified Dual-Protocol Gateway**:
+- **Multi-Transport MCP Gateway**:
   - Full support for MCP **Streamable HTTP** (`/mcp`) protocol.
   - Full backward compatibility for **Server-Sent Events** (`/sse`, `/message`).
+  - Native **Standard I/O (`--stdio`)** transport via MCP `StdioServerTransport` for direct integration with local AI agents, **OpenAI `tunnel-client` (ChatGPT)**, Claude Desktop, and Cursor.
+  - **Early Stdout Purity Guard**: In `--stdio` mode, automatically redirects operational logging to `stderr` to ensure the JSON-RPC wire on `stdout` remains 100% clean and free of parser errors.
   - Real-time Web Monitor Dashboard (`/` and `/dashboard`) with live request throughput, log streams, and GPU stats.
   - Interactive file and markdown viewer (`/preview?path=<file>`).
   - MCP UI App Resource: `preview://file`.
 - **38 Native Windows Tools**:
-  - **Terminal & Background Execution**: `terminal_run`, `terminal_task_start`, `terminal_task_stop`, `terminal_task_status`, `terminal_task_list`, `terminal_task_input`.
-  - **Filesystem & Search**: `file_read`, `file_write`, `file_edit`, `file_list`, `file_search`, `file_tail`, `file_hash`, `file_copy`, `file_move`, `file_archive_zip`, `file_extract_zip`, `file_recycle_bin`, `ripgrep_search`.
-  - **Workstation & Inspection**: `process_list`, `process_kill`, `eventlog_query`, `network_info`, `windows_service_list`, `windows_service_action`, `system_info`, `system_monitor`.
-  - **Desktop & Productivity**: `screen_capture`, `app_launch`, `clipboard_read`, `clipboard_write`, `notification_send`, `pdf_generate`.
-  - **Network & Diagnostics**: `http_ping`, `http_request`.
-  - **Auditing & Config**: `log_export`, `config_view`, `config_reload`.
+  - **Terminal & Background Execution (6)**: `terminal_run`, `terminal_task_start`, `terminal_task_list`, `terminal_task_logs`, `terminal_task_send`, `terminal_task_kill`.
+  - **Filesystem & Safe Delete (12)**: `file_read`, `file_write`, `file_edit`, `file_list`, `file_search`, `file_delete_safe`, `file_move`, `file_copy`, `archive_zip`, `archive_unzip`, `file_tail`, `file_hash`.
+  - **Codebase Search, PDF & Preview (3)**: `file_search_ripgrep`, `pdf_generate`, `file_preview`.
+  - **Desktop & Productivity (5)**: `clipboard_get`, `clipboard_set`, `screen_capture`, `system_open`, `notification_send`.
+  - **System, Processes & Services (9)**: `system_info`, `gpu_info`, `process_list`, `process_kill`, `port_check`, `eventlog_query`, `service_list`, `service_status`, `service_control`.
+  - **Network & Diagnostics (3)**: `http_ping`, `http_request`, `network_info`.
 - **Enterprise Security**:
   - Configurable command allowlist & regex blacklist blocking destructive commands (`format`, `diskpart`, `rmdir /s /q C:\`, etc.).
   - Read-only enforcement mode (`--read-only`).
@@ -31,12 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SHA-256 audit logging to daily rotating log files.
 - **Dynamic Tool Profile System ("Load Only What You Need")**:
   - `core` profile: 15 essential tools for basic coding (~60% context token savings).
-  - `dev` profile: 25 tools for full-stack software development with background tasks, ripgrep, archives, and previews (~35% token savings).
-  - `sysadmin` profile: 32 tools for IT management, services, event logs, network, and desktop automation.
+  - `dev` profile: 28 tools for full-stack software development with background tasks, ripgrep, archives, HTTP testing, PDF reports, system open, and previews (~30% token savings).
+  - `sysadmin` profile: 37 tools for IT management, services, event logs, network, tasks, ripgrep, archives, and desktop automation (all tools except headless `pdf_generate`).
   - `full` profile: All 38 tools and resources (default).
   - Configure via CLI (`--profile <name>` or `-p <name>`), env var (`WINHELM_PROFILE`), or `winhelm.config.json`.
   - Visual status badge and inactive tool indicators on Web Monitor Dashboard.
 - **Standalone Binary Packaging**:
   - Node.js Single Executable Application (SEA) build script creating portable `winhelm.exe` (~2.6 MB bundle).
 - **Test Suite**:
-  - 59 automated unit, integration, stress, and profile tests passing with 100% test coverage across 25 suites.
+  - 64 automated unit, integration, stress, and profile tests passing with 100% test coverage across 25 suites.

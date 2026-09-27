@@ -37,7 +37,7 @@ export const PROFILES: Record<ToolProfile, ProfileDefinition> = {
   },
   dev: {
     name: "Developer",
-    description: "25 tools for software engineering, background tasks, ripgrep, archives, and previews",
+    description: "28 tools for software engineering, background tasks, ripgrep, archives, HTTP API testing, PDF reports, and previews",
     tools: [
       "terminal_run",
       "file_read",
@@ -63,13 +63,16 @@ export const PROFILES: Record<ToolProfile, ProfileDefinition> = {
       "archive_zip",
       "archive_unzip",
       "http_ping",
+      "http_request",
+      "pdf_generate",
+      "system_open",
       "file_preview",
     ],
     includesResource: true,
   },
   sysadmin: {
     name: "System Admin",
-    description: "32 tools for IT management, services, event logs, network, and desktop automation",
+    description: "37 tools for IT management, services, event logs, network, background tasks, ripgrep, archives, and desktop automation (all except pdf_generate)",
     tools: [
       "terminal_run",
       "file_read",
@@ -102,9 +105,14 @@ export const PROFILES: Record<ToolProfile, ProfileDefinition> = {
       "terminal_task_start",
       "terminal_task_list",
       "terminal_task_logs",
+      "terminal_task_send",
       "terminal_task_kill",
+      "file_search_ripgrep",
+      "archive_zip",
+      "archive_unzip",
+      "file_preview",
     ],
-    includesResource: false,
+    includesResource: true,
   },
   full: {
     name: "Full Suite",

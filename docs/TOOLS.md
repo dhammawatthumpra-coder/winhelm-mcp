@@ -8,13 +8,13 @@ WinHelm provides **38 native Windows tools** and **1 MCP Resource** designed for
 
 WinHelm supports loading subset profiles to prevent prompt context bloat:
 
-| Tool Name | `core` (15) | `dev` (25) | `sysadmin` (32) | `full` (38) | Category | Description |
+| Tool Name | `core` (15) | `dev` (28) | `sysadmin` (37) | `full` (38) | Category | Description |
 | :--- | :---: | :---: | :---: | :---: | :--- | :--- |
 | `terminal_run` | ✅ | ✅ | ✅ | ✅ | Terminal | Synchronous PowerShell runner with UTF-8 encoding |
 | `terminal_task_start` | ❌ | ✅ | ✅ | ✅ | Terminal | Starts detached background daemon task |
 | `terminal_task_list` | ❌ | ✅ | ✅ | ✅ | Terminal | Lists active and exited background tasks |
 | `terminal_task_logs` | ❌ | ✅ | ✅ | ✅ | Terminal | Retrieves buffered output logs of a task |
-| `terminal_task_send` | ❌ | ✅ | ❌ | ✅ | Terminal | Sends interactive input (`stdin`) to a task |
+| `terminal_task_send` | ❌ | ✅ | ✅ | ✅ | Terminal | Sends interactive input (`stdin`) to a task |
 | `terminal_task_kill` | ❌ | ✅ | ✅ | ✅ | Terminal | Terminates a background task process tree |
 | `file_read` | ✅ | ✅ | ✅ | ✅ | Filesystem | Reads file content with optional line slicing |
 | `file_write` | ✅ | ✅ | ✅ | ✅ | Filesystem | Writes UTF-8 file (creates directories) |
@@ -24,17 +24,17 @@ WinHelm supports loading subset profiles to prevent prompt context bloat:
 | `file_delete_safe` | ✅ | ✅ | ✅ | ✅ | Filesystem | Moves file to Windows Recycle Bin (recoverable) |
 | `file_move` | ✅ | ✅ | ✅ | ✅ | Filesystem | Atomically moves or renames a file/folder |
 | `file_copy` | ✅ | ✅ | ✅ | ✅ | Filesystem | Recursively copies files or directories |
-| `archive_zip` | ❌ | ✅ | ❌ | ✅ | Filesystem | Compresses directory to `.zip` via native .NET |
-| `archive_unzip` | ❌ | ✅ | ❌ | ✅ | Filesystem | Extracts `.zip` archive via native .NET |
+| `archive_zip` | ❌ | ✅ | ✅ | ✅ | Filesystem | Compresses directory to `.zip` via native .NET |
+| `archive_unzip` | ❌ | ✅ | ✅ | ✅ | Filesystem | Extracts `.zip` archive via native .NET |
 | `file_tail` | ✅ | ✅ | ✅ | ✅ | Filesystem | Reads trailing N lines of large files/logs |
 | `file_hash` | ✅ | ✅ | ✅ | ✅ | Filesystem | Computes SHA-256, MD5, or SHA-1 checksum |
-| `file_search_ripgrep` | ❌ | ✅ | ❌ | ✅ | Codebase | Fast regex code search with streaming pagination |
-| `pdf_generate` | ❌ | ❌ | ❌ | ✅ | Document | Generates styled PDF via headless Edge/Chrome |
-| `file_preview` | ❌ | ✅ | ❌ | ✅ | Preview | File metadata and web preview URL |
+| `file_search_ripgrep` | ❌ | ✅ | ✅ | ✅ | Codebase | Fast regex code search with streaming pagination |
+| `pdf_generate` | ❌ | ✅ | ❌ | ✅ | Document | Generates styled PDF via headless Edge/Chrome |
+| `file_preview` | ❌ | ✅ | ✅ | ✅ | Preview | File metadata and web preview URL |
 | `clipboard_get` | ❌ | ❌ | ✅ | ✅ | Desktop | Reads text from Windows Clipboard |
 | `clipboard_set` | ❌ | ❌ | ✅ | ✅ | Desktop | Writes text to Windows Clipboard |
 | `screen_capture` | ❌ | ❌ | ✅ | ✅ | Desktop | Captures desktop screenshot (base64 PNG) |
-| `system_open` | ❌ | ❌ | ✅ | ✅ | Desktop | Opens URL, file, or folder in default app |
+| `system_open` | ❌ | ✅ | ✅ | ✅ | Desktop | Opens URL, file, or folder in default app |
 | `notification_send` | ❌ | ❌ | ✅ | ✅ | Desktop | Dispatches Windows native Toast Notification |
 | `system_info` | ✅ | ✅ | ✅ | ✅ | System | OS version, CPU, RAM, drives & uptime |
 | `gpu_info` | ✅ | ✅ | ✅ | ✅ | System | NVIDIA GPU telemetry (VRAM, temp) or WMI |
@@ -46,9 +46,9 @@ WinHelm supports loading subset profiles to prevent prompt context bloat:
 | `service_status` | ❌ | ❌ | ✅ | ✅ | Services | Detailed status and PID of a service |
 | `service_control` | ❌ | ❌ | ✅ | ✅ | Services | Starts, stops, or restarts a service |
 | `http_ping` | ❌ | ✅ | ✅ | ✅ | Network | Fast HTTP latency and health probe |
-| `http_request` | ❌ | ❌ | ✅ | ✅ | Network | Dispatches HTTP requests (GET/POST/etc.) |
+| `http_request` | ❌ | ✅ | ✅ | ✅ | Network | Dispatches HTTP requests (GET/POST/etc.) |
 | `network_info` | ❌ | ❌ | ✅ | ✅ | Network | Network adapters, IPs, DNS, and Tailscale |
-| `preview://file` *(Resource)* | ❌ | ✅ | ❌ | ✅ | MCP Resource | Dynamic interactive HTML preview resource |
+| `preview://file` *(Resource)* | ❌ | ✅ | ✅ | ✅ | MCP Resource | Dynamic interactive HTML preview resource |
 
 ---
 

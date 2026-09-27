@@ -193,10 +193,10 @@ AI coding assistants perform much better when their context window isn't bloated
 # 1. Core Profile: 15 essential tools (terminal, file read/write/edit/search/hash, process list, telemetry)
 winhelm --profile core
 
-# 2. Developer Profile: 25 tools (Core + background tasks, ripgrep, zip archives, HTTP ping & file preview)
+# 2. Developer Profile: 28 tools (Core + background tasks, ripgrep, zip archives, HTTP requests, PDF reports, system open & file preview)
 winhelm --profile dev
 
-# 3. SysAdmin Profile: 32 tools (Core + process kill, event logs, services, network adapters & desktop actions)
+# 3. SysAdmin Profile: 37 tools (All Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop automation & preview — all except pdf_generate)
 winhelm --profile sysadmin
 
 # 4. Full Suite: All 38 tools + interactive preview resource (default)
@@ -206,8 +206,8 @@ winhelm --profile full
 | Profile | Active Tools | Key Inclusions | Context Window Savings |
 | :--- | :---: | :--- | :--- |
 | **`core`** | **15** | `terminal_run`, `file_read`, `file_write`, `file_edit`, `file_list`, `file_search`, `file_copy`, `file_move`, `file_tail`, `file_hash`, `file_delete_safe`, `system_info`, `gpu_info`, `process_list`, `port_check` | 🟢 **~60% token reduction** |
-| **`dev`** | **25** | All Core + `terminal_task_*` (background daemons), `file_search_ripgrep`, `archive_zip/unzip`, `http_ping`, `preview://file` | 🟡 **~35% token reduction** |
-| **`sysadmin`** | **32** | All Core + `process_kill`, `eventlog_query`, `network_info`, `service_*`, `screen_capture`, `clipboard_*`, `notification_send` | 🟠 Comprehensive IT toolkit |
+| **`dev`** | **28** | All Core + `terminal_task_*` (5 tasks), `file_search_ripgrep`, `archive_zip/unzip`, `http_ping/request`, `pdf_generate`, `system_open`, `preview://file` | 🟡 **~30% token reduction** |
+| **`sysadmin`** | **37** | All tools except `pdf_generate`: Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop actions & preview | 🟠 Full Windows ops toolkit |
 | **`full`** | **38** | All 38 tools + interactive HTML preview resource (default when omitted) | 🔵 Complete Windows control |
 
 > **Pro Tip:** In `claude_desktop_config.json`, pass `["--profile", "dev"]` under `args` to keep Claude's context light and fast!
@@ -337,11 +337,11 @@ WinHelm provides 38 focused Windows native tools grouped across 6 functional cat
 | Category | Tools | In Profiles | Summary |
 | :--- | :---: | :--- | :--- |
 | **Terminal & Background Tasks** | 6 | `core` (run only), `dev`, `sysadmin`, `full` | Synchronous PowerShell runner and detached daemon processes with live logs & stdin. |
-| **Filesystem, Safe Delete & Archives** | 12 | `core` (10 tools), `dev` (all 12), `sysadmin` (10 tools), `full` (all 12) | Surgical file edits, streaming tails, SHA-256 hashes, .NET zip archives, and **Recycle Bin safe delete**. |
-| **Codebase Search, PDF & Preview** | 3 | `dev` (search & preview), `full` (all 3) | Streaming paginated `ripgrep` regex search, headless Chromium PDF printer, and web previewer. |
-| **Desktop, Clipboard & Toast** | 5 | `sysadmin`, `full` | Windows clipboard read/write, primary screen capture, system app launcher, and native Toast notifications. |
+| **Filesystem, Safe Delete & Archives** | 12 | `core` (10 tools), `dev` (all 12), `sysadmin` (all 12), `full` (all 12) | Surgical file edits, streaming tails, SHA-256 hashes, .NET zip archives, and **Recycle Bin safe delete**. |
+| **Codebase Search, PDF & Preview** | 3 | `dev` (all 3), `sysadmin` (search & preview), `full` (all 3) | Streaming paginated `ripgrep` regex search (`query` parameter), headless Chromium PDF printer, and web previewer. |
+| **Desktop, Clipboard & Toast** | 5 | `dev` (`system_open`), `sysadmin` (all 5), `full` (all 5) | Windows clipboard read/write, primary screen capture, system app launcher (`system_open`), and native Toast notifications. |
 | **System, Processes & Services** | 9 | `core` (info, gpu, procs, port), `sysadmin` (all 9), `full` (all 9) | CPU/RAM/Drive telemetry, NVIDIA GPU stats, process list/kill, port inspector, event logs, and service control. |
-| **Network & Connectivity** | 3 | `dev` (ping), `sysadmin` (ping, req, net), `full` (all 3) | HTTP latency probe, full REST client, and local/Tailscale adapter inspector. |
+| **Network & Connectivity** | 3 | `dev` (ping, req), `sysadmin` (all 3), `full` (all 3) | HTTP latency probe, full REST client (`http_request`), and local/Tailscale adapter inspector. |
 
 📖 **See [docs/TOOLS.md](docs/TOOLS.md) for full parameter specifications, types, returns, and schemas.**
 
@@ -387,7 +387,7 @@ WinHelm loads configuration in the following order of precedence:
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--stdio` | *N/A* | `false` | Run in standard I/O mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor). |
-| `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `core` (15), `dev` (25), `sysadmin` (32), or `full` (38). |
+| `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `core` (15), `dev` (28), `sysadmin` (37), or `full` (38). |
 | `--transport <type>` | `WINHELM_TRANSPORT` | `http` | Transport mode: `http` (Web Gateway + SSE) or `stdio`. |
 | `--port <number>` | `PORT` | `8788` | Port number for the Web Gateway and MCP server. |
 | `--host <string>` | `HOST` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for LAN/Tailscale, `127.0.0.1` for local only). |

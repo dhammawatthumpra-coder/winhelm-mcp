@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "winhelm-mcp",
   "title": "WinHelm",
-  "description": "Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 32 System Tools",
+  "description": "Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 38 System Tools",
   "repository": {
     "url": "https://github.com/winhelm/winhelm-mcp",
     "source": "github"

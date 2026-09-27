@@ -5,7 +5,7 @@ This guide demonstrates concrete workflows for LLM coding agents (e.g. Claude De
 ---
 
 ## Use Case 1: Autonomous Build, Test, and Self-Healing
-**Recommended Profile:** `dev` (25 tools)
+**Recommended Profile:** `dev` (28 tools)
 
 When an AI agent needs to compile a large project, monitor progress in the background, and fix build errors without blocking the conversation:
 
@@ -59,7 +59,7 @@ The agent executes the test suite synchronously:
 ---
 
 ## Use Case 2: System Health Inspection & Troubleshooting
-**Recommended Profile:** `sysadmin` (32 tools)
+**Recommended Profile:** `sysadmin` (37 tools)
 
 When an AI agent is asked: *"Why is my Windows computer sluggish or why did my application crash?"*
 
@@ -111,7 +111,7 @@ When an AI agent is asked: *"Why is my Windows computer sluggish or why did my a
 ---
 
 ## Use Case 3: Code Search & Automated PDF Report
-**Recommended Profile:** `full` (38 tools)
+**Recommended Profile:** `dev` (28 tools) or `full` (38 tools)
 
 When an agent performs an audit and generates a client-ready PDF document:
 
