@@ -39,3 +39,7 @@ tmp/
 Thumbs.db
 .DS_Store
 Desktop.ini
+
+# Local personal scripts
+start-funnel.ps1
+*.local.ps1
