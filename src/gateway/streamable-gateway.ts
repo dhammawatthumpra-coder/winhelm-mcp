@@ -7,10 +7,28 @@ import { registerAllTools } from "../tools/index.js";
 interface StreamableSession {
   transport: StreamableHTTPServerTransport;
   mcpServer: McpServer;
+  lastActivityAt: number;
 }
 
 export class StreamableGateway {
   private sessions = new Map<string, StreamableSession>();
+  private cleanupTimer: NodeJS.Timeout | null = null;
+  private idleTimeoutMs: number;
+  private maxSessions: number;
+
+  constructor(idleTimeoutMs = 45 * 60 * 1000, maxSessions = 100) {
+    this.idleTimeoutMs = idleTimeoutMs;
+    this.maxSessions = maxSessions;
+
+    // Check periodically for idle sessions; unref timer so it doesn't prevent process exit
+    const intervalMs = Math.min(60000, Math.max(1000, Math.floor(this.idleTimeoutMs / 2)));
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupIdleSessions();
+    }, intervalMs);
+    if (this.cleanupTimer && this.cleanupTimer.unref) {
+      this.cleanupTimer.unref();
+    }
+  }
 
   private createMcpServerInstance(): McpServer {
     const server = new McpServer({
@@ -22,6 +40,49 @@ export class StreamableGateway {
   }
 
   /**
+   * Evict the least recently used session if capacity is reached
+   */
+  private evictOldestIfNeeded(): void {
+    while (this.sessions.size >= this.maxSessions) {
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+
+      for (const [key, session] of this.sessions.entries()) {
+        if (session.lastActivityAt < oldestTime) {
+          oldestTime = session.lastActivityAt;
+          oldestKey = key;
+        }
+      }
+
+      if (oldestKey) {
+        const session = this.sessions.get(oldestKey);
+        this.sessions.delete(oldestKey);
+        if (session) {
+          session.mcpServer.close().catch(() => {});
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Cleanup sessions that have been idle longer than idleTimeoutMs
+   */
+  public cleanupIdleSessions(): number {
+    const now = Date.now();
+    let count = 0;
+    for (const [key, session] of this.sessions.entries()) {
+      if (now - session.lastActivityAt > this.idleTimeoutMs) {
+        this.sessions.delete(key);
+        session.mcpServer.close().catch(() => {});
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Handle ALL /mcp - Streamable HTTP transport
    */
   public async handleRequest(req: Request, res: Response): Promise<void> {
@@ -30,10 +91,14 @@ export class StreamableGateway {
 
       // If an existing session ID is provided and active, use it
       if (sessionId && this.sessions.has(sessionId)) {
-        const { transport } = this.sessions.get(sessionId)!;
-        await transport.handleRequest(req, res);
+        const session = this.sessions.get(sessionId)!;
+        session.lastActivityAt = Date.now();
+        await session.transport.handleRequest(req, res);
         return;
       }
+
+      // Evict oldest session if at max capacity before allocating a new one
+      this.evictOldestIfNeeded();
 
       // Create a new session for initialize requests
       const mcpServer = this.createMcpServerInstance();
@@ -52,7 +117,11 @@ export class StreamableGateway {
       await transport.handleRequest(req, res);
 
       if (transport.sessionId) {
-        this.sessions.set(transport.sessionId, { transport, mcpServer });
+        this.sessions.set(transport.sessionId, {
+          transport,
+          mcpServer,
+          lastActivityAt: Date.now(),
+        });
       }
     } catch (err) {
       console.error("[StreamableHTTP] Error handling /mcp request:", err);
@@ -66,7 +135,36 @@ export class StreamableGateway {
     return this.sessions.size;
   }
 
+  public getSession(sessionId: string): StreamableSession | undefined {
+    return this.sessions.get(sessionId);
+  }
+
+  public setSessionLastActivity(sessionId: string, timestamp: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.lastActivityAt = timestamp;
+      return true;
+    }
+    return false;
+  }
+
+  public registerSessionForTest(
+    sessionId: string,
+    session: { transport?: any; mcpServer?: any; lastActivityAt?: number } = {}
+  ): void {
+    this.evictOldestIfNeeded();
+    this.sessions.set(sessionId, {
+      transport: session.transport || ({} as any),
+      mcpServer: session.mcpServer || ({ close: async () => {} } as any),
+      lastActivityAt: session.lastActivityAt ?? Date.now(),
+    });
+  }
+
   public async closeAll(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
     for (const session of this.sessions.values()) {
       try {
         await session.mcpServer.close();
