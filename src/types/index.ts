@@ -87,6 +87,8 @@ export interface ServerConfig {
   corsOrigins?: string[] | boolean | string;
   searchExcludeDirs?: string[];
   preferPwsh?: boolean;
+  sessionIdleTimeoutMs?: number;
+  maxConcurrentSessions?: number;
 }
 
 // Group 1: File Safety & Archives

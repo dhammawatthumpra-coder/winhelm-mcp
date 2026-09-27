@@ -44,5 +44,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   profile: "full",
   searchExcludeDirs: ["dist", "logs", "build", "out"],
   preferPwsh: true,
+  sessionIdleTimeoutMs: 45 * 60 * 1000,
+  maxConcurrentSessions: 100,
 };
 

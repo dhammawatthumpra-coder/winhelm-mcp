@@ -29,8 +29,8 @@ export function createServer(options: ServerOptions): {
   const config = configManager.getConfig();
   const authToken = options.authToken ?? config.authToken;
 
-  const sseGateway = new SseGateway();
-  const streamableGateway = new StreamableGateway();
+  const sseGateway = new SseGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
+  const streamableGateway = new StreamableGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
   const rateLimiter = new RateLimiter();
 
   // Cache system info for 2.5s to avoid PowerShell overhead during continuous polling
