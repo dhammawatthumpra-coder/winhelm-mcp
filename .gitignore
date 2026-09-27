@@ -1,0 +1,41 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and sensitive config
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist/
+build/
+
+# Logs and runtime traces
+logs/
+*.log
+
+# Temp test files and artifacts
+test/unit/tmp*/
+test-*.pdf
+test-*.html
+test-*.zip
+temp/
+tmp/
+
+# Editor, IDE, and AI tools
+.serena/
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
