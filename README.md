@@ -160,8 +160,11 @@ npm run build
 ### 2. Start the Server
 
 ```powershell
-# Start standard server on port 8788
+# Start standard server on port 8788 (full profile)
 npm start
+
+# Or start with a lightweight profile for coding agents (dev) or small models (minimal)
+node dist/index.js --profile dev
 
 # Or customize port and bearer token via CLI flags
 node dist/index.js --port 8788 --auth my-secret-token
@@ -264,7 +267,7 @@ Path: `%APPDATA%\Claude\claude_desktop_config.json`
   }
 }
 ```
-> **Context Optimization:** Supplying `"--profile", "dev"` restricts tools to 25 developer essentials, saving ~35% context tokens while preserving all coding, ripgrep, background task, and zip capabilities.
+> **Context Optimization:** Supplying `"--profile", "dev"` restricts tools to 28 developer essentials, saving ~32% context tokens while preserving all coding, ripgrep, background task, PDF, archive, and preview capabilities.
 
 #### Option C: Standalone Executable (`winhelm.exe`)
 ```json
@@ -317,7 +320,7 @@ log:
 
 mcp:
   commands:
-    # Direct stdio connection with dev profile (~35% token savings for ChatGPT)
+    # Direct stdio connection with dev profile (~32% token savings for ChatGPT)
     - channel: main
       command: 'node D:/mcp/winhelm-mcp/dist/index.js --stdio --profile dev'
 ```
@@ -486,8 +489,8 @@ The resulting executable will be generated at `dist/winhelm.exe`:
 
 1. **Automatic Secret Redaction:**
    - Automatically sanitizes sensitive keys (`sk-...`, `ghp_...`, `Bearer ********`, and password values) from terminal output, dashboard UI, and log files.
-2. **Built-in Rate Limiting:**
-   - Enforces a ceiling of 120 requests per minute per IP address, preventing runaway client loops.
+2. **Built-in Rate Limiting (Sliding Window):**
+   - Enforces a sliding window ceiling of 120 requests per minute per IP address, preventing runaway client loops.
 3. **Auditing & Log Rotation:**
    - Logs are stored in `logs/winhelm-YYYY-MM-DD.log` (capped at 10 MB per file, auto-pruning logs older than 7 days).
    - Export audit logs anytime via browser or API:

@@ -148,7 +148,7 @@ When an agent performs an audit and generates a client-ready PDF document:
 ---
 
 ## Use Case 4: Safe File Operations & Archival
-**Recommended Profile:** `dev` (25 tools) or `core` (15 tools)
+**Recommended Profile:** `dev` (28 tools) or `core` (15 tools)
 
 Safe file management that avoids accidental permanent loss:
 
