@@ -76,4 +76,37 @@ describe("Filesystem Engine", () => {
     assert.strictEqual(matches[0].file, testFile);
     assert.ok(matches[0].text.includes("ภาษาไทยทดสอบ"));
   });
+
+  it("should exclude dist, logs, .serena, and build directories from file search and recursive listing", async () => {
+    const distDir = path.join(testDir, "dist");
+    const logsDir = path.join(testDir, "logs");
+    const serenaDir = path.join(testDir, ".serena");
+    const srcDir = path.join(testDir, "src");
+
+    await fs.mkdir(distDir, { recursive: true });
+    await fs.mkdir(logsDir, { recursive: true });
+    await fs.mkdir(serenaDir, { recursive: true });
+    await fs.mkdir(srcDir, { recursive: true });
+
+    await fs.writeFile(path.join(distDir, "bundle.cjs"), "const secretKey = 'FIND_ME_TARGET';", "utf-8");
+    await fs.writeFile(path.join(logsDir, "app.log"), "2026-09-27 FIND_ME_TARGET in log", "utf-8");
+    await fs.writeFile(path.join(serenaDir, "memory.json"), "FIND_ME_TARGET in memory", "utf-8");
+    await fs.writeFile(path.join(srcDir, "index.ts"), "export const val = 'FIND_ME_TARGET';", "utf-8");
+
+    // Test searchInFiles: should only find the match in src/, not in dist/, logs/, or .serena/
+    const matches = await searchInFiles("FIND_ME_TARGET", testDir);
+    assert.strictEqual(matches.length, 1, `Expected exactly 1 match in src/, got ${matches.length}`);
+    assert.ok(matches[0].file.includes("src"));
+    assert.ok(!matches.some((m) => m.file.includes("dist")));
+    assert.ok(!matches.some((m) => m.file.includes("logs")));
+    assert.ok(!matches.some((m) => m.file.includes(".serena")));
+
+    // Test listDirectory with recursive: true: should not traverse into dist, logs, .serena
+    const list = await listDirectory(testDir, true);
+    const subPaths = list.map((item) => item.path);
+    assert.ok(!subPaths.some((p) => p.includes("bundle.cjs")), "Should not traverse into dist/");
+    assert.ok(!subPaths.some((p) => p.includes("app.log")), "Should not traverse into logs/");
+    assert.ok(!subPaths.some((p) => p.includes("memory.json")), "Should not traverse into .serena/");
+    assert.ok(subPaths.some((p) => p.includes("index.ts")), "Should traverse into src/");
+  });
 });

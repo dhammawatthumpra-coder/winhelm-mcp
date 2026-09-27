@@ -42,5 +42,6 @@ export const DEFAULT_CONFIG: ServerConfig = {
   readOnly: false,
   rateLimitPerMinute: 120,
   profile: "full",
+  searchExcludeDirs: ["dist", "logs", "build", "out"],
 };
 
