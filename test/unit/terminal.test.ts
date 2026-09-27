@@ -1,6 +1,11 @@
 import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { runPowerShell } from "../../src/engine/powershell-runner.js";
+import {
+  runPowerShell,
+  isPwshAvailable,
+  getPowerShellExecutable,
+  setPwshAvailableCache,
+} from "../../src/engine/powershell-runner.js";
 
 describe("PowerShell Runner Engine", () => {
   it("should execute command and return UTF-8 output without corruption", async () => {
@@ -22,5 +27,25 @@ describe("PowerShell Runner Engine", () => {
       },
       /blocked by security policy/
     );
+  });
+
+  it("should select pwsh.exe when available and preferred", () => {
+    try {
+      setPwshAvailableCache(true);
+      assert.strictEqual(getPowerShellExecutable(true), "pwsh.exe");
+      assert.strictEqual(getPowerShellExecutable(false), "powershell.exe");
+    } finally {
+      setPwshAvailableCache(null);
+    }
+  });
+
+  it("should fallback to powershell.exe when pwsh is not available", () => {
+    try {
+      setPwshAvailableCache(false);
+      assert.strictEqual(getPowerShellExecutable(true), "powershell.exe");
+      assert.strictEqual(getPowerShellExecutable(false), "powershell.exe");
+    } finally {
+      setPwshAvailableCache(null);
+    }
   });
 });

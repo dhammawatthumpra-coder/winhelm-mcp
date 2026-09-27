@@ -1,9 +1,49 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { ExecutionResult } from "../types/index.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
+
+let cachedPwshAvailable: boolean | null = null;
+
+/**
+ * Check whether PowerShell 7+ (pwsh.exe) is installed on the host system.
+ * Cached in memory after the initial check to eliminate recurring spawn overhead.
+ */
+export function isPwshAvailable(): boolean {
+  if (cachedPwshAvailable !== null) {
+    return cachedPwshAvailable;
+  }
+  try {
+    const res = spawnSync("pwsh.exe", ["-NoProfile", "-Version"], {
+      windowsHide: true,
+      stdio: "ignore",
+      timeout: 2000,
+    });
+    cachedPwshAvailable = res.status === 0;
+  } catch {
+    cachedPwshAvailable = false;
+  }
+  return cachedPwshAvailable;
+}
+
+/**
+ * Reset or set pwsh availability cache (useful for testing and mocking)
+ */
+export function setPwshAvailableCache(val: boolean | null): void {
+  cachedPwshAvailable = val;
+}
+
+/**
+ * Select preferred PowerShell executable: pwsh.exe if available and preferred, else powershell.exe
+ */
+export function getPowerShellExecutable(preferPwsh = true): string {
+  if (preferPwsh && isPwshAvailable()) {
+    return "pwsh.exe";
+  }
+  return "powershell.exe";
+}
 
 export interface PowerShellOptions {
   cwd?: string;
@@ -68,9 +108,11 @@ export function runPowerShell(
       "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new(); " +
       "$OutputEncoding = [System.Text.UTF8Encoding]::new(); ";
     const fullCommand = utf8Setup + command;
+    const preferPwsh = config.preferPwsh !== false;
+    const executable = getPowerShellExecutable(preferPwsh);
 
     const child = spawn(
-      "powershell.exe",
+      executable,
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", fullCommand],
       {
         cwd,
