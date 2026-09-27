@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-90%2F90%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-95%2F95%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
@@ -460,7 +460,9 @@ Create or modify `winhelm.config.json` in your project root or `%USERPROFILE%\.w
 }
 ```
 
-> **Whole-Drive Whitelist Tip:** You can supply `"D:\\"`, `"D:"`, or `"D"` in `allowedDirectories` to permit access to an entire volume safely.
+> **Fail-Closed Security & Allowed Directories:** `allowedDirectories: []` blocks all filesystem operations by default for safety. You must explicitly configure target paths (e.g. `["D:\\mcp", "C:\\Workspace"]`).  
+> **Whole-Drive Whitelist Tip:** You can supply `"D:\\"`, `"D:"`, or `"D"` in `allowedDirectories` to permit access to an entire volume safely.  
+> **Wildcard Full-Drive Access (`["*"]`):** To permit access across all drives on your machine for personal development, supply `["*"]` or `["all"]`. ⚠️ **Security Warning:** Wildcard full access (`["*"]`) is strictly discouraged for unauthenticated or public-facing network exposures.
 
 ---
 

@@ -42,9 +42,28 @@ describe("ConfigManager and Security Policy", () => {
     }
   });
 
-  it("should allow paths when allowedDirectories is empty", () => {
+  it("should block paths when allowedDirectories is empty (fail-closed by default)", async () => {
+    await configManager.updateConfig({ allowedDirectories: [] }, false);
     const check = configManager.isPathAllowed("C:\\AnyPath\\file.txt");
-    assert.strictEqual(check.allowed, true);
+    assert.strictEqual(check.allowed, false);
+    assert.ok(check.reason?.includes("no allowedDirectories configured"));
+  });
+
+  it("should allow paths when allowedDirectories has wildcard '*'", async () => {
+    await configManager.updateConfig({ allowedDirectories: ["*"] }, false);
+    const checkC = configManager.isPathAllowed("C:\\AnyPath\\file.txt");
+    const checkD = configManager.isPathAllowed("D:\\AnyPath\\file.txt");
+    assert.strictEqual(checkC.allowed, true);
+    assert.strictEqual(checkD.allowed, true);
+  });
+
+  it("should allow paths when allowedDirectories has case-insensitive 'all'", async () => {
+    for (const val of ["all", "ALL", "All", "  all  "]) {
+      await configManager.updateConfig({ allowedDirectories: [val] }, false);
+      assert.strictEqual(configManager.isPathAllowed("C:\\test.txt").allowed, true);
+      assert.strictEqual(configManager.isPathAllowed("D:\\test.txt").allowed, true);
+    }
+    await configManager.updateConfig({ allowedDirectories: ["*"] }, false);
   });
 
   it("should allow multiple specific drives like D: and F: while blocking C:, E:, W:", async () => {

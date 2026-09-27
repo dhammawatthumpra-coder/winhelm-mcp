@@ -85,23 +85,25 @@ When active, any call to mutating tools (e.g. `file_write`, `file_edit`, `file_d
 
 ---
 
-## 4. Path Confinement (`allowedDirectories`)
+## 4. Path Confinement (`allowedDirectories`) & Fail-Closed Design
 
-You can restrict filesystem operations (`file_read`, `file_write`, `file_list`, `file_search_ripgrep`, `terminal_run` working directories) to specific paths or drives in `winhelm.config.json`:
-
-```json
-{
-  "allowedDirectories": [
-    "D:\\mcp",
-    "C:\\Projects"
-  ],
-  "allowSystemExecution": true
-}
-```
-
-- Any attempt to access paths outside the whitelist is rejected with a security error.
-- Path traversal tricks (`..\..\Windows\System32`) are normalized and blocked.
-- You can whitelist an entire volume by specifying `"D:\\"`, `"D:"`, or `"D"`.
+WinHelm follows a **fail-closed by default** security principle:
+- **Default (`allowedDirectories: []` or empty)**: If no allowed directories are configured, **all filesystem operations are strictly blocked**. This prevents accidental full-machine exposure when running an unconfigured instance.
+- **Specific Directory Whitelist**: Specify target directories or drives to restrict access:
+  ```json
+  {
+    "allowedDirectories": [
+      "D:\\mcp",
+      "C:\\Projects"
+    ],
+    "allowSystemExecution": true
+  }
+  ```
+- **Whole-Volume Whitelist**: You can whitelist an entire volume by specifying `"D:\\"`, `"D:"`, or `"D"`.
+- **Wildcard Full-Drive Access (`["*"]` or `["all"]`)**: You can explicitly opt-in to unrestricted machine access by configuring `["*"]` or `["all"]`.
+  > ⚠️ **Warning:** Wildcard access (`["*"]`) should only be used for trusted, local single-user development with authentication enabled. Never expose an unauthenticated server with wildcard access to a public network or reverse proxy.
+- Any attempt to access paths outside the whitelist is rejected with a descriptive security error.
+- Path traversal tricks (`..\..\Windows\System32`) and NTFS directory junctions/symlinks are resolved to canonical real paths via `fs.realpathSync` before boundary checks.
 
 ---
 
