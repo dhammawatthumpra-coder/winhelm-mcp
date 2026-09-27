@@ -106,7 +106,8 @@ export class Logger {
     }
 
     const sessTag = sessionId ? `${C.gray}[sess:${sessionId.slice(0, 8)}]${C.reset} ` : "";
-    const line = `${C.gray}[${time}]${C.reset} ${C.cyan}[HTTP]${C.reset} ${C.bold}${method}${C.reset} ${url} ${statusColor}${statusCode}${C.reset} ${C.dim}(${durationMs}ms)${C.reset} ${sessTag}${C.gray}${ip}${C.reset}`;
+    const cleanUrl = sanitizeText(url);
+    const line = `${C.gray}[${time}]${C.reset} ${C.cyan}[HTTP]${C.reset} ${C.bold}${method}${C.reset} ${cleanUrl} ${statusColor}${statusCode}${C.reset} ${C.dim}(${durationMs}ms)${C.reset} ${sessTag}${C.gray}${ip}${C.reset}`;
     console.log(line);
 
     this.addLog({
