@@ -33,7 +33,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
     "remove-item -recurse -force c:\\",
   ],
   blockedCommandPatterns: [...DEFAULT_BLOCKED_PATTERNS],
-  allowedDirectories: [], // Empty means unrestricted access
+  allowedDirectories: [], // Empty means BLOCKED by default (fail-closed). Use ["*"] or ["all"] to allow full access.
   allowSystemExecution: true, // Allows invoking runtimes on C: (Python/Node/Git) while restricting workspace file writes
   fileReadLineLimit: 2000,
   defaultTimeoutMs: 60000,

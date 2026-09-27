@@ -131,7 +131,7 @@ describe("New Enterprise Tools (Groups 1-4)", () => {
       );
 
       // Restore unrestricted config
-      await configManager.updateConfig({ allowedDirectories: [] }, false);
+      await configManager.updateConfig({ allowedDirectories: ["*"] }, false);
     });
   });
 

@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { ServerConfig } from "../types/index.js";
@@ -15,6 +15,14 @@ export interface CommandLogEntry {
   timedOut: boolean;
 }
 
+export function isWildcardAllowAll(dirs: string[] | undefined): boolean {
+  if (!dirs || dirs.length === 0) return false;
+  return dirs.some((d) => {
+    const trimmed = d.trim().toLowerCase();
+    return trimmed === "*" || trimmed === "all";
+  });
+}
+
 export class ConfigManager {
   private static instance: ConfigManager | null = null;
   private config: ServerConfig;
@@ -27,6 +35,7 @@ export class ConfigManager {
 
     if (customConfigPath) {
       this.configFilePath = path.resolve(customConfigPath);
+      this.loadConfigSync();
       return;
     }
 
@@ -50,6 +59,21 @@ export class ConfigManager {
       }
     }
     this.configFilePath = chosen;
+    this.loadConfigSync();
+  }
+
+  private loadConfigSync(): void {
+    if (this.configFilePath && existsSync(this.configFilePath)) {
+      try {
+        const raw = readFileSync(this.configFilePath, "utf-8");
+        const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+        const parsed = JSON.parse(cleanRaw);
+        this.config = {
+          ...this.config,
+          ...parsed,
+        };
+      } catch {}
+    }
   }
 
   public static getInstance(customConfigPath?: string): ConfigManager {
@@ -176,7 +200,11 @@ export class ConfigManager {
 
     // If allowSystemExecution is explicitly false, strictly block referencing unallowed drives in commands
     if (this.config.allowSystemExecution === false) {
-      if (this.config.allowedDirectories && this.config.allowedDirectories.length > 0) {
+      if (
+        this.config.allowedDirectories &&
+        this.config.allowedDirectories.length > 0 &&
+        !isWildcardAllowAll(this.config.allowedDirectories)
+      ) {
         const driveMatches = command.match(/\b([a-zA-Z]):(?=[\\/\s"']|$)/g);
         if (driveMatches) {
           for (const match of driveMatches) {
@@ -200,8 +228,14 @@ export class ConfigManager {
    * Validate if a filesystem path is permitted under allowedDirectories
    */
   public isPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
-    if (!this.config.allowedDirectories || this.config.allowedDirectories.length === 0) {
+    if (isWildcardAllowAll(this.config.allowedDirectories)) {
       return { allowed: true };
+    }
+    if (!this.config.allowedDirectories || this.config.allowedDirectories.length === 0) {
+      return {
+        allowed: false,
+        reason: `Access to path "${targetPath}" is blocked: no allowedDirectories configured. Set allowedDirectories to specific paths, or ["*"] to allow all (not recommended for public exposure).`,
+      };
     }
 
     let resolvedTarget = path.resolve(targetPath);

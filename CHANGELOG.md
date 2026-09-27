@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-09-27
 
+### Breaking Changes
+- **Fail-Closed by Default Filesystem Confinement (`allowedDirectories`)**: Changed the default security semantic of `allowedDirectories: []` or empty/unconfigured. Previously, an empty array permitted full filesystem access ("fail-open"). It now strictly blocks all filesystem operations ("fail-closed") with a descriptive security error. To restore full-drive access, you must explicitly opt-in using wildcard syntax `allowedDirectories: ["*"]` or `["all"]`. Existing configurations that relied on `[]` for open access must update to `["*"]`.
+
 ### Security
 - **Default Network Interface Hardening**: Changed default HTTP binding host from `0.0.0.0` to `127.0.0.1` (loopback only) to prevent unintentional exposure to the local network or public internet. Added a prominent console warning when binding to non-loopback addresses without authentication.
 - **Closed Auth Bypass for Dashboard & Preview**: Enforced authentication on `/preview` and `/api/monitor/*` endpoints. Added support for token authentication via query parameter (`?token=...` or `?auth=...`) and HTTP cookie fallback for browser dashboard and markdown previewer access.
