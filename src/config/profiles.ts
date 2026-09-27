@@ -3,7 +3,7 @@
  * Allows AI agents to load only required tools to optimize context window and tokens
  */
 
-export type ToolProfile = "full" | "core" | "dev" | "sysadmin";
+export type ToolProfile = "full" | "core" | "dev" | "sysadmin" | "minimal" | "custom";
 
 export interface ProfileDefinition {
   name: string;
@@ -13,6 +13,19 @@ export interface ProfileDefinition {
 }
 
 export const PROFILES: Record<ToolProfile, ProfileDefinition> = {
+  minimal: {
+    name: "Minimal",
+    description: "6 essential tools for small models (Claude Haiku, Llama 8B, local LLMs) with ~85% token reduction",
+    tools: [
+      "terminal_run",
+      "file_read",
+      "file_write",
+      "file_list",
+      "file_search",
+      "system_info",
+    ],
+    includesResource: false,
+  },
   core: {
     name: "Core",
     description: "15 essential tools for daily coding and file operations",
@@ -159,9 +172,50 @@ export const PROFILES: Record<ToolProfile, ProfileDefinition> = {
     ],
     includesResource: true,
   },
+  custom: {
+    name: "Custom",
+    description: "User-defined tool selection via --tools or config.json",
+    tools: [],
+    includesResource: true,
+  },
 };
 
-export function isToolInProfile(toolName: string, profile: ToolProfile = "full"): boolean {
+export function resolveCustomTools(
+  baseProfile: ToolProfile = "full",
+  toolsArg?: string,
+  configCustomTools?: string[]
+): string[] | undefined {
+  if (!toolsArg && (!configCustomTools || configCustomTools.length === 0)) {
+    return undefined;
+  }
+  const rawList = toolsArg
+    ? toolsArg.split(",").map((t) => t.trim()).filter(Boolean)
+    : configCustomTools || [];
+
+  const hasAdd = rawList.some((t) => t.startsWith("+"));
+  const hasRemove = rawList.some((t) => t.startsWith("-"));
+
+  if (hasAdd || hasRemove) {
+    const baseTools = new Set((PROFILES[baseProfile] || PROFILES.full).tools);
+    for (const item of rawList) {
+      if (item.startsWith("+")) {
+        baseTools.add(item.slice(1).trim());
+      } else if (item.startsWith("-")) {
+        baseTools.delete(item.slice(1).trim());
+      } else {
+        baseTools.add(item);
+      }
+    }
+    return Array.from(baseTools);
+  }
+
+  return rawList;
+}
+
+export function isToolInProfile(toolName: string, profile: ToolProfile = "full", customTools?: string[]): boolean {
+  if (customTools && customTools.length > 0) {
+    return customTools.includes(toolName);
+  }
   const p = PROFILES[profile] || PROFILES.full;
   return p.tools.includes(toolName);
 }

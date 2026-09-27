@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic secret and bearer token masking in all log channels.
   - SHA-256 audit logging to daily rotating log files.
 - **Dynamic Tool Profile System ("Load Only What You Need")**:
+  - `minimal` profile: 6 essential tools for small models like Claude 3.5 Haiku and Llama 8B (~85% context token savings).
   - `core` profile: 15 essential tools for basic coding (~60% context token savings).
   - `dev` profile: 28 tools for full-stack software development with background tasks, ripgrep, archives, HTTP testing, PDF reports, system open, and previews (~30% token savings).
   - `sysadmin` profile: 37 tools for IT management, services, event logs, network, tasks, ripgrep, archives, and desktop automation (all tools except headless `pdf_generate`).
@@ -41,4 +42,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Standalone Binary Packaging**:
   - Node.js Single Executable Application (SEA) build script creating portable `winhelm.exe` (~2.6 MB bundle).
 - **Test Suite**:
-  - 64 automated unit, integration, stress, and profile tests passing with 100% test coverage across 25 suites.
+  - 68 automated unit, integration, stress, and profile tests passing with 100% test coverage across 25 suites.

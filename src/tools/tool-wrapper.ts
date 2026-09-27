@@ -13,8 +13,9 @@ export function registerTracedTool(
   schema: any,
   handler: (args: any, extra: any) => Promise<any>
 ): void {
-  const profile = ConfigManager.getInstance().getConfig().profile || "full";
-  if (!isToolInProfile(name, profile)) {
+  const config = ConfigManager.getInstance().getConfig();
+  const profile = config.profile || "full";
+  if (!isToolInProfile(name, profile, config.customTools)) {
     return;
   }
   const wrappedHandler = async (args: any, extra: any) => {

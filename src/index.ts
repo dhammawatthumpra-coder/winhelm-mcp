@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigManager } from "./config/config-manager.js";
 import { createServer } from "./gateway/server.js";
-import { isValidProfile } from "./config/profiles.js";
+import { isValidProfile, resolveCustomTools } from "./config/profiles.js";
 import { registerAllTools } from "./tools/index.js";
 
 // Parse CLI arguments
@@ -26,12 +26,13 @@ Usage:
 Options:
   --port <number>       Port to listen on (default: 8788 or PORT env)
   --host <string>       Host interface (default: 0.0.0.0 or HOST env)
-  --profile, -p <name>  Tool profile: core (15), dev (28), sysadmin (37), full (38) (default: full)
+  --profile, -p <name>  Tool profile: minimal (6), core (15), dev (28), sysadmin (37), full (38) (default: full)
   --stdio               Run in stdio mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor)
   --transport <type>    Transport mode: http (default) or stdio
   --auth <token>        Bearer authentication token (or MCP_AUTH_TOKEN env)
   --read-only           Enable read-only mode (block mutating actions)
   --allowed-dirs <list> Comma-separated allowed directories (e.g. "D:\\mcp,C:\\Projects")
+  --tools <list>        Explicit comma-separated tools to load or +tool/-tool modifiers
   --help, -h            Show this help message
 `);
   process.exit(0);
@@ -53,6 +54,7 @@ async function main() {
   const ALLOWED_DIRS = getArg("--allowed-dirs", process.env.MCP_ALLOWED_DIRECTORIES || undefined);
   const READ_ONLY = args.includes("--read-only") || process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1";
   const PROFILE_ARG = getArg("--profile", getArg("-p", process.env.WINHELM_PROFILE || undefined));
+  const TOOLS_ARG = getArg("--tools");
 
   const updates: Record<string, any> = {};
   if (AUTH_TOKEN) updates.authToken = AUTH_TOKEN;
@@ -61,9 +63,14 @@ async function main() {
     if (isValidProfile(PROFILE_ARG)) {
       updates.profile = PROFILE_ARG;
     } else {
-      console.error(`[WinHelm] Unknown profile: "${PROFILE_ARG}". Valid profiles: core, dev, sysadmin, full`);
+      console.error(`[WinHelm] Unknown profile: "${PROFILE_ARG}". Valid profiles: minimal, core, dev, sysadmin, full, custom`);
       process.exit(1);
     }
+  }
+  if (TOOLS_ARG) {
+    const baseProfile = (updates.profile || configManager.getConfig().profile || "full") as any;
+    updates.customTools = resolveCustomTools(baseProfile, TOOLS_ARG);
+    if (!updates.profile) updates.profile = "custom";
   }
   if (ALLOWED_DIRS) {
     updates.allowedDirectories = ALLOWED_DIRS.split(",")

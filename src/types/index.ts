@@ -82,6 +82,7 @@ export interface ServerConfig {
   readOnly?: boolean;
   rateLimitPerMinute?: number;
   profile?: import("../config/profiles.js").ToolProfile;
+  customTools?: string[];
 }
 
 // Group 1: File Safety & Archives
