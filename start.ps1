@@ -3,7 +3,8 @@ param (
     [int]$Port = 8788,
     [string]$HostAddr = "0.0.0.0",
     [string]$Auth = "",
-    [string]$AllowedDirs = ""
+    [string]$AllowedDirs = "",
+    [string]$ServerProfile = ""
 )
 
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -28,6 +29,9 @@ if ($AllowedDirs) {
 } else {
     Write-Host "  Allowed Directories: All paths (Unrestricted)" -ForegroundColor Gray
 }
+if ($ServerProfile) {
+    Write-Host "  Profile: $ServerProfile" -ForegroundColor Yellow
+}
 Write-Host "==========================================" -ForegroundColor Cyan
 
 $argsList = @("dist/index.js", "--port", $Port, "--host", $HostAddr)
@@ -36,6 +40,9 @@ if ($Auth) {
 }
 if ($AllowedDirs) {
     $argsList += @("--allowed-dirs", $AllowedDirs)
+}
+if ($ServerProfile) {
+    $argsList += @("--profile", $ServerProfile)
 }
 
 node @argsList
