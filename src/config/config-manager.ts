@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { ServerConfig } from "../types/index.js";
-import { DEFAULT_CONFIG } from "./default-config.js";
+import { DEFAULT_CONFIG, DEFAULT_BLOCKED_PATTERNS } from "./default-config.js";
 
 export interface CommandLogEntry {
   id: string;
@@ -22,8 +22,13 @@ export class ConfigManager {
   private executionHistory: CommandLogEntry[] = [];
   private readonly maxHistoryLength = 500;
 
-  private constructor() {
+  private constructor(customConfigPath?: string) {
     this.config = { ...DEFAULT_CONFIG };
+
+    if (customConfigPath) {
+      this.configFilePath = path.resolve(customConfigPath);
+      return;
+    }
 
     // Check multiple candidate locations so external MCP clients (Claude/Cursor) find it regardless of CWD
     const candidates = [
@@ -47,26 +52,51 @@ export class ConfigManager {
     this.configFilePath = chosen;
   }
 
-  public static getInstance(): ConfigManager {
+  public static getInstance(customConfigPath?: string): ConfigManager {
     if (!ConfigManager.instance) {
-      ConfigManager.instance = new ConfigManager();
+      ConfigManager.instance = new ConfigManager(customConfigPath);
+    } else if (customConfigPath && ConfigManager.instance.configFilePath !== path.resolve(customConfigPath)) {
+      ConfigManager.instance = new ConfigManager(customConfigPath);
     }
     return ConfigManager.instance;
   }
 
+  public static resetInstance(customConfigPath?: string): ConfigManager {
+    ConfigManager.instance = new ConfigManager(customConfigPath);
+    return ConfigManager.instance;
+  }
+
+  public getConfigFilePath(): string {
+    return this.configFilePath;
+  }
+
   /**
-   * Initialize config by reading from file and environment variables
+   * Initialize config by reading from file, custom path, or in-memory override object
    */
-  public async init(): Promise<void> {
+  public async init(configOrPath?: string | Partial<ServerConfig>): Promise<void> {
+    if (configOrPath && typeof configOrPath === "object") {
+      this.config = {
+        ...this.config,
+        ...configOrPath,
+      };
+      return;
+    }
+
+    if (typeof configOrPath === "string") {
+      this.configFilePath = path.resolve(configOrPath);
+    }
     try {
       if (existsSync(this.configFilePath)) {
         const raw = await fs.readFile(this.configFilePath, "utf-8");
-        const parsed = JSON.parse(raw);
+        const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+        const parsed = JSON.parse(cleanRaw);
         this.config = {
           ...this.config,
           ...parsed,
         };
         console.log(`[ConfigManager] Loaded configuration from ${this.configFilePath}`);
+      } else if (typeof configOrPath === "string") {
+        console.warn(`[ConfigManager] Specified config file not found: ${this.configFilePath}`);
       }
     } catch (err) {
       console.warn(`[ConfigManager] Could not read config file (${this.configFilePath}):`, (err as Error).message);
@@ -100,7 +130,7 @@ export class ConfigManager {
     return this.config;
   }
 
-  public async updateConfig(updates: Partial<ServerConfig>, persist = true): Promise<void> {
+  public async updateConfig(updates: Partial<ServerConfig>, persist = false): Promise<void> {
     this.config = { ...this.config, ...updates };
     if (!persist) return;
     try {
@@ -125,6 +155,22 @@ export class ConfigManager {
           allowed: false,
           reason: `Command execution blocked by security policy: matches blocked pattern "${blocked}"`,
         };
+      }
+    }
+
+    // Check regex blocked patterns
+    const patterns = this.config.blockedCommandPatterns || DEFAULT_BLOCKED_PATTERNS;
+    for (const pattern of patterns) {
+      try {
+        const regex = new RegExp(pattern, "i");
+        if (regex.test(command)) {
+          return {
+            allowed: false,
+            reason: `Command execution blocked by security policy: matches dangerous pattern "${pattern}"`,
+          };
+        }
+      } catch {
+        // ignore invalid custom regex pattern
       }
     }
 
@@ -158,10 +204,33 @@ export class ConfigManager {
       return { allowed: true };
     }
 
-    const resolvedTarget = path.resolve(targetPath).toLowerCase();
-    const targetWithSep = resolvedTarget.endsWith(path.sep)
-      ? resolvedTarget
-      : resolvedTarget + path.sep;
+    let resolvedTarget = path.resolve(targetPath);
+    // Resolve symlinks / junctions to prevent directory traversal escapes
+    try {
+      if (existsSync(resolvedTarget)) {
+        resolvedTarget = realpathSync(resolvedTarget);
+      } else {
+        // If file doesn't exist yet, resolve the nearest existing parent directory
+        let cur = path.dirname(resolvedTarget);
+        while (cur && !existsSync(cur)) {
+          const parent = path.dirname(cur);
+          if (parent === cur) break;
+          cur = parent;
+        }
+        if (existsSync(cur)) {
+          const realCur = realpathSync(cur);
+          const rel = path.relative(cur, resolvedTarget);
+          resolvedTarget = path.resolve(realCur, rel);
+        }
+      }
+    } catch {
+      // fallback to path.resolve if realpath fails
+    }
+
+    const normTarget = resolvedTarget.toLowerCase();
+    const targetWithSep = normTarget.endsWith(path.sep)
+      ? normTarget
+      : normTarget + path.sep;
 
     const isAllowed = this.config.allowedDirectories.some((dir) => {
       let cleanDir = dir.trim();
@@ -170,12 +239,21 @@ export class ConfigManager {
         cleanDir = cleanDir[0].toUpperCase() + ":\\";
       }
 
-      let resolvedDir = path.resolve(cleanDir).toLowerCase();
-      if (!resolvedDir.endsWith(path.sep)) {
-        resolvedDir += path.sep;
+      let resolvedDir = path.resolve(cleanDir);
+      try {
+        if (existsSync(resolvedDir)) {
+          resolvedDir = realpathSync(resolvedDir);
+        }
+      } catch {
+        // fallback
       }
 
-      return targetWithSep.startsWith(resolvedDir) || resolvedTarget === resolvedDir.slice(0, -1);
+      let normDir = resolvedDir.toLowerCase();
+      if (!normDir.endsWith(path.sep)) {
+        normDir += path.sep;
+      }
+
+      return targetWithSep.startsWith(normDir) || normTarget === normDir.slice(0, -1);
     });
 
     if (!isAllowed) {

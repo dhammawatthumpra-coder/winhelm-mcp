@@ -73,6 +73,7 @@ export type { ToolProfile } from "../config/profiles.js";
 
 export interface ServerConfig {
   blockedCommands: string[];
+  blockedCommandPatterns?: string[];
   allowedDirectories: string[];
   allowSystemExecution?: boolean;
   fileReadLineLimit: number;
@@ -83,6 +84,7 @@ export interface ServerConfig {
   rateLimitPerMinute?: number;
   profile?: import("../config/profiles.js").ToolProfile;
   customTools?: string[];
+  corsOrigins?: string[] | boolean | string;
 }
 
 // Group 1: File Safety & Archives

@@ -80,4 +80,124 @@ describe("ConfigManager and Security Policy", () => {
     // Restore initial config in memory
     await configManager.updateConfig(initialConfig, false);
   });
+
+  it("should block dangerous commands matching SECURITY.md regex patterns (Option A)", () => {
+    const dangerousCommands = [
+      "reg delete HKLM\\Software\\Test",
+      "reg.exe delete HKLM\\System /f",
+      "diskpart",
+      "diskpart.exe /s script.txt",
+      "initialize-disk -Number 1",
+      "clear-disk -Number 0",
+      "bcdedit /set {default} recoveryenabled No",
+      "bootrec /fixmbr",
+      "net user hacker Password123 /add",
+      "takeown /f C:\\Windows\\System32",
+      "icacls C:\\Windows /grant Everyone:F",
+      "mimikatz privilege::debug",
+      "procdump.exe -ma lsass.exe lsass.dmp",
+      "rundll32.exe C:\\windows\\System32\\comsvcs.dll, MiniDump",
+    ];
+
+    for (const cmd of dangerousCommands) {
+      const res = configManager.isCommandAllowed(cmd);
+      assert.strictEqual(res.allowed, false, `Expected dangerous command "${cmd}" to be blocked`);
+      assert.ok(res.reason?.includes("blocked") || res.reason?.includes("dangerous"));
+    }
+  });
+
+  it("should load configuration from a custom config path (--config)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const tmpDir = path.resolve("./test_scratch_config");
+    await fs.mkdir(tmpDir, { recursive: true });
+
+    const customConfigFile = path.join(tmpDir, "custom-project.json");
+    await fs.writeFile(
+      customConfigFile,
+      JSON.stringify({
+        allowedDirectories: ["D:\\custom-project"],
+        profile: "core",
+        authToken: "custom-token-xyz",
+      }),
+      "utf-8"
+    );
+
+    const customManager = ConfigManager.resetInstance(customConfigFile);
+    await customManager.init(customConfigFile);
+
+    const cfg = customManager.getConfig();
+    assert.deepStrictEqual(cfg.allowedDirectories, ["D:\\custom-project"]);
+    assert.strictEqual(cfg.profile, "core");
+    assert.strictEqual(cfg.authToken, "custom-token-xyz");
+    assert.strictEqual(customManager.getConfigFilePath(), customConfigFile);
+
+    // Clean up
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    // Reset to default
+    ConfigManager.resetInstance();
+  });
+
+  it("should not persist in-memory overrides when persist=false (non-persistence test)", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const crypto = await import("node:crypto");
+    const tmpDir = path.resolve("./test_scratch_persist");
+    await fs.mkdir(tmpDir, { recursive: true });
+
+    const testConfigFile = path.join(tmpDir, "static-config.json");
+    const originalContent = JSON.stringify({
+      allowedDirectories: ["D:\\original"],
+      profile: "minimal",
+    }, null, 2);
+    await fs.writeFile(testConfigFile, originalContent, "utf-8");
+
+    const hashBefore = crypto.createHash("sha256").update(originalContent).digest("hex");
+
+    const manager = ConfigManager.resetInstance(testConfigFile);
+    await manager.init(testConfigFile);
+
+    // Update in-memory with persist = false
+    await manager.updateConfig({ allowedDirectories: ["D:\\overridden-in-memory"], profile: "dev" }, false);
+
+    // Manager memory reflects new values
+    assert.deepStrictEqual(manager.getConfig().allowedDirectories, ["D:\\overridden-in-memory"]);
+    assert.strictEqual(manager.getConfig().profile, "dev");
+
+    // File on disk remains completely untouched
+    const contentAfter = await fs.readFile(testConfigFile, "utf-8");
+    const hashAfter = crypto.createHash("sha256").update(contentAfter).digest("hex");
+    assert.strictEqual(hashBefore, hashAfter, "Config file on disk was modified when persist=false!");
+
+    // Clean up
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    ConfigManager.resetInstance();
+  });
+
+  it("should maintain multi-instance isolation across distinct config files", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const tmpDir = path.resolve("./test_scratch_multi");
+    await fs.mkdir(tmpDir, { recursive: true });
+
+    const configPathA = path.join(tmpDir, "project-a.json");
+    const configPathB = path.join(tmpDir, "project-b.json");
+
+    await fs.writeFile(configPathA, JSON.stringify({ allowedDirectories: ["D:\\project-a"], profile: "dev" }), "utf-8");
+    await fs.writeFile(configPathB, JSON.stringify({ allowedDirectories: ["D:\\project-b"], profile: "minimal" }), "utf-8");
+
+    const instanceA = ConfigManager.resetInstance(configPathA);
+    await instanceA.init(configPathA);
+    assert.deepStrictEqual(instanceA.getConfig().allowedDirectories, ["D:\\project-a"]);
+    assert.strictEqual(instanceA.getConfig().profile, "dev");
+
+    const instanceB = ConfigManager.resetInstance(configPathB);
+    await instanceB.init(configPathB);
+    assert.deepStrictEqual(instanceB.getConfig().allowedDirectories, ["D:\\project-b"]);
+    assert.strictEqual(instanceB.getConfig().profile, "minimal");
+
+    // Clean up
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    ConfigManager.resetInstance();
+  });
 });

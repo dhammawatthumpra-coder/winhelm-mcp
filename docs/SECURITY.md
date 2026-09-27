@@ -51,7 +51,9 @@ Security is a foundational design pillar of WinHelm. Giving an AI agent access t
 
 ## 2. Authentication & Access Control
 
-By default, WinHelm runs on localhost without requiring authentication for simple local setups. In multi-user, LAN, or remote setups, you should enforce Bearer Token authentication:
+By default, WinHelm binds strictly to **`127.0.0.1` (localhost loopback)**, preventing external machines on your local network (LAN) or public internet from reaching the server.
+
+If you bind WinHelm to an external interface (`--host 0.0.0.0`) without an authentication token, a prominent startup warning is emitted to alert you of open exposure. In any shared, multi-user, LAN, or remote setup, you should enforce Bearer Token authentication:
 
 ### CLI Flag
 ```powershell
@@ -64,7 +66,10 @@ $env:MCP_AUTH_TOKEN = "my-secure-random-token-here"
 winhelm
 ```
 
-When enabled, all HTTP requests to `/mcp`, `/sse`, `/dashboard`, and `/api/*` require an `Authorization: Bearer <token>` header.
+When enabled:
+- All protocol endpoints (`/mcp`, `/sse`, `/message`), file previews (`/preview`), and administrative telemetry APIs (`/api/monitor/*`) require an `Authorization: Bearer <token>` header.
+- For convenient browser access to the Web Monitor Dashboard and Previewer, the token can also be supplied via URL query parameter (`?token=<token>` or `?auth=<token>`) or browser cookie.
+- Unauthenticated access is strictly confined to public health checks (`/health`) and the basic dashboard HTML shell (`/`, `/dashboard`).
 
 ---
 
