@@ -17,16 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Symlink & Junction Traversal Guard**: Integrated `fs.realpathSync` path canonicalization in `ConfigManager.isPathAllowed()` to resolve symlinks and NTFS directory junctions before boundary evaluation.
 - **CORS Hardening**: Restricted CORS default origins to localhost / loopback interfaces (`127.0.0.1`, `[::1]`, and active port origins) instead of wildcard `*`.
 - **Console Request Log Sanitization**: Updated `Logger.req()` to mask sensitive tokens and credentials in URL query parameters using `sanitizeText()` prior to log string assembly, preserving ANSI color codes in console output.
+- **Hardened `start.ps1` & Host Safety Gate**: Changed default `$HostAddr` parameter in `start.ps1` from `0.0.0.0` to `127.0.0.1`. Added a mandatory security validation gate that blocks execution with exit code 1 if a non-loopback interface (e.g. `0.0.0.0`) is requested without an authentication token (via `-Auth`, environment variable, or config file).
 
 ### Added
 - **`--config <path>` Flag**: Added ability to load configuration directly from any specified JSON path, bypassing default search candidates for multi-project isolation. Includes automatic UTF-8 BOM stripping.
 - **Session Non-Persistence Mode**: CLI overrides (`--allowed-dirs`, `--auth`, `--profile`, `--tools`, `--read-only`) now default to in-memory application without mutating configuration files on disk (`persist = false`). Added `--persist` flag for opt-in disk persistence.
+- **Enhanced `start.ps1` Parameters**: Added `-Config`, `-Tools`, `-ReadOnly`, and `-NoPersist` switches for complete parity with CLI options.
 
 ### Changed
 - Refactored `ConfigManager.updateConfig()` to default to `persist = false` for safer runtime overrides and test execution.
 
 ### Tests
-- Expanded automated test coverage from 68 tests across 25 suites to **78 automated tests across 26 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, and ANSI log sanitization.
+- Expanded automated test coverage from 68 tests across 25 suites to **79 automated tests across 26 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, and `start.ps1` loopback defaults and safety enforcement.
 
 ---
 
