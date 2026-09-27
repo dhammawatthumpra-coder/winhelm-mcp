@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-09-27
+
+### Security
+- **Default Network Interface Hardening**: Changed default HTTP binding host from `0.0.0.0` to `127.0.0.1` (loopback only) to prevent unintentional exposure to the local network or public internet. Added a prominent console warning when binding to non-loopback addresses without authentication.
+- **Closed Auth Bypass for Dashboard & Preview**: Enforced authentication on `/preview` and `/api/monitor/*` endpoints. Added support for token authentication via query parameter (`?token=...` or `?auth=...`) and HTTP cookie fallback for browser dashboard and markdown previewer access.
+- **Filesystem Source-Path Confinement**: Added strict `allowedDirectories` path confinement checks for `sourcePath` in `copyFileOrDir`, `sourceDir` in `createZip`, and `zipPath` in `extractZip` to prevent exfiltration or copying of files outside allowed boundaries.
+- **Dangerous Command Blocklist Enforcement (Option A)**: Integrated `DEFAULT_BLOCKED_PATTERNS` regex blocklist in `ConfigManager.isCommandAllowed()` blocking destructive system manipulation commands including `reg delete HKLM`, `diskpart`, `mimikatz`, `procdump`, `bcdedit`, `net user /add`, `takeown /f`, and `icacls /grant`.
+- **Symlink & Junction Traversal Guard**: Integrated `fs.realpathSync` path canonicalization in `ConfigManager.isPathAllowed()` to resolve symlinks and NTFS directory junctions before boundary evaluation.
+- **CORS Hardening**: Restricted CORS default origins to localhost / loopback interfaces (`127.0.0.1`, `[::1]`, and active port origins) instead of wildcard `*`.
+- **Console Request Log Sanitization**: Updated `Logger.req()` to mask sensitive tokens and credentials in URL query parameters using `sanitizeText()` prior to log string assembly, preserving ANSI color codes in console output.
+
+### Added
+- **`--config <path>` Flag**: Added ability to load configuration directly from any specified JSON path, bypassing default search candidates for multi-project isolation. Includes automatic UTF-8 BOM stripping.
+- **Session Non-Persistence Mode**: CLI overrides (`--allowed-dirs`, `--auth`, `--profile`, `--tools`, `--read-only`) now default to in-memory application without mutating configuration files on disk (`persist = false`). Added `--persist` flag for opt-in disk persistence.
+
+### Changed
+- Refactored `ConfigManager.updateConfig()` to default to `persist = false` for safer runtime overrides and test execution.
+
+### Tests
+- Expanded automated test coverage from 68 tests across 25 suites to **78 automated tests across 26 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, and ANSI log sanitization.
+
+---
+
 ## [1.0.0] - 2026-09-27
 
 ### Added
