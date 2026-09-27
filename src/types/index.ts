@@ -85,6 +85,7 @@ export interface ServerConfig {
   profile?: import("../config/profiles.js").ToolProfile;
   customTools?: string[];
   corsOrigins?: string[] | boolean | string;
+  searchExcludeDirs?: string[];
 }
 
 // Group 1: File Safety & Archives

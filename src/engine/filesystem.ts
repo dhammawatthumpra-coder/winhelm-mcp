@@ -18,6 +18,22 @@ import type {
 import { ConfigManager } from "../config/config-manager.js";
 import { runPowerShell } from "./powershell-runner.js";
 
+export const DEFAULT_EXCLUDED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "logs",
+  "build",
+  "out",
+]);
+
+export function isExcludedDirectory(name: string, customExcludes?: string[]): boolean {
+  if (name.startsWith(".")) return true;
+  if (DEFAULT_EXCLUDED_DIRS.has(name)) return true;
+  if (customExcludes && customExcludes.includes(name)) return true;
+  return false;
+}
+
 /**
  * Read file with optional line range and line limit safeguard
  */
@@ -160,6 +176,7 @@ export async function listDirectory(
     throw new Error(pathCheck.reason);
   }
 
+  const customExcludes = configManager.getConfig().searchExcludeDirs;
   const resolved = path.resolve(dirPath);
 
   async function scan(currentDir: string, depth = 0): Promise<DirectoryEntry[]> {
@@ -192,8 +209,7 @@ export async function listDirectory(
         recursive &&
         isDir &&
         depth < 3 &&
-        entry.name !== "node_modules" &&
-        entry.name !== ".git"
+        !isExcludedDirectory(entry.name, customExcludes)
       ) {
         const sub = await scan(full, depth + 1);
         results.push(...sub);
@@ -219,6 +235,7 @@ export async function searchInFiles(
     throw new Error(pathCheck.reason);
   }
 
+  const customExcludes = configManager.getConfig().searchExcludeDirs;
   const resolved = path.resolve(targetPath);
   const matches: SearchMatch[] = [];
 
@@ -232,7 +249,7 @@ export async function searchInFiles(
     }
 
     for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git" || entry.name.startsWith(".")) {
+      if (isExcludedDirectory(entry.name, customExcludes)) {
         continue;
       }
       const full = path.join(dir, entry.name);
