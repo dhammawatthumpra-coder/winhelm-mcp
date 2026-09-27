@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import crypto from "node:crypto";
 import type { Server } from "node:http";
 import { ConfigManager } from "../config/config-manager.js";
 import { SseGateway } from "./sse-gateway.js";
@@ -19,12 +20,21 @@ export interface ServerOptions {
   authToken?: string | null;
 }
 
+export function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export function createServer(options: ServerOptions): {
   app: Express;
   start: () => Promise<Server>;
   stop: (server: Server) => Promise<void>;
 } {
   const app = express();
+  // Trust proxy for loopback reverse proxies (Tailscale Funnel, local tunnel clients)
+  app.set("trust proxy", "loopback");
   const configManager = ConfigManager.getInstance();
   const config = configManager.getConfig();
   const authToken = options.authToken ?? config.authToken;
@@ -97,8 +107,7 @@ export function createServer(options: ServerOptions): {
         req.path === "/health" ||
         req.path.startsWith("/api/monitor/") ||
         req.path === "/" ||
-        req.path === "/dashboard" ||
-        req.path === "/preview";
+        req.path === "/dashboard";
 
       // Only print terminal logs for MCP protocol and external actions, keeping terminal clean & stable
       if (!isInternalPolling) {
@@ -122,9 +131,9 @@ export function createServer(options: ServerOptions): {
         return next();
       }
 
-      // 1. Check standard Authorization header
+      // 1. Check standard Authorization header (timing-safe comparison)
       const authHeader = req.headers.authorization;
-      if (authHeader && authHeader === `Bearer ${authToken}`) {
+      if (authHeader && safeCompare(authHeader, `Bearer ${authToken}`)) {
         return next();
       }
 
@@ -140,7 +149,7 @@ export function createServer(options: ServerOptions): {
       }
 
       const browserToken = queryToken || cookieToken;
-      if (browserToken && browserToken === authToken) {
+      if (browserToken && safeCompare(browserToken, authToken)) {
         return next();
       }
 

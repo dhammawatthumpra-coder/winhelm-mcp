@@ -231,13 +231,34 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+export function sanitizeHref(url: string): string {
+  const clean = url.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+  const normalized = clean.replace(/&#x?[0-9a-f]+;?/gi, (match) => {
+    try {
+      if (match.startsWith("&#x") || match.startsWith("&#X")) {
+        return String.fromCharCode(parseInt(match.slice(3), 16));
+      } else if (match.startsWith("&#")) {
+        return String.fromCharCode(parseInt(match.slice(2), 10));
+      }
+    } catch {}
+    return match;
+  });
+
+  if (/^(?:javascript|vbscript|data)\s*:/i.test(normalized.trim())) {
+    return "#";
+  }
+  return clean;
+}
+
 function formatInline(str: string): string {
   return escapeHtml(str)
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
     .replace(/~~(.*?)~~/g, "<del>$1</del>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text, href) => {
+      return `<a href="${sanitizeHref(href)}">${text}</a>`;
+    });
 }
 
 /**

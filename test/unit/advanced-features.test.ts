@@ -75,6 +75,16 @@ describe("Advanced Features: Ripgrep, PDF & Interactive Preview", () => {
       assert.ok(html.includes("<pre class=\"code-block ts\">"));
     });
 
+    it("should sanitize dangerous javascript: and vbscript: links in markdownToHtml", () => {
+      const md = "[Malicious Link](javascript:alert(1)) and [Safe Link](https://example.com) and [VBScript](vbscript:msgbox)";
+      const html = markdownToHtml(md, "XSS Test");
+      assert.ok(html.includes('<a href="#">Malicious Link</a>'));
+      assert.ok(html.includes('<a href="#">VBScript</a>'));
+      assert.ok(html.includes('<a href="https://example.com">Safe Link</a>'));
+      assert.strictEqual(html.includes("javascript:"), false);
+      assert.strictEqual(html.includes("vbscript:"), false);
+    });
+
     it("should locate Chromium browser (Edge or Chrome)", () => {
       const browser = findChromiumPath();
       assert.ok(browser !== null, "At least Edge or Chrome must be installed on Windows");

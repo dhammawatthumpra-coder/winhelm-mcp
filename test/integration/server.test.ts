@@ -1,7 +1,7 @@
 import test, { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
-import { createServer } from "../../src/gateway/server.js";
+import { createServer, safeCompare } from "../../src/gateway/server.js";
 
 describe("Unified Gateway Server Integration", () => {
   const TEST_PORT = 8795;
@@ -219,6 +219,31 @@ describe("Server Authentication and Protected Endpoints", () => {
 
     const previewRes = await fetch(`${AUTH_BASE_URL}/preview?path=README.md&token=${TEST_TOKEN}`);
     assert.strictEqual(previewRes.status, 200);
+  });
+
+  it("should configure trust proxy loopback on Express application", () => {
+    const { app } = createServer({ port: 8799, host: "127.0.0.1" });
+    assert.strictEqual(app.get("trust proxy"), "loopback");
+  });
+
+  it("should perform timing-safe token comparisons correctly with safeCompare", () => {
+    assert.strictEqual(safeCompare("secret123", "secret123"), true);
+    assert.strictEqual(safeCompare("secret123", "secret124"), false);
+    assert.strictEqual(safeCompare("secret123", "secret12"), false);
+    assert.strictEqual(safeCompare("secret", "secret123"), false);
+    assert.strictEqual(safeCompare("", ""), true);
+  });
+
+  it("should reject invalid or partial Bearer tokens with 401", async () => {
+    const res1 = await fetch(`${AUTH_BASE_URL}/api/monitor/logs`, {
+      headers: { Authorization: "Bearer wrong_token" },
+    });
+    assert.strictEqual(res1.status, 401);
+
+    const res2 = await fetch(`${AUTH_BASE_URL}/api/monitor/logs`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}_extra` },
+    });
+    assert.strictEqual(res2.status, 401);
   });
 });
 
