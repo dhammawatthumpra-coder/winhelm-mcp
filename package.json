@@ -1,0 +1,50 @@
+{
+  "name": "winhelm-mcp",
+  "version": "1.0.0",
+  "description": "WinHelm - Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 38 Tools",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "winhelm": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CLAUDE.md",
+    "manifest.json",
+    "server.json",
+    "scripts"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "build:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-exe.ps1",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "type-check": "tsc --noEmit",
+    "service:install": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action install",
+    "service:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action uninstall",
+    "service:start": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action start",
+    "service:stop": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action stop",
+    "service:status": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action status"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

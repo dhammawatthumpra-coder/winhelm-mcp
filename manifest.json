@@ -1,0 +1,62 @@
+{
+  "manifest_version": "0.4",
+  "name": "winhelm-mcp",
+  "version": "1.0.0",
+  "description": "WinHelm - Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 38 System Tools",
+  "long_description": "WinHelm is a lightweight, all-in-one MCP server designed for the Windows operating system. It embeds a native Streamable HTTP and SSE gateway, complete with Web Monitor, UTF-8 PowerShell runner, surgical file editor, Ripgrep search, PDF generation, clipboard, screen capture, and system inspection tools.",
+  "author": {
+    "name": "WinHelm Community"
+  },
+  "homepage": "https://github.com/winhelm/winhelm-mcp",
+  "documentation": "https://github.com/winhelm/winhelm-mcp#readme",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js",
+        "--port",
+        "${user_config.port}",
+        "--host",
+        "${user_config.host}"
+      ],
+      "env": {
+        "PORT": "${user_config.port}",
+        "HOST": "${user_config.host}",
+        "MCP_AUTH_TOKEN": "${user_config.auth_token}",
+        "MCP_ALLOWED_DIRECTORIES": "${user_config.allowed_directories}"
+      }
+    }
+  },
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Port on which the HTTP, SSE, and Streamable HTTP gateway listens.",
+      "required": false,
+      "default": 8788
+    },
+    "host": {
+      "type": "string",
+      "title": "Bind Host",
+      "description": "Network host interface to bind (e.g. 0.0.0.0 for Tailscale/LAN, 127.0.0.1 for local only).",
+      "required": false,
+      "default": "0.0.0.0"
+    },
+    "auth_token": {
+      "type": "string",
+      "title": "Authentication Bearer Token",
+      "description": "Optional Bearer token required for all incoming requests.",
+      "required": false,
+      "default": ""
+    },
+    "allowed_directories": {
+      "type": "string",
+      "title": "Allowed Directories",
+      "description": "Comma-separated list of directories permitted for file operations (leave empty for unrestricted).",
+      "required": false,
+      "default": ""
+    }
+  }
+}

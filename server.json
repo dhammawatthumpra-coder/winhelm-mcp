@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "winhelm-mcp",
+  "title": "WinHelm",
+  "description": "Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 32 System Tools",
+  "repository": {
+    "url": "https://github.com/winhelm/winhelm-mcp",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "winhelm-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:8788/mcp"
+      }
+    }
+  ]
+}
