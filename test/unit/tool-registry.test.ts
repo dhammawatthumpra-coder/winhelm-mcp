@@ -13,6 +13,7 @@ test("Canonical Tool Registry & Documentation Integrity", async (t) => {
   });
 
   await t.test("should match exact tool counts in all profiles", () => {
+    assert.equal(PROFILES.minimal.tools.length, 6, "Minimal profile must have exactly 6 tools");
     assert.equal(PROFILES.core.tools.length, 15, "Core profile must have exactly 15 tools");
     assert.equal(PROFILES.dev.tools.length, 28, "Dev profile must have exactly 28 tools");
     assert.equal(PROFILES.sysadmin.tools.length, 37, "Sysadmin profile must have exactly 37 tools");

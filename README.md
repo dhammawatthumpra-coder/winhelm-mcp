@@ -3,13 +3,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-64%2F64%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-68%2F68%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
 > A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor Dashboard, 38 System Tools with Dynamic Profile Loading, and MCP File Preview Resource.
 
-[📖 Tools Reference](docs/TOOLS.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
+[📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
 
 ---
 
@@ -190,27 +190,43 @@ Visit `http://localhost:8788/health` in your browser. You should receive:
 AI coding assistants perform much better when their context window isn't bloated with dozens of unneeded tool schemas. WinHelm implements a **Dynamic Profile System** so your agent sees only the tools it actually needs:
 
 ```powershell
-# 1. Core Profile: 15 essential tools (terminal, file read/write/edit/search/hash, process list, telemetry)
+# 1. Minimal Profile: 6 essential tools for small models (Haiku, Llama 8B, local LLMs)
+winhelm --profile minimal
+
+# 2. Core Profile: 15 essential tools (terminal, file read/write/edit/search/hash, process list, telemetry)
 winhelm --profile core
 
-# 2. Developer Profile: 28 tools (Core + background tasks, ripgrep, zip archives, HTTP requests, PDF reports, system open & file preview)
+# 3. Developer Profile: 28 tools (Core + background tasks, ripgrep, zip archives, HTTP requests, PDF reports, system open & file preview)
 winhelm --profile dev
 
-# 3. SysAdmin Profile: 37 tools (All Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop automation & preview — all except pdf_generate)
+# 4. SysAdmin Profile: 37 tools (All Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop automation & preview — all except pdf_generate)
 winhelm --profile sysadmin
 
-# 4. Full Suite: All 38 tools + interactive preview resource (default)
+# 5. Full Suite: All 38 tools + interactive preview resource (default)
 winhelm --profile full
 ```
 
+### Profile Inclusions
+
 | Profile | Active Tools | Key Inclusions | Context Window Savings |
 | :--- | :---: | :--- | :--- |
+| **`minimal`** | **6** | `terminal_run`, `file_read`, `file_write`, `file_list`, `file_search`, `system_info` | 🟢 **~85% token reduction** |
 | **`core`** | **15** | `terminal_run`, `file_read`, `file_write`, `file_edit`, `file_list`, `file_search`, `file_copy`, `file_move`, `file_tail`, `file_hash`, `file_delete_safe`, `system_info`, `gpu_info`, `process_list`, `port_check` | 🟢 **~60% token reduction** |
 | **`dev`** | **28** | All Core + `terminal_task_*` (5 tasks), `file_search_ripgrep`, `archive_zip/unzip`, `http_ping/request`, `pdf_generate`, `system_open`, `preview://file` | 🟡 **~30% token reduction** |
 | **`sysadmin`** | **37** | All tools except `pdf_generate`: Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop actions & preview | 🟠 Full Windows ops toolkit |
 | **`full`** | **38** | All 38 tools + interactive HTML preview resource (default when omitted) | 🔵 Complete Windows control |
 
-> **Pro Tip:** In `claude_desktop_config.json`, pass `["--profile", "dev"]` under `args` to keep Claude's context light and fast!
+### Token Economics & Model Optimization
+
+| Profile | Tools | Approx Context Tokens | Token Savings | Recommended Target Models & Use Cases |
+| :--- | :---: | :---: | :---: | :--- |
+| **`minimal`** | **6** | **~1,500** | 🟢 **−85%** | **Claude 3.5 Haiku, Llama 3 8B, local LLMs** or token-constrained pipelines |
+| **`core`** | **15** | **~4,000** | 🟢 **−60%** | Everyday coding & file operations without background processes |
+| **`dev`** | **28** | **~6,800** | 🟡 **−32%** | **Claude 3.7 Sonnet, GPT-4o, Cursor** full-stack software development |
+| **`sysadmin`** | **37** | **~9,200** | 🟠 **−8%** | Headless server management, Windows DevOps, diagnostics & audit |
+| **`full`** | **38** | **~10,000** | 🔵 **Baseline** | Complete Windows native desktop suite with PDF & HTML visual previews |
+
+> **Pro Tip:** In `claude_desktop_config.json`, pass `["--profile", "dev"]` under `args` for software development, or `["--profile", "minimal"]` for Claude Haiku!
 
 ---
 
@@ -336,11 +352,11 @@ WinHelm provides 38 focused Windows native tools grouped across 6 functional cat
 
 | Category | Tools | In Profiles | Summary |
 | :--- | :---: | :--- | :--- |
-| **Terminal & Background Tasks** | 6 | `core` (run only), `dev`, `sysadmin`, `full` | Synchronous PowerShell runner and detached daemon processes with live logs & stdin. |
-| **Filesystem, Safe Delete & Archives** | 12 | `core` (10 tools), `dev` (all 12), `sysadmin` (all 12), `full` (all 12) | Surgical file edits, streaming tails, SHA-256 hashes, .NET zip archives, and **Recycle Bin safe delete**. |
+| **Terminal & Background Tasks** | 6 | `minimal` (run only), `core` (run only), `dev`, `sysadmin`, `full` | Synchronous PowerShell runner and detached daemon processes with live logs & stdin. |
+| **Filesystem, Safe Delete & Archives** | 12 | `minimal` (read, write, list, search), `core` (10 tools), `dev` (all 12), `sysadmin` (all 12), `full` (all 12) | Surgical file edits, streaming tails, SHA-256 hashes, .NET zip archives, and **Recycle Bin safe delete**. |
 | **Codebase Search, PDF & Preview** | 3 | `dev` (all 3), `sysadmin` (search & preview), `full` (all 3) | Streaming paginated `ripgrep` regex search (`query` parameter), headless Chromium PDF printer, and web previewer. |
 | **Desktop, Clipboard & Toast** | 5 | `dev` (`system_open`), `sysadmin` (all 5), `full` (all 5) | Windows clipboard read/write, primary screen capture, system app launcher (`system_open`), and native Toast notifications. |
-| **System, Processes & Services** | 9 | `core` (info, gpu, procs, port), `sysadmin` (all 9), `full` (all 9) | CPU/RAM/Drive telemetry, NVIDIA GPU stats, process list/kill, port inspector, event logs, and service control. |
+| **System, Processes & Services** | 9 | `minimal` (`system_info`), `core` (info, gpu, procs, port), `sysadmin` (all 9), `full` (all 9) | CPU/RAM/Drive telemetry, NVIDIA GPU stats, process list/kill, port inspector, event logs, and service control. |
 | **Network & Connectivity** | 3 | `dev` (ping, req), `sysadmin` (all 3), `full` (all 3) | HTTP latency probe, full REST client (`http_request`), and local/Tailscale adapter inspector. |
 
 📖 **See [docs/TOOLS.md](docs/TOOLS.md) for full parameter specifications, types, returns, and schemas.**
@@ -387,7 +403,7 @@ WinHelm loads configuration in the following order of precedence:
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--stdio` | *N/A* | `false` | Run in standard I/O mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor). |
-| `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `core` (15), `dev` (28), `sysadmin` (37), or `full` (38). |
+| `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `minimal` (6), `core` (15), `dev` (28), `sysadmin` (37), or `full` (38). |
 | `--transport <type>` | `WINHELM_TRANSPORT` | `http` | Transport mode: `http` (Web Gateway + SSE) or `stdio`. |
 | `--port <number>` | `PORT` | `8788` | Port number for the Web Gateway and MCP server. |
 | `--host <string>` | `HOST` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for LAN/Tailscale, `127.0.0.1` for local only). |
@@ -531,6 +547,7 @@ The resulting executable will be generated at `dist/winhelm.exe`:
 For in-depth guides, architectural references, and developer guidelines, explore the `docs/` folder:
 
 - 📖 **[Comprehensive Tools Reference](docs/TOOLS.md)**: Exhaustive documentation for all 38 tools, including parameter types, options, return formats, and JSON-RPC examples.
+- ⚙️ **[Tool Profiles & Context Optimization](docs/PROFILES.md)**: Deep dive into the 5 built-in profiles (minimal, core, dev, sysadmin, full), custom `--tools` filtering, token economics, and LLM optimization recipes.
 - 🛡️ **[Security Model & Architecture](docs/SECURITY.md)**: Deep dive into the 5-layer security model, path confinement, regex command blacklists, and secret masking.
 - 💡 **[Real-World Agent Examples](docs/EXAMPLES.md)**: End-to-end workflows showing how AI agents build projects, troubleshoot Windows crashes, and generate executive PDFs.
 - 📝 **[Changelog](CHANGELOG.md)**: Release notes and version history following Keep a Changelog.
