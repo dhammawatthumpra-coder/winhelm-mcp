@@ -14,8 +14,8 @@ describe("Tool Profiles System", () => {
     assert.strictEqual(isValidProfile("invalid"), false);
 
     assert.strictEqual(PROFILES.core.tools.length, 15, "Core profile must have 15 tools");
-    assert.strictEqual(PROFILES.dev.tools.length, 25, "Dev profile must have 25 tools");
-    assert.strictEqual(PROFILES.sysadmin.tools.length, 32, "Sysadmin profile must have 32 tools");
+    assert.strictEqual(PROFILES.dev.tools.length, 28, "Dev profile must have 28 tools");
+    assert.strictEqual(PROFILES.sysadmin.tools.length, 37, "Sysadmin profile must have 37 tools");
     assert.strictEqual(PROFILES.full.tools.length, 38, "Full profile must have 38 tools");
   });
 
@@ -37,6 +37,12 @@ describe("Tool Profiles System", () => {
     assert.strictEqual(isToolInProfile("service_control", "dev"), false);
     assert.strictEqual(isToolInProfile("service_control", "sysadmin"), true);
     assert.strictEqual(isToolInProfile("service_control", "full"), true);
+
+    // pdf_generate is in dev and full, but NOT sysadmin or core
+    assert.strictEqual(isToolInProfile("pdf_generate", "core"), false);
+    assert.strictEqual(isToolInProfile("pdf_generate", "dev"), true);
+    assert.strictEqual(isToolInProfile("pdf_generate", "sysadmin"), false);
+    assert.strictEqual(isToolInProfile("pdf_generate", "full"), true);
   });
 
   it("should register exactly 15 tools when profile is 'core'", async () => {
@@ -52,7 +58,7 @@ describe("Tool Profiles System", () => {
     assert.strictEqual(toolCount, 15, `Core profile must register exactly 15 tools (got ${toolCount})`);
   });
 
-  it("should register exactly 25 tools when profile is 'dev'", async () => {
+  it("should register exactly 28 tools when profile is 'dev'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "dev" });
 
@@ -61,10 +67,10 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 25, `Dev profile must register exactly 25 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 28, `Dev profile must register exactly 28 tools (got ${toolCount})`);
   });
 
-  it("should register exactly 32 tools when profile is 'sysadmin'", async () => {
+  it("should register exactly 37 tools when profile is 'sysadmin'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "sysadmin" });
 
@@ -73,7 +79,7 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 32, `Sysadmin profile must register exactly 32 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 37, `Sysadmin profile must register exactly 37 tools (got ${toolCount})`);
   });
 
   it("should register all 38 tools when profile is 'full'", async () => {

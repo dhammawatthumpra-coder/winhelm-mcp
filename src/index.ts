@@ -26,7 +26,7 @@ Usage:
 Options:
   --port <number>       Port to listen on (default: 8788 or PORT env)
   --host <string>       Host interface (default: 0.0.0.0 or HOST env)
-  --profile, -p <name>  Tool profile: core (15), dev (25), sysadmin (32), full (38) (default: full)
+  --profile, -p <name>  Tool profile: core (15), dev (28), sysadmin (37), full (38) (default: full)
   --stdio               Run in stdio mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor)
   --transport <type>    Transport mode: http (default) or stdio
   --auth <token>        Bearer authentication token (or MCP_AUTH_TOKEN env)
