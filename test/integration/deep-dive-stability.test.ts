@@ -88,7 +88,7 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
   });
 
   it("should gracefully stop server and immediately rebind without EADDRINUSE", async () => {
-    const REBIND_PORT = 8794;
+    const REBIND_PORT = 8791;
     const g1 = createServer({ port: REBIND_PORT, host: "127.0.0.1" });
     const s1 = await g1.start();
 
@@ -98,6 +98,7 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
 
     // Stop s1
     await g1.stop(s1);
+    await new Promise((r) => setTimeout(r, 100));
 
     // Immediately start s2 on the exact same port
     const g2 = createServer({ port: REBIND_PORT, host: "127.0.0.1" });

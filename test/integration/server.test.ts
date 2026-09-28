@@ -213,9 +213,17 @@ describe("Server Authentication and Protected Endpoints", () => {
     assert.strictEqual(logsRes.status, 200);
   });
 
-  it("should allow access to protected endpoints with ?token= query parameter", async () => {
+  it("should allow access to protected endpoints with ?token= query parameter and set cookie", async () => {
     const logsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/logs?token=${TEST_TOKEN}`);
     assert.strictEqual(logsRes.status, 200);
+    const setCookie = logsRes.headers.get("set-cookie");
+    assert.ok(setCookie?.includes("authToken="));
+
+    // Verify subsequent request using cookie without query token
+    const cookieRes = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`, {
+      headers: { Cookie: setCookie! },
+    });
+    assert.strictEqual(cookieRes.status, 200);
 
     const previewRes = await fetch(`${AUTH_BASE_URL}/preview?path=README.md&token=${TEST_TOKEN}`);
     assert.strictEqual(previewRes.status, 200);

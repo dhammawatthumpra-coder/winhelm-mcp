@@ -150,6 +150,9 @@ export function createServer(options: ServerOptions): {
 
       const browserToken = queryToken || cookieToken;
       if (browserToken && safeCompare(browserToken, authToken)) {
+        if (queryToken && !cookieToken) {
+          res.setHeader("Set-Cookie", `authToken=${encodeURIComponent(queryToken)}; Path=/; HttpOnly; SameSite=Lax`);
+        }
         return next();
       }
 
