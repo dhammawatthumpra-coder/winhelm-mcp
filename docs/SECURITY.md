@@ -71,6 +71,13 @@ When enabled:
 - For clients without custom header support (such as Claude.ai Custom Connectors) or convenient browser access to the Web Monitor Dashboard and Previewer, the token can also be supplied via URL query parameter (`?token=<token>` or `?auth=<token>`) or browser cookie.
 - Unauthenticated access is strictly confined to public health checks (`/health`) and the basic dashboard HTML shell (`/`, `/dashboard`).
 
+### Disabling Authentication (`"authToken": null`)
+
+If `"authToken"` is explicitly set to `null` in `winhelm.config.json` (or `--auth` / `MCP_AUTH_TOKEN` is omitted):
+- The server operates in **No-Auth Mode** (`Public network mode active (No auth token set)`).
+- Incoming MCP requests and tools are executed without verifying any Bearer token or query token.
+- **Safety Restriction:** This mode should be strictly confined to local loopback development (`127.0.0.1`). Exposing an unauthenticated server with unrestricted drive access to public networks is dangerous and guarded by safety gates in `start-funnel.ps1`.
+
 ---
 
 ## 3. Read-Only Enforcement Mode

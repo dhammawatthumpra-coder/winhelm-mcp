@@ -472,7 +472,10 @@ Create or modify `winhelm.config.json` in your project root or `%USERPROFILE%\.w
 
 > **Fail-Closed Security & Allowed Directories:** `allowedDirectories: []` blocks all filesystem operations by default for safety. You must explicitly configure target paths (e.g. `["D:\\mcp", "C:\\Workspace"]`).  
 > **Whole-Drive Whitelist Tip:** You can supply `"D:\\"`, `"D:"`, or `"D"` in `allowedDirectories` to permit access to an entire volume safely.  
-> **Wildcard Full-Drive Access (`["*"]`):** To permit access across all drives on your machine for personal development, supply `["*"]` or `["all"]`. ⚠️ **Security Warning:** Wildcard full access (`["*"]`) is strictly discouraged for unauthenticated or public-facing network exposures.
+> **Wildcard Full-Drive Access (`["*"]`):** To permit access across all drives on your machine for personal development, supply `["*"]` or `["all"]`. ⚠️ **Security Warning:** Wildcard full access (`["*"]`) is strictly discouraged for unauthenticated or public-facing network exposures.  
+> **Authentication Mode (`authToken`):**  
+> - **`"authToken": null` (No-Auth Mode):** Disables authentication entirely. The server accepts all incoming requests without asking for a Bearer token or URL token. Recommended strictly for local loopback development (`127.0.0.1`).  
+> - **`"authToken": "<token-string>"` (Protected Mode):** Enforces cryptographic Bearer token validation (via `Authorization: Bearer <token>` header or `?token=<token>` query parameter). Mandatory when exposing WinHelm across networks or via Tailscale Funnel.
 
 ---
 
