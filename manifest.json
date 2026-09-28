@@ -7,8 +7,8 @@
   "author": {
     "name": "WinHelm Community"
   },
-  "homepage": "https://github.com/winhelm/winhelm-mcp",
-  "documentation": "https://github.com/winhelm/winhelm-mcp#readme",
+  "homepage": "https://github.com/dhammawatthumpra-coder/winhelm-mcp",
+  "documentation": "https://github.com/dhammawatthumpra-coder/winhelm-mcp#readme",
   "server": {
     "type": "node",
     "entry_point": "dist/index.js",
