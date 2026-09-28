@@ -16,6 +16,8 @@ describe("Workstation & Inspection Tools (6 Golden Tools)", () => {
   const testDir = path.resolve(process.cwd(), "test-scratch-workstation");
 
   before(async () => {
+    const { ConfigManager } = await import("../../src/config/config-manager.js");
+    await ConfigManager.getInstance().updateConfig({ allowedDirectories: ["*"] }, false);
     if (existsSync(testDir)) {
       await fs.rm(testDir, { recursive: true, force: true });
     }

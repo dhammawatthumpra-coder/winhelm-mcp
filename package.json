@@ -18,12 +18,13 @@
   "files": [
     "dist",
     "docs",
-    "scripts",
-    "README.md",
-    "CHANGELOG.md",
-    "CLAUDE.md",
     "manifest.json",
-    "server.json"
+    "server.json",
+    "scripts/build-exe.ps1",
+    "scripts/manage-service.ps1",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",

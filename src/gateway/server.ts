@@ -27,6 +27,55 @@ export function safeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+/**
+ * Validate Host header against loopback, bound interface, and allowed hosts whitelist (DNS Rebinding protection)
+ */
+export function isHostAllowed(
+  hostHeader?: string,
+  allowedHosts: string[] = ["localhost", "127.0.0.1", "[::1]", "*.ts.net"],
+  bindHost = "127.0.0.1"
+): boolean {
+  if (!hostHeader) return false;
+  let hostname: string;
+  const cleanHeader = hostHeader.trim().toLowerCase();
+
+  // Handle IPv6 literal with brackets [::1]:port or naked ::1
+  if (cleanHeader.startsWith("[")) {
+    const endBracket = cleanHeader.indexOf("]");
+    hostname = endBracket !== -1 ? cleanHeader.slice(1, endBracket) : cleanHeader;
+  } else if (cleanHeader === "::1" || cleanHeader.startsWith("::1:")) {
+    hostname = "::1";
+  } else {
+    hostname = cleanHeader.split(":")[0];
+  }
+
+  // Always permit loopback interfaces
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  ) {
+    return true;
+  }
+
+  // Permit explicitly configured bind host interface
+  if (bindHost && hostname === bindHost.toLowerCase()) {
+    return true;
+  }
+
+  // Check allowed hosts whitelist (supports wildcard prefixes like *.ts.net, *.example.com)
+  return allowedHosts.some((pattern) => {
+    const p = pattern.trim().toLowerCase();
+    if (p === "*") return true;
+    if (p.startsWith("*.")) {
+      const suffix = p.slice(1);
+      return hostname.endsWith(suffix) || hostname === p.slice(2);
+    }
+    return hostname === p;
+  });
+}
+
 export function createServer(options: ServerOptions): {
   app: Express;
   start: () => Promise<Server>;
@@ -38,6 +87,47 @@ export function createServer(options: ServerOptions): {
   const configManager = ConfigManager.getInstance();
   const config = configManager.getConfig();
   const authToken = options.authToken ?? config.authToken;
+
+  // 1. Global Security Headers (Prevent MIME sniffing and Clickjacking)
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    next();
+  });
+
+  // 2. Host Header Validation Guard (Mitigates DNS Rebinding attacks)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const hostHeader = req.get("host") || "";
+    const allowed = config.allowedHosts || ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
+    if (!isHostAllowed(hostHeader, allowed, options.host)) {
+      logger.security(
+        "Blocked request with unauthorized Host header (DNS Rebinding protection)",
+        `Host: ${hostHeader} | IP: ${req.ip}`
+      );
+      res.status(403).json({
+        error: "Forbidden: Host header not permitted by WinHelm security policy",
+      });
+      return;
+    }
+    next();
+  });
+
+  // 3. Remote Proxy / Tunnel Security Guard (Fail-closed when no auth token is configured)
+  if (!authToken) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.headers["x-forwarded-for"] || req.headers["forwarded"]) {
+        logger.security(
+          "Blocked unauthenticated remote proxy/tunnel request",
+          `Path: ${req.path} | IP: ${req.ip} | X-Forwarded-For: ${req.headers["x-forwarded-for"]}`
+        );
+        res.status(403).json({
+          error: "Forbidden: Remote proxy/tunnel access is strictly blocked when no authentication token is configured. Set an authToken or --auth.",
+        });
+        return;
+      }
+      next();
+    });
+  }
 
   const sseGateway = new SseGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
   const streamableGateway = new StreamableGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
@@ -77,14 +167,14 @@ export function createServer(options: ServerOptions): {
     return cachedGpuInfo;
   }
 
-  // CORS configuration: restrict external web origins by default to prevent DNS-rebinding
+  // 4. CORS configuration: restricts web browser cross-origin requests
   const corsOption = config.corsOrigins;
   if (corsOption === true || corsOption === "*") {
     app.use(cors({ origin: "*" }));
   } else if (Array.isArray(corsOption) || typeof corsOption === "string") {
     app.use(cors({ origin: corsOption }));
   } else {
-    // Default: permit local requests and loopback origins, preventing external DNS-rebinding attacks
+    // Default: permit local requests and loopback origins
     app.use(
       cors({
         origin: (origin, callback) => {
@@ -151,7 +241,11 @@ export function createServer(options: ServerOptions): {
       const browserToken = queryToken || cookieToken;
       if (browserToken && safeCompare(browserToken, authToken)) {
         if (queryToken && !cookieToken) {
-          res.setHeader("Set-Cookie", `authToken=${encodeURIComponent(queryToken)}; Path=/; HttpOnly; SameSite=Lax`);
+          const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
+          res.setHeader(
+            "Set-Cookie",
+            `authToken=${encodeURIComponent(queryToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isSecure ? "; Secure" : ""}`
+          );
         }
         return next();
       }
@@ -179,6 +273,10 @@ export function createServer(options: ServerOptions): {
     }
     const html = await getFilePreviewHtml(filePath);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; frame-src data:; connect-src 'none'; form-action 'none'; frame-ancestors 'none';"
+    );
     res.send(html);
   });
 

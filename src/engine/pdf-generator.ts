@@ -50,8 +50,9 @@ export function markdownToHtml(md: string, title = "Document"): string {
     // Code blocks
     if (line.trim().startsWith("```")) {
       if (inCodeBlock) {
+        const safeLang = escapeHtml(codeBlockLang.replace(/[^\w\-]/g, ""));
         htmlParts.push(
-          `<pre class="code-block ${codeBlockLang}"><code>${escapeHtml(codeBuffer.join("\n"))}</code></pre>`
+          `<pre class="code-block ${safeLang}"><code>${escapeHtml(codeBuffer.join("\n"))}</code></pre>`
         );
         codeBuffer = [];
         inCodeBlock = false;

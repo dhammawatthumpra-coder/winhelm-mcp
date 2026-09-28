@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { runPowerShell } from "../engine/powershell-runner.js";
 import { taskManager } from "../engine/task-manager.js";
+import { ConfigManager } from "../config/config-manager.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 
 export function registerTerminalTools(server: McpServer): void {
@@ -18,6 +19,12 @@ export function registerTerminalTools(server: McpServer): void {
         .describe("Maximum execution time in milliseconds (default: 60000)"),
     },
     async ({ command, cwd, timeout_ms }) => {
+      if (ConfigManager.getInstance().isReadOnly()) {
+        return {
+          content: [{ type: "text", text: "Execution blocked: Server is operating in read-only mode." }],
+          isError: true,
+        };
+      }
       try {
         const res = await runPowerShell(command, { cwd, timeoutMs: timeout_ms });
         let output = "";
@@ -50,6 +57,12 @@ export function registerTerminalTools(server: McpServer): void {
       cwd: z.string().optional().describe("Working directory for task execution"),
     },
     async ({ command, cwd }) => {
+      if (ConfigManager.getInstance().isReadOnly()) {
+        return {
+          content: [{ type: "text", text: "Task execution blocked: Server is operating in read-only mode." }],
+          isError: true,
+        };
+      }
       try {
         const task = taskManager.startTask(command, cwd);
         return {

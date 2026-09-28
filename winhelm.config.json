@@ -9,7 +9,7 @@
     "del /f /s /q c:\\",
     "remove-item -recurse -force c:\\"
   ],
-  "allowedDirectories": ["*"],
+  "allowedDirectories": [],
   "allowSystemExecution": true,
   "fileReadLineLimit": 2000,
   "defaultTimeoutMs": 60000,

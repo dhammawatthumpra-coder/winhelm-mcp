@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { executeHttpRequest, pingEndpoint } from "../engine/http-client.js";
 import { getNetworkInfo } from "../engine/system.js";
+import { ConfigManager } from "../config/config-manager.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 
 export function registerNetworkTools(server: McpServer): void {
@@ -51,6 +52,18 @@ export function registerNetworkTools(server: McpServer): void {
       timeout_ms: z.number().optional().describe("Timeout in milliseconds (default: 15000)"),
     },
     async ({ url, method, headers, body, timeout_ms }) => {
+      const methodUpper = (method || "GET").toUpperCase();
+      if (ConfigManager.getInstance().isReadOnly() && !["GET", "HEAD"].includes(methodUpper)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `HTTP mutation blocked: ${methodUpper} requests are not permitted in read-only mode.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       try {
         const res = await executeHttpRequest({
           url,

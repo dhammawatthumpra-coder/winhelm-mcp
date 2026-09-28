@@ -10,11 +10,15 @@ import {
   writeFileContent,
 } from "../../src/engine/filesystem.js";
 
+import { ConfigManager } from "../../src/config/config-manager.js";
+
 describe("Filesystem Engine", () => {
   const testDir = path.resolve("./test_temp_fs");
   const testFile = path.join(testDir, "sample.txt");
 
   before(async () => {
+    const configManager = ConfigManager.getInstance();
+    await configManager.updateConfig({ allowedDirectories: ["*"] }, false);
     await fs.mkdir(testDir, { recursive: true });
   });
 

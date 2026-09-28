@@ -1,7 +1,32 @@
 import test, { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import type { Server } from "node:http";
+import http, { type Server } from "node:http";
 import { createServer, safeCompare } from "../../src/gateway/server.js";
+
+function rawHttpRequest(
+  port: number,
+  path: string,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method: "GET",
+        headers,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => resolve({ status: res.statusCode || 0, body }));
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 describe("Unified Gateway Server Integration", () => {
   const TEST_PORT = 8795;
@@ -181,6 +206,37 @@ describe("Unified Gateway Server Integration", () => {
     const csvText = await csvRes.text();
     assert.ok(csvText.includes("Timestamp,Type,Level,Title"));
   });
+
+  it("should enforce Host header validation to mitigate DNS Rebinding attacks", async () => {
+    // 1. Unauthorized external domain -> 403 Forbidden
+    const evilRes = await rawHttpRequest(TEST_PORT, "/health", { Host: "evil.attacker.com" });
+    assert.strictEqual(evilRes.status, 403);
+    assert.ok(evilRes.body.includes("Host header not permitted"));
+
+    // 2. Loopback localhost -> 200 OK
+    const localRes = await rawHttpRequest(TEST_PORT, "/health", { Host: `localhost:${TEST_PORT}` });
+    assert.strictEqual(localRes.status, 200);
+
+    // 3. Tailscale domain (*.ts.net) -> 200 OK
+    const tsRes = await rawHttpRequest(TEST_PORT, "/health", { Host: `my-box.tailscale.ts.net:${TEST_PORT}` });
+    assert.strictEqual(tsRes.status, 200);
+  });
+
+  it("should strictly block unauthenticated remote proxy/tunnel requests with 403 (Fail-Closed)", async () => {
+    const proxyRes = await fetch(`${BASE_URL}/health`, {
+      headers: { "X-Forwarded-For": "203.0.113.195" },
+    });
+    assert.strictEqual(proxyRes.status, 403);
+    const body = (await proxyRes.json()) as any;
+    assert.ok(body.error?.includes("Remote proxy/tunnel access is strictly blocked"));
+  });
+
+  it("should send security headers on HTTP responses", async () => {
+    const res = await fetch(`${BASE_URL}/health`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get("x-content-type-options"), "nosniff");
+    assert.strictEqual(res.headers.get("x-frame-options"), "DENY");
+  });
 });
 
 describe("Server Authentication and Protected Endpoints", () => {
@@ -296,6 +352,32 @@ describe("Server Authentication and Protected Endpoints", () => {
       headers: { Authorization: `Bearer ${TEST_TOKEN}_extra` },
     });
     assert.strictEqual(res2.status, 401);
+  });
+
+  it("should permit remote proxy/tunnel requests when Bearer token is valid", async () => {
+    const authProxyRes = await fetch(`${AUTH_BASE_URL}/health`, {
+      headers: {
+        "X-Forwarded-For": "203.0.113.195",
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+    });
+    assert.strictEqual(authProxyRes.status, 200);
+  });
+
+  it("should include strict Content-Security-Policy on /preview endpoint", async () => {
+    const res = await fetch(`${AUTH_BASE_URL}/preview?path=C:\\Windows\\win.ini&token=${TEST_TOKEN}`);
+    // File may or may not exist, but headers are set
+    const csp = res.headers.get("content-security-policy");
+    assert.ok(csp?.includes("default-src 'none'"));
+    assert.ok(csp?.includes("connect-src 'none'"));
+  });
+
+  it("should set Max-Age and SameSite on session authentication cookie", async () => {
+    const res = await fetch(`${AUTH_BASE_URL}/api/monitor/logs?token=${TEST_TOKEN}`);
+    const setCookie = res.headers.get("set-cookie");
+    assert.ok(setCookie?.includes("Max-Age=2592000"));
+    assert.ok(setCookie?.includes("SameSite=Lax"));
+    assert.ok(setCookie?.includes("HttpOnly"));
   });
 });
 
