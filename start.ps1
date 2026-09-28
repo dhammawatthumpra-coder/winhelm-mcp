@@ -8,27 +8,47 @@ param (
     [string]$Config = "",
     [string]$Tools = "",
     [switch]$ReadOnly = $false,
+    [switch]$Persist = $false,
     [switch]$NoPersist = $false
 )
 
-$PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if (-not $PSScriptRoot) {
+    $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+}
 Set-Location $PSScriptRoot
 
 # Safety Guard: Disallow binding to non-loopback interface without authentication
-$isLoopback = ($HostAddr -eq "127.0.0.1" -or $HostAddr.ToLower() -eq "localhost" -or $HostAddr -eq "::1")
+$hostNorm = if ($HostAddr) { $HostAddr.ToLower().Trim() } else { "127.0.0.1" }
+$isLoopback = $hostNorm -in @("127.0.0.1", "localhost", "::1", "[::1]")
 $effectiveAuth = if ($Auth) { $Auth } elseif ($env:MCP_AUTH_TOKEN) { $env:MCP_AUTH_TOKEN } else { "" }
 
-if (-not $effectiveAuth) {
-    $targetConfig = if ($Config -and (Test-Path $Config)) { $Config } elseif (Test-Path "$PSScriptRoot\winhelm.config.json") { "$PSScriptRoot\winhelm.config.json" } else { $null }
-    if ($targetConfig) {
-        try {
-            $cfgContent = Get-Content $targetConfig -Raw -Encoding UTF8
-            $cfgJson = $cfgContent | ConvertFrom-Json
-            if ($cfgJson.authToken) {
-                $effectiveAuth = $cfgJson.authToken
-            }
-        } catch {}
+# Search for configuration candidate in order of precedence
+function Find-WinHelmConfig {
+    param([string]$Explicit, [string]$Root)
+    if ($Explicit -and (Test-Path $Explicit)) { return $Explicit }
+    $candidates = @(
+        (Join-Path $Root "winhelm.local.json"),
+        (Join-Path $Root "winhelm.config.json"),
+        (Join-Path $env:USERPROFILE ".winhelm\config.json")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
     }
+    return $null
+}
+
+$targetConfig = Find-WinHelmConfig -Explicit $Config -Root $PSScriptRoot
+$cfgJson = $null
+
+if ($targetConfig) {
+    try {
+        $cfgRaw = Get-Content $targetConfig -Raw -Encoding UTF8
+        $cfgClean = $cfgRaw -replace '^\uFEFF', ''
+        $cfgJson = $cfgClean | ConvertFrom-Json
+        if (-not $effectiveAuth -and $cfgJson.authToken) {
+            $effectiveAuth = $cfgJson.authToken
+        }
+    } catch {}
 }
 
 if (-not $isLoopback -and -not $effectiveAuth) {
@@ -63,16 +83,21 @@ if ($effectiveAuth) {
 } else {
     Write-Host "  Auth: DISABLED (Loopback Local Only)" -ForegroundColor Gray
 }
+
 if ($AllowedDirs) {
     Write-Host "  Allowed Directories: $AllowedDirs" -ForegroundColor Yellow
+} elseif ($cfgJson -and $cfgJson.allowedDirectories -and $cfgJson.allowedDirectories.Count -gt 0) {
+    Write-Host "  Allowed Directories: $($cfgJson.allowedDirectories -join ', ') (from config)" -ForegroundColor Yellow
 } else {
-    Write-Host "  Allowed Directories: All paths (Unrestricted)" -ForegroundColor Gray
+    Write-Host "  Allowed Directories: None (fail-closed - all filesystem ops blocked)" -ForegroundColor DarkYellow
+    Write-Host "  Hint: pass -AllowedDirs or configure allowedDirectories in config" -ForegroundColor DarkGray
 }
+
 if ($ServerProfile) {
     Write-Host "  Profile: $ServerProfile" -ForegroundColor Yellow
 }
-if ($Config) {
-    Write-Host "  Config: $Config" -ForegroundColor Yellow
+if ($targetConfig) {
+    Write-Host "  Config: $targetConfig" -ForegroundColor Yellow
 }
 if ($ReadOnly) {
     Write-Host "  Read-Only Mode: ENABLED" -ForegroundColor Yellow
@@ -98,7 +123,9 @@ if ($Tools) {
 if ($ReadOnly) {
     $argsList += @("--read-only")
 }
-if ($NoPersist) {
+if ($Persist) {
+    $argsList += @("--persist")
+} elseif ($NoPersist) {
     $argsList += @("--no-persist")
 }
 
