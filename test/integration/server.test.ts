@@ -53,7 +53,35 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.1.0");
+    assert.strictEqual(body.version, "1.1.1");
+  });
+
+  it("should smoothly redirect browser visits (Accept: text/html) on GET /mcp to dashboard", async () => {
+    const res = await fetch(`${BASE_URL}/mcp?token=testtoken`, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+      },
+      redirect: "manual",
+    });
+    // Should return HTTP 302 redirecting to /?token=testtoken
+    assert.strictEqual(res.status, 302);
+    assert.strictEqual(res.headers.get("location"), "/?token=testtoken");
+  });
+
+  it("should gracefully handle CORS without unhandled 500 server crashes", async () => {
+    // 1. Allowed origin (Tailscale IP)
+    const allowedRes = await fetch(`${BASE_URL}/health`, {
+      headers: { Origin: "http://100.78.131.83:8788" },
+    });
+    assert.strictEqual(allowedRes.status, 200);
+    assert.strictEqual(allowedRes.headers.get("access-control-allow-origin"), "http://100.78.131.83:8788");
+
+    // 2. Disallowed origin should return 200 without Access-Control-Allow-Origin (no crash/error)
+    const blockedRes = await fetch(`${BASE_URL}/health`, {
+      headers: { Origin: "http://evil.com" },
+    });
+    assert.strictEqual(blockedRes.status, 200);
+    assert.strictEqual(blockedRes.headers.get("access-control-allow-origin"), null);
   });
 
   it("should serve Web Monitor Dashboard on / and /dashboard", async () => {

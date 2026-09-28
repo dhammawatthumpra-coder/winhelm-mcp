@@ -31,7 +31,7 @@ export class SseGateway {
   private createMcpServerInstance(): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
-      version: "1.1.0",
+      version: "1.1.1",
     });
     registerAllTools(server);
     return server;

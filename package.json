@@ -1,6 +1,6 @@
 {
   "name": "winhelm-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "WinHelm - Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 38 Tools",
   "type": "module",
   "main": "dist/index.js",
