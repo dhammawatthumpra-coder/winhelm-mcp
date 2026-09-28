@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-95%2F95%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-103%2F103%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
@@ -55,7 +55,7 @@
    - **Health Check:** `http://<HOST>:8788/health`
 2. **High-Observability Logging & Secret Masking:**
    - Microsecond execution timings with ANSI color-coded tags (`[HTTP]`, `[TOOL-START]`, `[TOOL-DONE]`, `[SECURITY]`).
-   - Automatically sanitizes Bearer tokens, OpenAI/Anthropic/GitHub API keys (`sk-***`, `ghp_***`), and sensitive passwords before printing or writing logs.
+   - Automatically sanitizes Bearer tokens, API keys (`sk-***`, `ghp_***`), AWS credentials (`AKIA***`), JSON properties (`"authToken"`, `"password"`, `"x-api-key"`), and sensitive arguments before printing or writing logs.
 3. **Background Daemon Task Engine:**
    - Execute long-running dev servers (`npm run dev`, `docker compose up`) as background tasks with detached PIDs, non-blocking logs streaming, and interactive stdin support.
 4. **High-Performance Code Search (Ripgrep):**

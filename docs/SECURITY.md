@@ -132,11 +132,12 @@ WinHelm inspects command lines executed via `terminal_run` or `terminal_task_sta
 
 Before log entries are displayed on the Web Monitor Dashboard or written to disk, all text is piped through [sanitizer.ts](../src/utils/sanitizer.ts):
 
-- **Bearer Tokens**: `Bearer [REDACTED]`
-- **OpenAI & Claude API Keys**: `sk-ant-[REDACTED]`, `sk-[REDACTED]`
-- **GitHub Tokens**: `ghp_[REDACTED]`, `gho_[REDACTED]`
-- **AWS Secrets**: `AKIA[REDACTED]`
-- **Password Objects**: `{ "password": "******" }`
+- **Bearer Tokens**: `Bearer ************`
+- **OpenAI & Claude API Keys**: `sk-ant-************`, `sk-************`
+- **GitHub Tokens**: `ghp_************`, `gho_************`
+- **AWS Access Keys**: `AKIA************`
+- **JSON Fields & Credentials**: `"authToken": "************"`, `"password": "************"`, `"x-api-key": "************"`
+- **Password Objects**: `{ "password": "************" }`
 
 ---
 

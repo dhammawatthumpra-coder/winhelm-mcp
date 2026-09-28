@@ -146,6 +146,30 @@ describe("Unified Gateway Server Integration", () => {
     assert.ok(toolLog, "Expected terminal_run to be captured in monitor logs");
   });
 
+  it("should return HTTP 404 with JSON-RPC error when request sends unknown mcp-session-id", async () => {
+    const res = await fetch(`${BASE_URL}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "mcp-session-id": "unknown-dead-session-9999",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        params: {},
+      }),
+    });
+
+    assert.strictEqual(res.status, 404);
+    const data = (await res.json()) as any;
+    assert.strictEqual(data.jsonrpc, "2.0");
+    assert.strictEqual(data.error?.code, -32001);
+    assert.strictEqual(data.error?.message, "Session not found");
+    assert.strictEqual(data.id, null);
+  });
+
   it("should export audit logs in JSON and CSV formats", async () => {
     const jsonRes = await fetch(`${BASE_URL}/api/monitor/export?format=json`);
     assert.strictEqual(jsonRes.status, 200);
