@@ -5,23 +5,56 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "winhelm": "dist/index.js"
   },
   "files": [
     "dist",
+    "docs",
+    "scripts",
     "README.md",
+    "CHANGELOG.md",
     "CLAUDE.md",
     "manifest.json",
-    "server.json",
-    "scripts"
+    "server.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dhammawatthumpra-coder/winhelm-mcp.git"
+  },
+  "homepage": "https://github.com/dhammawatthumpra-coder/winhelm-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/dhammawatthumpra-coder/winhelm-mcp/issues"
+  },
+  "author": "dhammawatthumpra-coder <dhammawatthumpra@gmail.com>",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "windows",
+    "ai",
+    "claude",
+    "cursor",
+    "automation",
+    "powershell",
+    "windows-native",
+    "llm-tools"
   ],
   "scripts": {
+    "prepublishOnly": "npm run build && npm test",
     "build": "rimraf dist && tsc",
     "build:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-exe.ps1",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
+    "dev:type-check": "tsc --noEmit --watch",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "type-check": "tsc --noEmit",
     "service:install": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action install",
