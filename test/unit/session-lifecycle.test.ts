@@ -113,4 +113,76 @@ describe("Session Lifecycle & Eviction Engine", () => {
       await sse.closeAll();
     }
   });
+
+  it("should return 404 with JSON-RPC error when request has unknown or evicted mcp-session-id in StreamableGateway", async () => {
+    const gateway = new StreamableGateway(60000, 10);
+    try {
+      let statusCode = 0;
+      let jsonPayload: any = null;
+
+      const mockReq: any = {
+        headers: { "mcp-session-id": "non-existent-session-id-123" },
+      };
+      const mockRes: any = {
+        status: (code: number) => {
+          statusCode = code;
+          return mockRes;
+        },
+        json: (data: any) => {
+          jsonPayload = data;
+          return mockRes;
+        },
+        headersSent: false,
+      };
+
+      await gateway.handleRequest(mockReq, mockRes);
+
+      assert.strictEqual(statusCode, 404);
+      assert.deepStrictEqual(jsonPayload, {
+        jsonrpc: "2.0",
+        error: { code: -32001, message: "Session not found" },
+        id: null,
+      });
+      assert.strictEqual(gateway.getActiveSessionCount(), 0, "No server should be created or tracked for missing session");
+    } finally {
+      await gateway.closeAll();
+    }
+  });
+
+  it("should clean up transport and McpServer when request without session id is invalid or not an initialize request", async () => {
+    const gateway = new StreamableGateway(60000, 10);
+    try {
+      let statusCode = 0;
+      let responseBody: any = null;
+
+      const mockReq: any = {
+        method: "GET",
+        headers: {},
+        url: "/mcp",
+        on: () => {},
+      };
+      const mockRes: any = {
+        status: (code: number) => {
+          statusCode = code;
+          return mockRes;
+        },
+        json: (data: any) => {
+          responseBody = data;
+          return mockRes;
+        },
+        setHeader: () => {},
+        writeHead: () => {},
+        write: () => {},
+        end: () => {},
+        headersSent: false,
+      };
+
+      await gateway.handleRequest(mockReq, mockRes);
+
+      // Verify no dangling session was registered in gateway
+      assert.strictEqual(gateway.getActiveSessionCount(), 0, "Non-initialize request must not leak session into map");
+    } finally {
+      await gateway.closeAll();
+    }
+  });
 });

@@ -135,7 +135,7 @@ export class Logger {
       }
     }
 
-    const preview = JSON.stringify(cleanArgs);
+    const preview = sanitizeText(JSON.stringify(cleanArgs));
     console.log(
       `${C.gray}[${time}]${C.reset} ${C.magenta}[TOOL-START]${C.reset} ${C.bold}${name}${C.reset} ${C.dim}${preview}${C.reset}`
     );
@@ -154,7 +154,8 @@ export class Logger {
    */
   public toolDone(name: string, durationMs: number, summary?: string): void {
     const time = this.getFormattedTime();
-    const sum = summary ? ` ${C.dim}-> ${summary.slice(0, 90)}${summary.length > 90 ? "..." : ""}${C.reset}` : "";
+    const cleanSummary = summary ? sanitizeText(summary) : undefined;
+    const sum = cleanSummary ? ` ${C.dim}-> ${cleanSummary.slice(0, 90)}${cleanSummary.length > 90 ? "..." : ""}${C.reset}` : "";
     console.log(
       `${C.gray}[${time}]${C.reset} ${C.green}[TOOL-DONE]${C.reset}  ${C.bold}${name}${C.reset} ${C.green}✔ OK${C.reset} ${C.dim}(${durationMs}ms)${C.reset}${sum}`
     );
@@ -163,7 +164,7 @@ export class Logger {
       type: "tool",
       level: "success",
       title: `tool_done: ${name}`,
-      detail: summary ? summary.slice(0, 150) : "Success",
+      detail: cleanSummary ? cleanSummary.slice(0, 150) : "Success",
       durationMs,
       status: "SUCCESS",
     });

@@ -89,39 +89,65 @@ export class StreamableGateway {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-      // If an existing session ID is provided and active, use it
-      if (sessionId && this.sessions.has(sessionId)) {
-        const session = this.sessions.get(sessionId)!;
+      // If an existing session ID is provided and active, use it.
+      // If provided but not found (evicted, idle timeout, or server restart),
+      // return 404 with JSON-RPC error immediately according to MCP specification.
+      if (sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+          res.status(404).json({
+            jsonrpc: "2.0",
+            error: { code: -32001, message: "Session not found" },
+            id: null,
+          });
+          return;
+        }
+
         session.lastActivityAt = Date.now();
         await session.transport.handleRequest(req, res);
         return;
       }
 
-      // Evict oldest session if at max capacity before allocating a new one
-      this.evictOldestIfNeeded();
-
       // Create a new session for initialize requests
       const mcpServer = this.createMcpServerInstance();
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (newSessionId: string) => {
+          this.evictOldestIfNeeded();
+          this.sessions.set(newSessionId, {
+            transport,
+            mcpServer,
+            lastActivityAt: Date.now(),
+          });
+        },
+        onsessionclosed: (closedSessionId: string) => {
+          const session = this.sessions.get(closedSessionId);
+          if (session) {
+            this.sessions.delete(closedSessionId);
+            session.mcpServer.close().catch(() => {});
+          }
+        },
       });
-      await mcpServer.connect(transport);
 
+      // Set transport.onclose BEFORE mcpServer.connect(transport)
+      // so Protocol.connect preserves our handler alongside Protocol._onclose
       transport.onclose = () => {
-        if (transport.sessionId) {
-          this.sessions.delete(transport.sessionId);
+        const sid = transport.sessionId;
+        if (sid) {
+          this.sessions.delete(sid);
         }
         mcpServer.close().catch(() => {});
       };
 
+      await mcpServer.connect(transport);
+
       await transport.handleRequest(req, res);
 
-      if (transport.sessionId) {
-        this.sessions.set(transport.sessionId, {
-          transport,
-          mcpServer,
-          lastActivityAt: Date.now(),
-        });
+      // If transport.sessionId is still undefined after handleRequest
+      // (not an initialize request or request was rejected/invalid), clean up immediately to prevent leaks
+      if (!transport.sessionId) {
+        await transport.close().catch(() => {});
+        await mcpServer.close().catch(() => {});
       }
     } catch (err) {
       console.error("[StreamableHTTP] Error handling /mcp request:", err);
