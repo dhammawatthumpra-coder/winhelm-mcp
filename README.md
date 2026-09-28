@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-114%2F114%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-117%2F117%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
@@ -197,7 +197,7 @@ Visit `http://localhost:8788/health` in your browser. You should receive:
 {
   "status": "ok",
   "server": "winhelm-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "activeSessions": {
     "sse": 0,
     "streamableHttp": 0

@@ -104,7 +104,7 @@ async function main() {
   if (IS_STDIO) {
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
-      version: "1.1.0",
+      version: "1.1.1",
     });
     registerAllTools(mcpServer);
 

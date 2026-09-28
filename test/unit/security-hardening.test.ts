@@ -5,13 +5,13 @@ import path from "node:path";
 import os from "node:os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
-import { isHostAllowed } from "../../src/gateway/server.js";
+import { isHostAllowed, isOriginAllowed } from "../../src/gateway/server.js";
 import { markdownToHtml } from "../../src/engine/pdf-generator.js";
 import { registerTerminalTools } from "../../src/tools/terminal-tools.js";
 import { registerNetworkTools } from "../../src/tools/network-tools.js";
 
 describe("Security Hardening & Boundary Enforcement", () => {
-  it("should validate Host headers against loopback and allowed host patterns (DNS Rebinding protection)", () => {
+  it("should validate Host headers against loopback, Tailscale CGNAT, and allowed host patterns (DNS Rebinding protection)", () => {
     const allowed = ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
 
     // 1. Loopback addresses must pass
@@ -26,16 +26,48 @@ describe("Security Hardening & Boundary Enforcement", () => {
     assert.strictEqual(isHostAllowed("my-laptop.ts.net", allowed), true);
     assert.strictEqual(isHostAllowed("node.tailscale.ts.net:8788", allowed), true);
 
-    // 3. Explicit bind host must pass
+    // 3. Tailscale CGNAT IPs (100.64.0.0/10) must pass
+    assert.strictEqual(isHostAllowed("100.78.131.83:8788", allowed), true);
+    assert.strictEqual(isHostAllowed("100.64.0.1", allowed), true);
+    assert.strictEqual(isHostAllowed("100.127.255.254", allowed), true);
+
+    // 4. Explicit bind host must pass
     assert.strictEqual(isHostAllowed("192.168.1.50:8788", allowed, "192.168.1.50"), true);
 
-    // 4. Unauthorized hosts must be blocked
+    // 5. Unauthorized hosts must be blocked
     assert.strictEqual(isHostAllowed("evil.attacker.com", allowed), false);
     assert.strictEqual(isHostAllowed("evil.attacker.com:8788", allowed), false);
     assert.strictEqual(isHostAllowed("not-ts.net", allowed), false);
     assert.strictEqual(isHostAllowed("evil-ts.net:8788", allowed), false);
+    assert.strictEqual(isHostAllowed("100.128.1.1", allowed), false); // Outside Tailscale CGNAT range
     assert.strictEqual(isHostAllowed("", allowed), false);
     assert.strictEqual(isHostAllowed(undefined, allowed), false);
+  });
+
+  it("should validate CORS Origin headers against allowed hosts, Tailscale IPs, and AI client web origins", () => {
+    const allowed = ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
+
+    // Non-browser / CLI requests (no Origin header)
+    assert.strictEqual(isOriginAllowed(undefined, allowed), true);
+    assert.strictEqual(isOriginAllowed("", allowed), true);
+
+    // Loopback browser origins
+    assert.strictEqual(isOriginAllowed("http://localhost:8788", allowed), true);
+    assert.strictEqual(isOriginAllowed("http://127.0.0.1:8788", allowed), true);
+    assert.strictEqual(isOriginAllowed("http://[::1]:8788", allowed), true);
+
+    // Tailscale MagicDNS and CGNAT IPs
+    assert.strictEqual(isOriginAllowed("https://my-box.ts.net", allowed), true);
+    assert.strictEqual(isOriginAllowed("http://100.78.131.83:8788", allowed), true);
+
+    // Standard remote Web MCP clients
+    assert.strictEqual(isOriginAllowed("https://claude.ai", allowed), true);
+    assert.strictEqual(isOriginAllowed("https://chatgpt.com", allowed), true);
+
+    // Malicious or unauthorized external origins
+    assert.strictEqual(isOriginAllowed("http://evil.attacker.com", allowed), false);
+    assert.strictEqual(isOriginAllowed("https://malicious-site.io", allowed), false);
+    assert.strictEqual(isOriginAllowed("http://not-ts.net", allowed), false);
   });
 
   it("should sanitize codeBlockLang in markdownToHtml to prevent HTML/attribute injection", () => {

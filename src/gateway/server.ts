@@ -64,6 +64,11 @@ export function isHostAllowed(
     return true;
   }
 
+  // Permit Tailscale CGNAT IP range (100.64.0.0/10: 100.64.0.0 - 100.127.255.255)
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return true;
+  }
+
   // Check allowed hosts whitelist (supports wildcard prefixes like *.ts.net, *.example.com)
   return allowedHosts.some((pattern) => {
     const p = pattern.trim().toLowerCase();
@@ -74,6 +79,46 @@ export function isHostAllowed(
     }
     return hostname === p;
   });
+}
+
+/**
+ * Validate Origin header for Cross-Origin Resource Sharing (CORS)
+ */
+export function isOriginAllowed(
+  origin: string | undefined,
+  allowedHosts: string[] = ["localhost", "127.0.0.1", "[::1]", "*.ts.net"],
+  bindHost = "127.0.0.1"
+): boolean {
+  if (!origin) return true; // Non-browser clients (curl, stdio, native apps) do not send Origin header
+  try {
+    const parsed = new URL(origin);
+    const hostWithPort = parsed.host;
+    const hostname = parsed.hostname;
+
+    // 1. Matches host validation (loopback, bindHost, *.ts.net, Tailscale CGNAT, custom allowedHosts)
+    if (isHostAllowed(hostWithPort, allowedHosts, bindHost)) {
+      return true;
+    }
+
+    // 2. Allow Tailscale CGNAT IP origins directly
+    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      return true;
+    }
+
+    // 3. Allow standard remote Web MCP client origins (Claude.ai, ChatGPT)
+    if (
+      hostname === "claude.ai" ||
+      hostname.endsWith(".claude.ai") ||
+      hostname === "chatgpt.com" ||
+      hostname.endsWith(".chatgpt.com")
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export function createServer(options: ServerOptions): {
@@ -170,20 +215,21 @@ export function createServer(options: ServerOptions): {
   // 4. CORS configuration: restricts web browser cross-origin requests
   const corsOption = config.corsOrigins;
   if (corsOption === true || corsOption === "*") {
-    app.use(cors({ origin: "*" }));
+    app.use(cors({ origin: "*", credentials: true }));
   } else if (Array.isArray(corsOption) || typeof corsOption === "string") {
-    app.use(cors({ origin: corsOption }));
+    app.use(cors({ origin: corsOption, credentials: true }));
   } else {
-    // Default: permit local requests and loopback origins
+    const allowed = config.allowedHosts || ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
     app.use(
       cors({
         origin: (origin, callback) => {
-          if (!origin) return callback(null, true);
-          if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          if (isOriginAllowed(origin, allowed, options.host)) {
             return callback(null, true);
           }
-          return callback(new Error("CORS origin not allowed by WinHelm security policy"));
+          // Gracefully omit Access-Control-Allow-Origin header without crashing Express with an unhandled error
+          return callback(null, false);
         },
+        credentials: true,
       })
     );
   }
@@ -285,7 +331,7 @@ export function createServer(options: ServerOptions): {
     res.json({
       status: "ok",
       server: "winhelm-mcp",
-      version: "1.1.0",
+      version: "1.1.1",
       activeSessions: {
         sse: sseGateway.getActiveSessionCount(),
         streamableHttp: streamableGateway.getActiveSessionCount(),
@@ -340,6 +386,17 @@ export function createServer(options: ServerOptions): {
       res.setHeader("Content-Disposition", 'attachment; filename="winhelm-audit.json"');
     }
     res.send(data);
+  });
+
+  // Friendly browser redirect for /mcp: if human visits in a web browser (Accept: text/html), redirect to dashboard
+  app.get("/mcp", (req: Request, res: Response, next: NextFunction) => {
+    const accept = req.headers["accept"] || "";
+    if (accept.includes("text/html") && !accept.includes("text/event-stream")) {
+      const token = (req.query.token || req.query.auth) as string | undefined;
+      const redirectUrl = token ? `/?token=${encodeURIComponent(token)}` : "/";
+      return res.redirect(redirectUrl);
+    }
+    next();
   });
 
   // Streamable HTTP Endpoint (/mcp)

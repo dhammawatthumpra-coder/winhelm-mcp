@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2026-09-28
+
+### Fixed
+- **Tailscale & Remote Origin CORS Support**: Extended CORS origin validation (`isOriginAllowed`) to permit Tailscale CGNAT IP addresses (`100.64.0.0/10` e.g. `100.78.131.83`), MagicDNS (`*.ts.net`), and remote Web MCP AI clients (`claude.ai`, `chatgpt.com`).
+- **Graceful CORS Error Handling**: Changed origin rejection to omit the `Access-Control-Allow-Origin` header (`callback(null, false)`) instead of throwing an unhandled `Error`, preventing Express from dumping 500 error stack traces in terminal output on unrecognized origins.
+- **Tailscale IP in Host Validation**: Added automatic permission for the Tailscale CGNAT subnet (`100.64.0.0/10`) in `isHostAllowed()`, enabling seamless direct connection via Tailscale IP alongside MagicDNS domains.
+- **Smart Browser Redirect for `/mcp`**: Added automatic detection for human web browser visits (`Accept: text/html`) on `GET /mcp` and redirects to the Web Monitor Dashboard (`/?token=...`), eliminating confusing `406 Not Acceptable` errors when URLs are pasted into a browser.
+
+---
+
 ## [1.1.0] - 2026-09-28
 
 ### Breaking Changes
