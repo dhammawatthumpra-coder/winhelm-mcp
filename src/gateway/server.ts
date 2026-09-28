@@ -137,7 +137,7 @@ export function createServer(options: ServerOptions): {
         return next();
       }
 
-      // 2. Fallback for browser dashboard & preview: read token from query param (?token=... or ?auth=...) or cookie
+      // 2. Fallback for URL query parameter (Claude.ai custom connectors without header UI, browser dashboard, preview) or cookie
       const queryToken = (req.query.token || req.query.auth) as string | undefined;
       const cookieHeader = req.headers.cookie;
       let cookieToken: string | undefined;

@@ -350,15 +350,25 @@ mcp:
 
 WinHelm binds by default to `127.0.0.1` (localhost only). To allow secure cross-device access over private networks like Tailscale or WireGuard, bind to `0.0.0.0` or your Tailscale IP:
 
-1. Retrieve your machine's Tailscale IP (e.g. `100.80.20.10`).
+1. Retrieve your machine's Tailscale IP (e.g. `100.80.20.10`) or Tailscale Funnel domain (e.g. `https://your-node.ts.net`).
 2. Start WinHelm with a strong token:
    ```powershell
    node dist/index.js --port 8788 --auth super-secure-token-here
    ```
-3. Connect your mobile or remote Claude / Cursor client to:
+3. Connect your mobile or remote Claude / Cursor / ChatGPT client:
    - **Streamable HTTP:** `http://100.80.20.10:8788/mcp`
    - **SSE Stream:** `http://100.80.20.10:8788/sse`
    - **Header:** `Authorization: Bearer super-secure-token-here`
+
+#### Claude.ai Custom Connectors (URL Query Token)
+
+Claude.ai Custom Connectors and certain web/mobile clients do not provide a UI field to enter custom HTTP headers (such as `Authorization: Bearer <token>`). WinHelm natively supports passing the authentication token directly via the URL query parameter:
+
+- **Server URL:** `https://<your-tailnet-domain>.ts.net/mcp?token=<YOUR_AUTH_TOKEN>`
+- **Authentication:** Select **`No sign-in`**
+- **Transport (under Advanced):** Streamable HTTP (Default)
+
+> 🔒 **Security Guarantee:** Passing the token in the URL query parameter still triggers full timing-safe cryptographic verification on the server, ensuring your Windows machine remains completely protected from unauthorized internet access without needing a complex OAuth setup.
 
 ---
 
@@ -533,11 +543,15 @@ The resulting executable will be generated at `dist/winhelm.exe`:
 
 ### 2. HTTP 401 Unauthorized
 - **Cause:** WinHelm was started with `--auth <token>` or `MCP_AUTH_TOKEN`, but the MCP client didn't supply matching credentials.
-- **Solution:** Add the Bearer token header to your client configuration:
+- **Solution 1 (Clients with Custom Header Support):** Add the Bearer token header to your client configuration:
   ```json
   "headers": {
     "Authorization": "Bearer <YOUR_TOKEN>"
   }
+  ```
+- **Solution 2 (Claude.ai Custom Connectors without Header UI):** Append the token directly to the Server URL and select **No sign-in**:
+  ```text
+  https://<your-domain>/mcp?token=<YOUR_TOKEN>
   ```
 
 ### 3. PowerShell Execution Policy Restriction
