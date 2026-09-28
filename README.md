@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-95%2F95%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
@@ -72,7 +72,7 @@
 | Component | Minimum Requirement | Recommended | Notes |
 | :--- | :--- | :--- | :--- |
 | **Operating System** | Windows 10 / 11 / Server 2019+ | Windows 11 (64-bit) | Native Win32 & PowerShell APIs |
-| **Node.js** | Node.js >= 18.0.0 | Node.js 20+ LTS | Not required if using `dist/winhelm.exe` |
+| **Node.js** | Node.js >= 20.0.0 | Node.js 20+ LTS | Not required if using `dist/winhelm.exe` |
 | **PowerShell** | Windows PowerShell 5.1 | PowerShell 7+ (pwsh) | Auto-detects pwsh with UTF-8 encoding |
 | **PDF Engine** | Microsoft Edge | Pre-installed on Win 10/11 | Google Chrome is also auto-detected |
 | **Search Engine** | Built-in recursive search | `ripgrep` (`rg.exe`) | Install via `winget install BurntSushi.ripgrep.MSVC` |
