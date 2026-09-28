@@ -148,10 +148,26 @@ Access syntax-highlighted code and rendered Markdown directly at `http://localho
 
 ## Quick Start
 
-### 1. Clone & Install
+### 1. Installation & Setup
 
+#### Option A: Standalone Executable (Recommended for Production)
+Download the portable zero-dependency `winhelm.exe` from [GitHub Releases](https://github.com/dhammawatthumpra-coder/winhelm-mcp/releases) or compile locally with `npm run build:exe`. Requires no Node.js runtime on Windows 10/11.
+
+#### Option B: NPM CLI (Convenient for Dev & Testing)
 ```powershell
-git clone https://github.com/winhelm/winhelm-mcp.git
+# Install globally
+npm install -g winhelm-mcp
+
+# Run immediately
+winhelm --profile dev
+
+# Or run on-demand with npx (no global install required)
+npx winhelm-mcp --profile dev
+```
+
+#### Option C: Clone & Build from Source
+```powershell
+git clone https://github.com/dhammawatthumpra-coder/winhelm-mcp.git
 cd winhelm-mcp
 npm install
 npm run build

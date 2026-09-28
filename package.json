@@ -33,7 +33,11 @@
   "bugs": {
     "url": "https://github.com/dhammawatthumpra-coder/winhelm-mcp/issues"
   },
-  "author": "dhammawatthumpra-coder <dhammawatthumpra@gmail.com>",
+  "author": {
+    "name": "dhammawatthumpra-coder",
+    "email": "dhammawatthumpra@gmail.com",
+    "url": "https://github.com/dhammawatthumpra-coder"
+  },
   "license": "MIT",
   "keywords": [
     "mcp",
