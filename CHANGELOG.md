@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.1.0] - 2026-09-27
+## [1.1.0] - 2026-09-28
 
 ### Breaking Changes
 - **Fail-Closed by Default Filesystem Confinement (`allowedDirectories`)**: Changed the default security semantic of `allowedDirectories: []` or empty/unconfigured. Previously, an empty array permitted full filesystem access ("fail-open"). It now strictly blocks all filesystem operations ("fail-closed") with a descriptive security error. To restore full-drive access, you must explicitly opt-in using wildcard syntax `allowedDirectories: ["*"]` or `["all"]`. Existing configurations that relied on `[]` for open access must update to `["*"]`.
@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Local Personal Config Isolation**: Added `.gitignore` pattern for `*.local.json` and `winhelm.local.json`, allowing machines to configure full-drive access without risking accidental commits to public repositories.
 
 ### Added
+- **Browser Session Cookie Persistence**: Gateway automatically issues a secure `Set-Cookie: authToken=...; Path=/; HttpOnly; SameSite=Lax` header upon validating a URL query token (`?token=...`), ensuring seamless persistent authentication on the Web Monitor Dashboard and Previewer across page reloads and link clicks.
+- **NPM Package & Executable Readiness**: Added `#!/usr/bin/env node` shebang in CLI entrypoint for global npm/npx execution (`winhelm`), formal ESM `exports` map, standard package metadata (`repository`, `homepage`, `bugs`, `keywords`), and automated `prepublishOnly` lifecycle validation (`npm run build && npm test`).
+- **Runtime Engine Alignment**: Standardized Node.js minimum requirement to `Node.js >= 20.0.0` across package configuration and documentation.
 - **`--config <path>` Flag**: Added ability to load configuration directly from any specified JSON path, bypassing default search candidates for multi-project isolation. Includes automatic UTF-8 BOM stripping.
 - **Session Non-Persistence Mode**: CLI overrides (`--allowed-dirs`, `--auth`, `--profile`, `--tools`, `--read-only`) now default to in-memory application without mutating configuration files on disk (`persist = false`). Added `--persist` flag for opt-in disk persistence.
 - **Enhanced `start.ps1` Parameters**: Added `-Config`, `-Tools`, `-ReadOnly`, and `-NoPersist` switches for complete parity with CLI options.
@@ -39,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored `ConfigManager.updateConfig()` to default to `persist = false` for safer runtime overrides and test execution.
 
 ### Tests
-- Expanded automated test coverage from 68 tests across 25 suites to **95 automated tests across 28 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, `start.ps1` loopback defaults and safety enforcement, Tailscale Funnel security gates, fail-closed `allowedDirectories` boundary enforcement, URL query token authentication for Claude.ai, pwsh detection and fallback, file search directory exclusion, and gateway session idle/LRU lifecycle eviction.
+- Expanded automated test coverage from 68 tests across 25 suites to **95 automated tests across 28 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, `start.ps1` loopback defaults and safety enforcement, Tailscale Funnel security gates, fail-closed `allowedDirectories` boundary enforcement, URL query token authentication for Claude.ai, browser session cookie persistence, pwsh detection and fallback, file search directory exclusion, and gateway session idle/LRU lifecycle eviction.
 
 ---
 
