@@ -42,6 +42,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   readOnly: false,
   rateLimitPerMinute: 120,
   profile: "full",
+  allowedHosts: ["localhost", "127.0.0.1", "[::1]", "*.ts.net"],
   searchExcludeDirs: ["dist", "logs", "build", "out"],
   preferPwsh: true,
   sessionIdleTimeoutMs: 45 * 60 * 1000,

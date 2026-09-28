@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-103%2F103%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-114%2F114%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
@@ -464,11 +464,12 @@ WinHelm loads configuration in the following order of precedence:
 | `--port <number>` | `PORT` | `8788` | Port number for the Web Gateway and MCP server. |
 | `--host <string>` | `HOST` | `127.0.0.1` | Network interface to bind (`127.0.0.1` loopback default, `0.0.0.0` for LAN/Tailscale). |
 | `--auth <token>` | `MCP_AUTH_TOKEN` | *none* | Bearer token for authentication. Rejects unauthenticated requests with HTTP 401. |
-| `--read-only` | `MCP_READ_ONLY` | `false` | Enables read-only mode (blocks file writing, safe deletion, process killing, and service changes). |
+| `--read-only` | `MCP_READ_ONLY` | `false` | Enables read-only mode (strictly blocks file writing, shell execution, process killing, service modification, and mutating HTTP requests). |
 | `--allowed-dirs <list>`| `MCP_ALLOWED_DIRECTORIES` | `[]` *(block all)* | Comma-separated directory paths permitted for file access (e.g. `"D:\mcp,C:\Workspace"`). Empty = block all filesystem operations (fail-closed). |
 | `--no-persist` | *N/A* | `true` | Keep CLI overrides session-only without writing to `winhelm.config.json` (default behavior / explicit no-op). |
 | `--persist` | *N/A* | `false` | Persist CLI overrides back to the active configuration file. |
 | *N/A* | `MCP_BLOCKED_COMMANDS` | *(see below)* | Additional comma-separated commands to block from execution. |
+| *N/A* | `MCP_ALLOWED_HOSTS` | `localhost,127.0.0.1,*.ts.net` | Comma-separated allowed hostnames for Host header validation (DNS Rebinding protection). |
 
 ### `winhelm.config.json`
 
@@ -498,12 +499,12 @@ Create or modify `winhelm.config.json` in your project root or `%USERPROFILE%\.w
 }
 ```
 
-> **Fail-Closed Security & Allowed Directories:** `allowedDirectories: []` blocks all filesystem operations by default for safety. You must explicitly configure target paths (e.g. `["D:\\mcp", "C:\\Workspace"]`).  
-> **Whole-Drive Whitelist Tip:** You can supply `"D:\\"`, `"D:"`, or `"D"` in `allowedDirectories` to permit access to an entire volume safely.  
-> **Wildcard Full-Drive Access (`["*"]`):** To permit access across all drives on your machine for personal development, supply `["*"]` or `["all"]`. ⚠️ **Security Warning:** Wildcard full access (`["*"]`) is strictly discouraged for unauthenticated or public-facing network exposures.  
-> **Authentication Mode (`authToken`):**  
-> - **`"authToken": null` (No-Auth Mode):** Disables authentication entirely. The server accepts all incoming requests without asking for a Bearer token or URL token. Recommended strictly for local loopback development (`127.0.0.1`).  
-> - **`"authToken": "<token-string>"` (Protected Mode):** Enforces cryptographic Bearer token validation (via `Authorization: Bearer <token>` header or `?token=<token>` query parameter). Mandatory when exposing WinHelm across networks or via Tailscale Funnel.
+> **Security Boundaries vs. Defense-in-Depth:**  
+> - **True Security Boundaries:** **Authentication Token (`authToken`)**, **Tool Profiles (`minimal`, `core`)**, and **Read-Only Mode (`readOnly`)**. For untrusted or public environments, configure an `authToken` and use `--profile core` to exclude terminal execution completely.  
+> - **Defense-in-Depth:** The command blocklist protects against accidental destructive commands (`format-volume`, `rmdir /s /q c:\`), but is not an impenetrable sandbox. `allowedDirectories` strictly bounds native File Tools (`file_read`, `file_write`, `create_zip`, etc.) and default CWD.  
+> - **DNS Rebinding Defense:** WinHelm validates `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, `*.ts.net`). Requests from unauthorized hostnames are rejected with **HTTP 403 Forbidden**.  
+> - **Remote Tunnel Fail-Closed Gate:** Requests arriving through a reverse proxy or tunnel without an `authToken` configured are rejected immediately with **HTTP 403 Forbidden**.  
+> - **Fail-Closed Filesystem:** `allowedDirectories: []` blocks all filesystem operations by default. Specify target paths (e.g. `["D:\\mcp", "C:\\Workspace"]`). Wildcard `["*"]` is strictly discouraged for unauthenticated or public network exposures.
 
 ---
 

@@ -85,6 +85,7 @@ export interface ServerConfig {
   profile?: import("../config/profiles.js").ToolProfile;
   customTools?: string[];
   corsOrigins?: string[] | boolean | string;
+  allowedHosts?: string[];
   searchExcludeDirs?: string[];
   preferPwsh?: boolean;
   sessionIdleTimeoutMs?: number;

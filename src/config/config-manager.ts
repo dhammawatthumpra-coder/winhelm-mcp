@@ -67,12 +67,16 @@ export class ConfigManager {
       try {
         const raw = readFileSync(this.configFilePath, "utf-8");
         const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+        if (!cleanRaw.trim()) return;
         const parsed = JSON.parse(cleanRaw);
         this.config = {
           ...this.config,
           ...parsed,
         };
-      } catch {}
+      } catch (err) {
+        console.error(`[ConfigManager] FATAL: Syntax error in configuration file (${this.configFilePath}):`, (err as Error).message);
+        throw new Error(`Failed to parse configuration file (${this.configFilePath}): ${(err as Error).message}`);
+      }
     }
   }
 
@@ -113,17 +117,20 @@ export class ConfigManager {
       if (existsSync(this.configFilePath)) {
         const raw = await fs.readFile(this.configFilePath, "utf-8");
         const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-        const parsed = JSON.parse(cleanRaw);
-        this.config = {
-          ...this.config,
-          ...parsed,
-        };
-        console.log(`[ConfigManager] Loaded configuration from ${this.configFilePath}`);
+        if (cleanRaw.trim()) {
+          const parsed = JSON.parse(cleanRaw);
+          this.config = {
+            ...this.config,
+            ...parsed,
+          };
+          console.log(`[ConfigManager] Loaded configuration from ${this.configFilePath}`);
+        }
       } else if (typeof configOrPath === "string") {
         console.warn(`[ConfigManager] Specified config file not found: ${this.configFilePath}`);
       }
     } catch (err) {
-      console.warn(`[ConfigManager] Could not read config file (${this.configFilePath}):`, (err as Error).message);
+      console.error(`[ConfigManager] FATAL: Could not read config file (${this.configFilePath}):`, (err as Error).message);
+      throw new Error(`Failed to load configuration file (${this.configFilePath}): ${(err as Error).message}`);
     }
 
     // Apply environment variables overrides
@@ -140,6 +147,13 @@ export class ConfigManager {
         .map((c) => c.trim().toLowerCase())
         .filter(Boolean);
       this.config.blockedCommands = Array.from(new Set([...this.config.blockedCommands, ...extraBlocked]));
+    }
+    if (process.env.MCP_ALLOWED_HOSTS) {
+      const extraHosts = process.env.MCP_ALLOWED_HOSTS.split(",")
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean);
+      const existing = this.config.allowedHosts || [];
+      this.config.allowedHosts = Array.from(new Set([...existing, ...extraHosts]));
     }
     if (process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1") {
       this.config.readOnly = true;

@@ -20,6 +20,7 @@ describe("New Enterprise Tools (Groups 1-4)", () => {
   const configManager = ConfigManager.getInstance();
 
   before(async () => {
+    await configManager.updateConfig({ allowedDirectories: ["*"] }, false);
     // Ensure test directory is clean
     if (existsSync(testDir)) {
       await fs.rm(testDir, { recursive: true, force: true });

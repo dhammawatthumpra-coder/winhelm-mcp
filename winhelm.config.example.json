@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "profile": "core",
+  "authToken": "replace_with_a_secure_random_token",
+  "allowedDirectories": [
+    "D:\\Workspace",
+    "C:\\Projects"
+  ],
+  "readOnly": false,
+  "allowSystemExecution": true,
+  "fileReadLineLimit": 2000,
+  "defaultTimeoutMs": 60000,
+  "rateLimitPerMinute": 120,
+  "allowedHosts": [
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "*.ts.net"
+  ],
+  "blockedCommands": [
+    "format-volume",
+    "format-disk",
+    "clear-disk",
+    "stop-computer",
+    "restart-computer",
+    "rmdir /s /q c:\\",
+    "del /f /s /q c:\\",
+    "remove-item -recurse -force c:\\"
+  ]
+}

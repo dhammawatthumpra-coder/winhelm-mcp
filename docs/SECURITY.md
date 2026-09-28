@@ -114,7 +114,43 @@ WinHelm follows a **fail-closed by default** security principle:
 
 ---
 
-## 5. Dangerous Command Blacklist
+---
+
+## 5. Security Model & Trust Boundaries (Important Clarification)
+
+To configure WinHelm safely, understand the distinction between hard security boundaries and defense-in-depth safeguards:
+
+### 🛡️ Hard Security Boundaries
+1. **Authentication Token (`authToken` / `--auth`)**:
+   - The primary security perimeter. When enabled, all MCP protocol interactions, tool dispatches, file previews, and monitoring APIs require token verification via timing-safe comparison (`crypto.timingSafeEqual`).
+2. **Tool Profiles (`--profile minimal` or `--profile core`)**:
+   - The most effective containment strategy. Profiles strictly exclude tools at registration time. Using `core` provides 15 file inspection and reading tools while completely excluding `terminal_run`, `terminal_task_start`, and system mutation tools.
+3. **Read-Only Mode (`--read-only`)**:
+   - Enforces an immutable environment. Blocks all filesystem modifications, archive creations, service controls, process terminations, mutating HTTP methods (POST/PUT/DELETE), and shell executions (`terminal_run` / `terminal_task_start`).
+
+### ⚠️ Defense-in-Depth Safeguards (Not Hard Security Boundaries)
+1. **Command Blocklist Patterns**:
+   - Regex-based command filtering is designed to prevent accidental destructive operations (e.g. `format-volume`, `rmdir /s /q C:\`). It is **not** an impregnable security sandbox against intentional evasion, as PowerShell syntax supports aliases, string concatenation, and encoded commands (`-EncodedCommand`, `iex`).
+2. **Filesystem Confinement (`allowedDirectories`)**:
+   - Strictly confines native **File Tools** (`file_read`, `file_write`, `file_edit`, `file_delete_safe`, `copy_file`, `create_zip`, `extract_zip`). It also sets the working directory for terminal execution. However, if `terminal_run` is enabled (under `dev`, `sysadmin`, or `full` profiles) with `allowSystemExecution: true`, processes run with the full operating system permissions of the Windows user account running WinHelm.
+
+---
+
+## 6. Network Hardening & Web Protections
+
+1. **Host Header Validation (DNS Rebinding Defense)**:
+   - WinHelm validates incoming `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, and configured `allowedHosts` such as `*.ts.net`). Requests with unauthorized host headers are rejected with **HTTP 403 Forbidden**, preventing malicious websites from exploiting browser same-origin policies via DNS rebinding.
+2. **Unauthenticated Remote Proxy / Tunnel Guard**:
+   - If WinHelm is started without an authentication token (`authToken: null`), any request detected arriving through a reverse proxy or tunnel (containing `X-Forwarded-For` or `Forwarded` headers) is immediately blocked with **HTTP 403 Forbidden** (Fail-Closed). This prevents accidental exposure of a local shell to the internet.
+3. **Content Security Policy & Security Headers**:
+   - File previews (`/preview`) enforce a strict Content Security Policy (`default-src 'none'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'`) preventing previewed Markdown files from executing network requests against the local API.
+   - Global HTTP responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
+4. **Token Security Notice**:
+   - While `?token=...` query parameters are supported for browser dashboards and Claude.ai custom connectors, automated tools and production integrations should prefer `Authorization: Bearer <token>` headers to avoid token retention in intermediate proxy logs or browser history.
+
+---
+
+## 7. Dangerous Command Blacklist
 
 WinHelm inspects command lines executed via `terminal_run` or `terminal_task_start` against regex patterns targeting destructive or risky actions:
 
@@ -128,7 +164,7 @@ WinHelm inspects command lines executed via `terminal_run` or `terminal_task_sta
 
 ---
 
-## 6. Secret Redaction & Log Sanitization
+## 8. Secret Redaction & Log Sanitization
 
 Before log entries are displayed on the Web Monitor Dashboard or written to disk, all text is piped through [sanitizer.ts](../src/utils/sanitizer.ts):
 
@@ -141,7 +177,7 @@ Before log entries are displayed on the Web Monitor Dashboard or written to disk
 
 ---
 
-## 7. Audit Logging & Export
+## 9. Audit Logging & Export
 
 All executed commands, exit codes, durations, and tool errors are sequentially logged to daily audit logs in `logs/winhelm-YYYY-MM-DD.log`.
 
