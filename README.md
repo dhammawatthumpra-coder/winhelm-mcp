@@ -1,5 +1,6 @@
 # WinHelm — Windows Native MCP Server
 
+[![npm version](https://img.shields.io/npm/v/winhelm-mcp.svg)](https://www.npmjs.com/package/winhelm-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
@@ -259,7 +260,23 @@ winhelm --profile full
 
 Path: `%APPDATA%\Claude\claude_desktop_config.json`
 
-#### Option A: Remote / Local SSE Gateway (Recommended)
+#### Option A: Zero-Install via npx (Easiest & Recommended)
+```json
+{
+  "mcpServers": {
+    "winhelm": {
+      "command": "npx",
+      "args": ["-y", "winhelm-mcp", "--stdio", "--profile", "dev"],
+      "env": {
+        "MCP_ALLOWED_DIRECTORIES": "D:\\Workspace,C:\\Projects"
+      }
+    }
+  }
+}
+```
+> **Instant Setup:** Runs the latest official `winhelm-mcp` directly from npm on demand without manual cloning or global installation. Specify permitted workspace paths in `MCP_ALLOWED_DIRECTORIES`.
+
+#### Option B: Remote / Local SSE Gateway
 ```json
 {
   "mcpServers": {
@@ -273,7 +290,7 @@ Path: `%APPDATA%\Claude\claude_desktop_config.json`
 }
 ```
 
-#### Option B: Direct Stdio / Node Process (Lightweight with Profile)
+#### Option C: Direct Stdio / Node Process (From Source)
 ```json
 {
   "mcpServers": {
@@ -289,7 +306,7 @@ Path: `%APPDATA%\Claude\claude_desktop_config.json`
 ```
 > **Context Optimization:** Supplying `"--profile", "dev"` restricts tools to 28 developer essentials, saving ~32% context tokens while preserving all coding, ripgrep, background task, PDF, archive, and preview capabilities.
 
-#### Option C: Standalone Executable (`winhelm.exe`)
+#### Option D: Standalone Executable (`winhelm.exe`)
 ```json
 {
   "mcpServers": {
@@ -301,7 +318,7 @@ Path: `%APPDATA%\Claude\claude_desktop_config.json`
 }
 ```
 
-#### Option D: Per-Project Dedicated Config File (Isolated Profiles & Roots)
+#### Option E: Per-Project Dedicated Config File (Isolated Profiles & Roots)
 ```json
 {
   "mcpServers": {
