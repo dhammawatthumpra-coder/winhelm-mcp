@@ -237,8 +237,9 @@ describe("ConfigManager and Security Policy", () => {
 
     // 3. Execute powershell test without auth -> must exit 1
     try {
-      execSync("powershell.exe -ExecutionPolicy Bypass -File .\\start.ps1 -HostAddr 0.0.0.0", {
+      execSync("powershell.exe -ExecutionPolicy Bypass -File .\\start.ps1 -HostAddr 0.0.0.0 -Config .\\winhelm.config.json", {
         stdio: "pipe",
+        env: { ...process.env, MCP_AUTH_TOKEN: "" },
       });
       assert.fail("Expected start.ps1 with 0.0.0.0 and no auth to exit with non-zero code");
     } catch (err: any) {
