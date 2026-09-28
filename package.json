@@ -20,6 +20,7 @@
     "docs",
     "manifest.json",
     "server.json",
+    "winhelm.config.example.json",
     "scripts/build-exe.ps1",
     "scripts/manage-service.ps1",
     "CHANGELOG.md",
