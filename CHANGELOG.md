@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored `ConfigManager.updateConfig()` to default to `persist = false` for safer runtime overrides and test execution.
 
 ### Tests
-- Expanded automated test coverage from 68 tests across 25 suites to **86 automated tests across 27 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, `start.ps1` loopback defaults and safety enforcement, pwsh detection and fallback, file search directory exclusion, and gateway session idle/LRU lifecycle eviction.
+- Expanded automated test coverage from 68 tests across 25 suites to **95 automated tests across 28 suites** (100% passing, 0 failures), adding comprehensive test coverage for regex blocklists, custom configuration paths, non-persistence behavior, source path confinement, ANSI log sanitization, `start.ps1` loopback defaults and safety enforcement, Tailscale Funnel security gates, fail-closed `allowedDirectories` boundary enforcement, URL query token authentication for Claude.ai, pwsh detection and fallback, file search directory exclusion, and gateway session idle/LRU lifecycle eviction.
 
 ---
 

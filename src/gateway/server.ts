@@ -184,7 +184,7 @@ export function createServer(options: ServerOptions): {
     res.json({
       status: "ok",
       server: "winhelm-mcp",
-      version: "1.0.0",
+      version: "1.1.0",
       activeSessions: {
         sse: sseGateway.getActiveSessionCount(),
         streamableHttp: streamableGateway.getActiveSessionCount(),
@@ -200,7 +200,7 @@ export function createServer(options: ServerOptions): {
     const gpu = await getCachedGpuInfo();
     res.json({
       server: "winhelm-mcp",
-      version: "1.0.0",
+      version: "1.1.0",
       port: options.port,
       host: options.host,
       readOnly: configManager.isReadOnly(),

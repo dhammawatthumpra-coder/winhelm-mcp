@@ -28,7 +28,7 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.0.0");
+    assert.strictEqual(body.version, "1.1.0");
   });
 
   it("should serve Web Monitor Dashboard on / and /dashboard", async () => {

@@ -63,7 +63,7 @@
 5. **Headless PDF Generation:**
    - Converts Markdown and HTML into clean PDF documents using pre-installed Microsoft Edge or Chrome without requiring heavy dependencies like Puppeteer.
 6. **Tailscale & Remote Ready:**
-   - Bind to `0.0.0.0` or Tailscale IP (`100.x.y.z`) with mandatory Bearer Token verification and rate limiting (120 req/min).
+   - Optionally bind to `0.0.0.0` or your Tailscale IP (`100.x.y.z`) for cross-device access. Default is `127.0.0.1` (loopback-only). Non-loopback binding requires Bearer Token verification and is guarded by a startup safety gate.
 
 ---
 
@@ -179,10 +179,14 @@ Visit `http://localhost:8788/health` in your browser. You should receive:
 ```json
 {
   "status": "ok",
-  "name": "winhelm-mcp",
-  "version": "1.0.0",
-  "readOnly": false,
-  "uptime": 12.4
+  "server": "winhelm-mcp",
+  "version": "1.1.0",
+  "activeSessions": {
+    "sse": 0,
+    "streamableHttp": 0
+  },
+  "uptimeSeconds": 12,
+  "timestamp": "2026-09-28T08:00:00.000Z"
 }
 ```
 
@@ -351,10 +355,11 @@ mcp:
 WinHelm binds by default to `127.0.0.1` (localhost only). To allow secure cross-device access over private networks like Tailscale or WireGuard, bind to `0.0.0.0` or your Tailscale IP:
 
 1. Retrieve your machine's Tailscale IP (e.g. `100.80.20.10`) or Tailscale Funnel domain (e.g. `https://your-node.ts.net`).
-2. Start WinHelm with a strong token:
+2. Start WinHelm with `--host 0.0.0.0` and a strong authentication token:
    ```powershell
-   node dist/index.js --port 8788 --auth super-secure-token-here
+   node dist/index.js --port 8788 --host 0.0.0.0 --auth super-secure-token-here
    ```
+   > ⚠️ **Host Safety Gate:** Binding to `--host 0.0.0.0` exposes the server to your local network and Tailscale. You **must** supply an authentication token (`--auth`), otherwise startup will be rejected with exit code 1 by the host safety gate.
 3. Connect your mobile or remote Claude / Cursor / ChatGPT client:
    - **Streamable HTTP:** `http://100.80.20.10:8788/mcp`
    - **SSE Stream:** `http://100.80.20.10:8788/sse`
@@ -437,8 +442,8 @@ WinHelm loads configuration in the following order of precedence:
 | `--host <string>` | `HOST` | `127.0.0.1` | Network interface to bind (`127.0.0.1` loopback default, `0.0.0.0` for LAN/Tailscale). |
 | `--auth <token>` | `MCP_AUTH_TOKEN` | *none* | Bearer token for authentication. Rejects unauthenticated requests with HTTP 401. |
 | `--read-only` | `MCP_READ_ONLY` | `false` | Enables read-only mode (blocks file writing, safe deletion, process killing, and service changes). |
-| `--allowed-dirs <list>`| `MCP_ALLOWED_DIRECTORIES` | `[]` *(all)* | Comma-separated directory paths permitted for file access (e.g. `"D:\mcp,C:\Workspace"`). |
-| `--no-persist` | *N/A* | `true` | Keep CLI overrides session-only without writing to `winhelm.config.json` (default). |
+| `--allowed-dirs <list>`| `MCP_ALLOWED_DIRECTORIES` | `[]` *(block all)* | Comma-separated directory paths permitted for file access (e.g. `"D:\mcp,C:\Workspace"`). Empty = block all filesystem operations (fail-closed). |
+| `--no-persist` | *N/A* | `true` | Keep CLI overrides session-only without writing to `winhelm.config.json` (default behavior / explicit no-op). |
 | `--persist` | *N/A* | `false` | Persist CLI overrides back to the active configuration file. |
 | *N/A* | `MCP_BLOCKED_COMMANDS` | *(see below)* | Additional comma-separated commands to block from execution. |
 
@@ -528,6 +533,13 @@ The resulting executable will be generated at `dist/winhelm.exe`:
    - Export audit logs anytime via browser or API:
      - `http://localhost:8788/api/monitor/export?format=json`
      - `http://localhost:8788/api/monitor/export?format=csv`
+4. **Fail-Closed Filesystem Confinement:**
+   - `allowedDirectories: []` blocks all filesystem operations by default for safety.
+   - Symlinks and NTFS directory junctions are resolved via `fs.realpathSync` before boundary evaluation.
+5. **Loopback-First Network Binding:**
+   - Default host is `127.0.0.1` (loopback only).
+   - Non-loopback binding (such as `0.0.0.0`) without `--auth` is blocked at startup with exit code 1.
+   - Bearer tokens are compared using `crypto.timingSafeEqual` with buffer length validation to prevent timing side-channels.
 
 ---
 
@@ -578,6 +590,10 @@ The resulting executable will be generated at `dist/winhelm.exe`:
 ### 6. PDF Generation Headless Browser Not Found
 - **Cause:** Neither Microsoft Edge nor Google Chrome could be located in default system paths.
 - **Solution:** Ensure Microsoft Edge is installed at its standard location (`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`) or install Google Chrome.
+
+### 7. Host Safety Gate Blocks Startup (`Non-loopback binding requires --auth`)
+- **Cause:** You attempted to bind to a non-loopback address (such as `0.0.0.0`) without specifying an authentication token.
+- **Solution:** Add `--auth <token>` or set the `MCP_AUTH_TOKEN` environment variable. This security gate prevents accidental public exposure of your host system without authentication.
 
 ---
 
