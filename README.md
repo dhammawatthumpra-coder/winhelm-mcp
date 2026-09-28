@@ -363,6 +363,7 @@ WinHelm binds by default to `127.0.0.1` (localhost only). To allow secure cross-
 3. Connect your mobile or remote Claude / Cursor / ChatGPT client:
    - **Streamable HTTP:** `http://100.80.20.10:8788/mcp`
    - **SSE Stream:** `http://100.80.20.10:8788/sse`
+   - **Web Monitor Dashboard:** `http://100.80.20.10:8788/?token=super-secure-token-here` (or Tailscale Funnel URL)
    - **Header:** `Authorization: Bearer super-secure-token-here`
 
 #### Claude.ai Custom Connectors (URL Query Token)
@@ -418,6 +419,12 @@ WinHelm hosts a full web application on a single port (default: `8788`):
 - **`/health`** — JSON health status and server uptime probe.
 - **`/api/monitor/stats`** — JSON hardware and session statistics.
 - **`/api/monitor/export?format=json|csv`** — Audit log export for security compliance.
+
+> 💡 **Browser Dashboard Access with Authentication:**  
+> When authentication is enabled (`--auth <token>` or `authToken`), accessing the Web Monitor Dashboard or Previewer via your browser requires passing the token once in the URL:  
+> - **Dashboard:** `http://<HOST>:8788/?token=<YOUR_AUTH_TOKEN>` (or `https://<your-tailnet-domain>.ts.net/?token=<YOUR_AUTH_TOKEN>`)  
+> - **File Preview:** `http://<HOST>:8788/preview?path=D:\project\README.md&token=<YOUR_AUTH_TOKEN>`  
+> WinHelm validates the token, displays live metrics and real-time logs, and sets a secure `HttpOnly` session cookie so subsequent dashboard navigation stays authenticated without re-entering the token.
 
 ---
 
@@ -567,6 +574,11 @@ The resulting executable will be generated at `dist/winhelm.exe`:
 - **Solution 2 (Claude.ai Custom Connectors without Header UI):** Append the token directly to the Server URL and select **No sign-in**:
   ```text
   https://<your-domain>/mcp?token=<YOUR_TOKEN>
+  ```
+- **Solution 3 (Browser Dashboard & File Preview):** Append `?token=<YOUR_TOKEN>` to the URL in your browser:
+  ```text
+  https://<your-domain>/?token=<YOUR_TOKEN>
+  https://<your-domain>/preview?path=...&token=<YOUR_TOKEN>
   ```
 
 ### 3. PowerShell Execution Policy Restriction
