@@ -90,12 +90,23 @@ export function isOriginAllowed(
   bindHost = "127.0.0.1"
 ): boolean {
   if (!origin) return true; // Non-browser clients (curl, stdio, native apps) do not send Origin header
+
+  // 1. Allow browser extensions & IDE webview origins (Chrome, Edge, Firefox, Safari, VS Code/Cursor)
+  if (
+    origin.startsWith("chrome-extension://") ||
+    origin.startsWith("moz-extension://") ||
+    origin.startsWith("safari-web-extension://") ||
+    origin.startsWith("vscode-webview://")
+  ) {
+    return true;
+  }
+
   try {
     const parsed = new URL(origin);
     const hostWithPort = parsed.host;
     const hostname = parsed.hostname;
 
-    // 1. Matches host validation (loopback, bindHost, *.ts.net, Tailscale CGNAT, custom allowedHosts)
+    // 2. Matches host validation (loopback, bindHost, *.ts.net, Tailscale CGNAT, custom allowedHosts)
     if (isHostAllowed(hostWithPort, allowedHosts, bindHost)) {
       return true;
     }
@@ -213,11 +224,19 @@ export function createServer(options: ServerOptions): {
   }
 
   // 4. CORS configuration: restricts web browser cross-origin requests
+  // Must expose Mcp-Session-Id so browser extensions/web clients can read session ID from initialization response
+  const exposedHeaders = [
+    "Mcp-Session-Id",
+    "mcp-session-id",
+    "Mcp-Protocol-Version",
+    "mcp-protocol-version",
+    "Last-Event-ID",
+  ];
   const corsOption = config.corsOrigins;
   if (corsOption === true || corsOption === "*") {
-    app.use(cors({ origin: "*", credentials: true }));
+    app.use(cors({ origin: "*", credentials: true, exposedHeaders }));
   } else if (Array.isArray(corsOption) || typeof corsOption === "string") {
-    app.use(cors({ origin: corsOption, credentials: true }));
+    app.use(cors({ origin: corsOption, credentials: true, exposedHeaders }));
   } else {
     const allowed = config.allowedHosts || ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
     app.use(
@@ -230,6 +249,7 @@ export function createServer(options: ServerOptions): {
           return callback(null, false);
         },
         credentials: true,
+        exposedHeaders,
       })
     );
   }
@@ -331,7 +351,7 @@ export function createServer(options: ServerOptions): {
     res.json({
       status: "ok",
       server: "winhelm-mcp",
-      version: "1.1.1",
+      version: "1.1.2",
       activeSessions: {
         sse: sseGateway.getActiveSessionCount(),
         streamableHttp: streamableGateway.getActiveSessionCount(),
@@ -347,7 +367,7 @@ export function createServer(options: ServerOptions): {
     const gpu = await getCachedGpuInfo();
     res.json({
       server: "winhelm-mcp",
-      version: "1.1.0",
+      version: "1.1.2",
       port: options.port,
       host: options.host,
       readOnly: configManager.isReadOnly(),

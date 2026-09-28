@@ -53,7 +53,7 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.1.1");
+    assert.strictEqual(body.version, "1.1.2");
   });
 
   it("should smoothly redirect browser visits (Accept: text/html) on GET /mcp to dashboard", async () => {
@@ -406,6 +406,49 @@ describe("Server Authentication and Protected Endpoints", () => {
     assert.ok(setCookie?.includes("Max-Age=2592000"));
     assert.ok(setCookie?.includes("SameSite=Lax"));
     assert.ok(setCookie?.includes("HttpOnly"));
+  });
+
+  it("should allow Chrome Extension CORS preflight and expose Mcp-Session-Id header", async () => {
+    const extOrigin = "chrome-extension://abcdefghijklmnop";
+    // 1. OPTIONS preflight
+    const optRes = await fetch(`${AUTH_BASE_URL}/mcp`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: extOrigin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,mcp-session-id",
+      },
+    });
+    assert.strictEqual(optRes.status, 204);
+    assert.strictEqual(optRes.headers.get("access-control-allow-origin"), extOrigin);
+
+    // 2. Initialize request with Chrome extension Origin and Bearer token
+    const initRes = await fetch(`${AUTH_BASE_URL}/mcp?token=${TEST_TOKEN}`, {
+      method: "POST",
+      headers: {
+        Origin: extOrigin,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "chrome-extension-client", version: "1.0" },
+        },
+      }),
+    });
+    assert.strictEqual(initRes.status, 200);
+    const exposeHeaders = initRes.headers.get("access-control-expose-headers") || "";
+    assert.ok(
+      exposeHeaders.toLowerCase().includes("mcp-session-id"),
+      `Expected Access-Control-Expose-Headers to include Mcp-Session-Id, got: ${exposeHeaders}`
+    );
+    const sessionId = initRes.headers.get("mcp-session-id");
+    assert.ok(sessionId, "Expected mcp-session-id in response");
   });
 });
 

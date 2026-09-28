@@ -33,7 +33,7 @@ export class StreamableGateway {
   private createMcpServerInstance(): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
-      version: "1.1.1",
+      version: "1.1.2",
     });
     registerAllTools(server);
     return server;
@@ -87,7 +87,7 @@ export class StreamableGateway {
    */
   public async handleRequest(req: Request, res: Response): Promise<void> {
     try {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      const sessionId = (req.headers["mcp-session-id"] || req.query?.sessionId || req.query?.["mcp-session-id"]) as string | undefined;
 
       // If an existing session ID is provided and active, use it.
       // If provided but not found (evicted, idle timeout, or server restart),

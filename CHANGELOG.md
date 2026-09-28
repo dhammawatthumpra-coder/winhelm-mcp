@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.2] - 2026-09-28
+
+### Fixed
+- **Browser Extension & IDE Webview CORS Support**: Added native whitelist support in `isOriginAllowed()` for `chrome-extension://` (Chrome, Edge, Brave, Arc), `moz-extension://` (Firefox), `safari-web-extension://` (Safari), and `vscode-webview://` (VS Code / Cursor). Resolves HTTP 405 Method Not Allowed errors when connecting via browser extensions.
+- **CORS `Access-Control-Expose-Headers` for `Mcp-Session-Id`**: Configured CORS middleware to explicitly expose `Mcp-Session-Id`, `Mcp-Protocol-Version`, and `Last-Event-ID`. Prevents browsers from hiding the session ID header from client-side JavaScript, resolving `400 Bad Request: Server not initialized` errors on subsequent requests.
+- **Session ID Query Parameter Fallback**: Added fallback parsing in `StreamableGateway` for `?sessionId=...` and `?mcp-session-id=...` query parameters alongside standard headers with optional chaining support.
+
+---
+
 ## [1.1.1] - 2026-09-28
 
 ### Fixed

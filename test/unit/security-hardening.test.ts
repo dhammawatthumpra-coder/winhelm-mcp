@@ -64,6 +64,12 @@ describe("Security Hardening & Boundary Enforcement", () => {
     assert.strictEqual(isOriginAllowed("https://claude.ai", allowed), true);
     assert.strictEqual(isOriginAllowed("https://chatgpt.com", allowed), true);
 
+    // Browser extensions & IDE webviews (Chrome, Firefox, Safari, VS Code/Cursor)
+    assert.strictEqual(isOriginAllowed("chrome-extension://abcdefghijklmnop", allowed), true);
+    assert.strictEqual(isOriginAllowed("moz-extension://12345-6789-abcd", allowed), true);
+    assert.strictEqual(isOriginAllowed("safari-web-extension://xyz", allowed), true);
+    assert.strictEqual(isOriginAllowed("vscode-webview://12345", allowed), true);
+
     // Malicious or unauthorized external origins
     assert.strictEqual(isOriginAllowed("http://evil.attacker.com", allowed), false);
     assert.strictEqual(isOriginAllowed("https://malicious-site.io", allowed), false);
