@@ -219,6 +219,26 @@ describe("Server Authentication and Protected Endpoints", () => {
 
     const previewRes = await fetch(`${AUTH_BASE_URL}/preview?path=README.md&token=${TEST_TOKEN}`);
     assert.strictEqual(previewRes.status, 200);
+
+    // Verify /mcp endpoint with query token (as used by Claude.ai custom connectors)
+    const mcpRes = await fetch(`${AUTH_BASE_URL}/mcp?token=${TEST_TOKEN}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "test-query-token",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "claude-custom-connector", version: "1.0.0" },
+        },
+      }),
+    });
+    assert.strictEqual(mcpRes.status, 200);
   });
 
   it("should configure trust proxy loopback on Express application", () => {
