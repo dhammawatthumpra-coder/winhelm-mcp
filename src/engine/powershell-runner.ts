@@ -84,6 +84,11 @@ export function runPowerShell(
   } else {
     const currentCwd = process.cwd();
     const currentCheck = configManager.isPathAllowed(currentCwd);
+    if (!currentCheck.allowed && config.allowSystemExecution === false) {
+      const reason = currentCheck.reason || `Effective working directory "${currentCwd}" is not permitted`;
+      logger.security(reason, command);
+      return Promise.reject(new Error(reason));
+    }
     if (currentCheck.allowed) {
       cwd = currentCwd;
     } else {
