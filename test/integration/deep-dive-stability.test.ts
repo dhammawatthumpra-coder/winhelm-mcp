@@ -11,6 +11,9 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
   let stopServer: (s: Server) => Promise<void>;
 
   before(async () => {
+    const { ConfigManager } = await import("../../src/config/config-manager.js");
+    await ConfigManager.getInstance().updateConfig({ allowedDirectories: [process.cwd()] }, false);
+
     const gateway = createServer({
       port: STRESS_PORT,
       host: "127.0.0.1",

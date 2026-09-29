@@ -503,18 +503,33 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
       }).join('');
     }
 
+    async function exchangeTokenIfNeeded() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token') || urlParams.get('auth');
+      if (token) {
+        try {
+          await fetch('/auth/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+          // Clean URL bar to avoid leaking token in history/bookmarks/screenshots
+          urlParams.delete('token');
+          urlParams.delete('auth');
+          const cleanQuery = urlParams.toString();
+          const cleanUrl = window.location.pathname + (cleanQuery ? '?' + cleanQuery : '');
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch (e) {
+          console.warn('Token exchange failed', e);
+        }
+      }
+    }
+
     async function fetchData() {
       try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token') || urlParams.get('auth');
-        if (token) {
-          document.cookie = 'token=' + encodeURIComponent(token) + '; path=/; SameSite=Lax';
-        }
-        const tokenQuery = token ? '?token=' + encodeURIComponent(token) : '';
-
         const [statsRes, logsRes] = await Promise.all([
-          fetch('/api/monitor/stats' + tokenQuery).then(r => r.json()),
-          fetch('/api/monitor/logs' + tokenQuery).then(r => r.json())
+          fetch('/api/monitor/stats').then(r => r.json()),
+          fetch('/api/monitor/logs').then(r => r.json())
         ]);
 
         // Server & Uptime
@@ -604,10 +619,7 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
     }
 
     async function clearLogs() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token') || urlParams.get('auth');
-      const tokenQuery = token ? '?token=' + encodeURIComponent(token) : '';
-      await fetch('/api/monitor/logs' + tokenQuery, { method: 'DELETE' });
+      await fetch('/api/monitor/logs', { method: 'DELETE' });
       logsCache = [];
       renderLogs();
     }
@@ -619,8 +631,8 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
       }
     }, 2500);
 
-    // Initial fetch
-    fetchData();
+    // Initial fetch (exchange token first if provided in URL)
+    exchangeTokenIfNeeded().then(() => fetchData());
   </script>
 </body>
 </html>`;

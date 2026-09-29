@@ -33,7 +33,7 @@ export class StreamableGateway {
   private createMcpServerInstance(): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
-      version: "1.1.2",
+      version: "1.2.0",
     });
     registerAllTools(server);
     return server;

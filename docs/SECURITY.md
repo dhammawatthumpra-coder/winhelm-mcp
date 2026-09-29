@@ -103,9 +103,13 @@ WinHelm follows a **fail-closed by default** security principle:
       "D:\\mcp",
       "C:\\Projects"
     ],
-    "allowSystemExecution": true
+    "allowSystemExecution": false
   }
   ```
+- **System Execution Isolation (`allowSystemExecution`)**:
+  - **Default: `false` (Fail-Closed)**. Commands referencing drives outside `allowedDirectories` (such as `C:\`) or invoking system binaries outside the whitelist are blocked by default.
+  - To allow invoking runtime binaries on `C:\` (such as `python.exe`, `node.exe`, `git.exe`) while keeping file tools restricted to your project drive, explicitly enable `"allowSystemExecution": true`, pass the `--system-exec` CLI flag, or set `WINHELM_ALLOW_SYSTEM_EXEC=true`.
+  - When enabled, WinHelm logs a security warning: `[SECURITY] System execution enabled - Runtime binaries on C: are now accessible`.
 - **Whole-Volume Whitelist**: You can whitelist an entire volume by specifying `"D:\\"`, `"D:"`, or `"D"`.
 - **Wildcard Full-Drive Access (`["*"]` or `["all"]`)**: You can explicitly opt-in to unrestricted machine access by configuring `["*"]` or `["all"]`.
   > ⚠️ **Warning:** Wildcard access (`["*"]`) should only be used for trusted, local single-user development with authentication enabled. Never expose an unauthenticated server with wildcard access to a public network or reverse proxy.
@@ -181,6 +185,8 @@ Before log entries are displayed on the Web Monitor Dashboard or written to disk
 
 All executed commands, exit codes, durations, and tool errors are sequentially logged to daily audit logs in `logs/winhelm-YYYY-MM-DD.log`.
 
+In addition, security-relevant events (blocked requests, authentication attempts, path traversal blocks, and tool executions) are permanently appended to a dedicated structured JSONL file in `logs/audit.log` via [audit-logger.ts](../src/utils/audit-logger.ts) with automatic 10MB file rotation and backup management.
+
 You can export audit logs at any time via the Web Monitor Dashboard buttons ("📥 Export JSON" / "📥 Export CSV") or programmatically via the HTTP endpoint:
 ```
 GET /api/monitor/export?format=json
@@ -188,3 +194,22 @@ GET /api/monitor/export?format=csv
 ```
 
 Logs older than 7 days are automatically pruned to prevent disk consumption.
+
+---
+
+## 10. Ephemeral Session Authentication
+
+To eliminate persistent credential exposure in browser URLs, history, and bookmarks:
+- The master `authToken` can be exchanged via `POST /auth/exchange` for an ephemeral `winhelm_session` cookie.
+- Ephemeral sessions use cryptographically secure 64-character hex identifiers (`crypto.randomBytes(32)`).
+- Sessions are subject to a **15-minute sliding expiration window** (`Max-Age=900; SameSite=Lax; HttpOnly`). Each valid request refreshes the 15-minute window.
+- When navigating to the Web Monitor Dashboard with a URL query token, WinHelm automatically exchanges the token for a session cookie and issues a clean 302 redirect to strip the token from the browser address bar.
+- Remote MCP connectors (such as Claude.ai) continue to support standard `Authorization: Bearer <token>` and URL query parameters with zero breaking changes.
+
+---
+
+## 11. Threat Model & Legal Disclaimers
+
+- 🎯 **[Threat Model & STRIDE Analysis](THREAT_MODEL.md)**: Exhaustive threat enumeration, trust boundary diagrams, assumptions, and mitigations.
+- 📜 **[Terms of Use & Security Disclaimer](../TERMS_OF_USE.md)**: Bilingual (English & Thai) terms detailing the Shared Responsibility Model and warranty disclaimer.
+- 🔒 **[Vulnerability Disclosure Policy](../SECURITY.md)**: Coordinated disclosure instructions and response commitments.

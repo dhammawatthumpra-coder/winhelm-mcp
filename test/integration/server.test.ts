@@ -53,7 +53,7 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.1.2");
+    assert.strictEqual(body.version, "1.2.0");
   });
 
   it("should smoothly redirect browser visits (Accept: text/html) on GET /mcp to dashboard", async () => {
@@ -273,14 +273,16 @@ describe("Server Authentication and Protected Endpoints", () => {
   const TEST_TOKEN = "mytoken";
   let authServer: Server;
   let stopAuthServer: (s: Server) => Promise<void>;
+  let authSessionManager: any;
 
   before(async () => {
-    const { start, stop } = createServer({
+    const { start, stop, sessionManager } = createServer({
       port: AUTH_PORT,
       host: "127.0.0.1",
       authToken: TEST_TOKEN,
     });
     stopAuthServer = stop;
+    authSessionManager = sessionManager;
     authServer = await start();
   });
 
@@ -325,7 +327,7 @@ describe("Server Authentication and Protected Endpoints", () => {
     const logsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/logs?token=${TEST_TOKEN}`);
     assert.strictEqual(logsRes.status, 200);
     const setCookie = logsRes.headers.get("set-cookie");
-    assert.ok(setCookie?.includes("authToken="));
+    assert.ok(setCookie?.includes("winhelm_session="));
 
     // Verify subsequent request using cookie without query token
     const cookieRes = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`, {
@@ -355,6 +357,123 @@ describe("Server Authentication and Protected Endpoints", () => {
       }),
     });
     assert.strictEqual(mcpRes.status, 200);
+  });
+
+  it("should exchange master token for ephemeral session cookie via POST /auth/exchange", async () => {
+    // 1. Invalid token returns 401
+    const badRes = await fetch(`${AUTH_BASE_URL}/auth/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "wrong-token" }),
+    });
+    assert.strictEqual(badRes.status, 401);
+
+    // 2. Valid token returns 200, session cookie, and expiresIn: 900
+    const okRes = await fetch(`${AUTH_BASE_URL}/auth/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: TEST_TOKEN }),
+    });
+    assert.strictEqual(okRes.status, 200);
+    const body = (await okRes.json()) as any;
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.expiresIn, 900);
+    const sessionCookie = okRes.headers.get("set-cookie");
+    assert.ok(sessionCookie?.includes("winhelm_session="));
+
+    // 3. Use exchanged cookie to access protected stats
+    const statsRes = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`, {
+      headers: { Cookie: sessionCookie! },
+    });
+    assert.strictEqual(statsRes.status, 200);
+
+    // 4. Logout revokes the session
+    const logoutRes = await fetch(`${AUTH_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: { Cookie: sessionCookie! },
+    });
+    assert.strictEqual(logoutRes.status, 200);
+
+    // 5. Subsequent request with logged out cookie should fail with 401
+    const postLogoutRes = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`, {
+      headers: { Cookie: sessionCookie! },
+    });
+    assert.strictEqual(postLogoutRes.status, 401);
+  });
+
+  it("should strip query token and set session cookie when browser visits dashboard", async () => {
+    const res = await fetch(`${AUTH_BASE_URL}/dashboard?token=${TEST_TOKEN}`, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+      },
+      redirect: "manual",
+    });
+    assert.strictEqual(res.status, 302);
+    assert.strictEqual(res.headers.get("location"), "/dashboard");
+    const cookie = res.headers.get("set-cookie");
+    assert.ok(cookie?.includes("winhelm_session="));
+    assert.ok(cookie?.includes("SameSite=Strict"));
+  });
+
+  it("should enforce single-use only on exchange tokens and strictly reject replay attacks", async () => {
+    // 1. Generate one-time exchange token
+    const exToken = authSessionManager.createExchangeToken(60000);
+
+    // 2. First visit with ?exchange=token succeeds (302) and sets session cookie
+    const firstRes = await fetch(`${AUTH_BASE_URL}/dashboard?exchange=${exToken}`, {
+      headers: { Accept: "text/html,application/xhtml+xml" },
+      redirect: "manual",
+    });
+    assert.strictEqual(firstRes.status, 302);
+    assert.strictEqual(firstRes.headers.get("location"), "/dashboard");
+    const setCookie = firstRes.headers.get("set-cookie");
+    assert.ok(setCookie?.includes("winhelm_session="));
+
+    // 3. Second visit with the SAME exchange token (Replay Attack) MUST be rejected with 401
+    const replayRes = await fetch(`${AUTH_BASE_URL}/dashboard?exchange=${exToken}`, {
+      headers: { Accept: "text/html,application/xhtml+xml" },
+      redirect: "manual",
+    });
+    assert.strictEqual(replayRes.status, 401);
+    const body = (await replayRes.json()) as any;
+    assert.ok(body.error?.includes("Exchange token is invalid or has already been used"));
+  });
+
+  it("should invalidate and clear stale or forged session cookies with Max-Age=0", async () => {
+    const res = await fetch(`${AUTH_BASE_URL}/api/monitor/stats`, {
+      headers: { Cookie: "winhelm_session=forged_non_existent_session_id" },
+    });
+    assert.strictEqual(res.status, 401);
+    const setCookie = res.headers.get("set-cookie");
+    assert.ok(setCookie?.includes("winhelm_session="));
+    assert.ok(setCookie?.includes("Max-Age=0"));
+  });
+
+  it("should dynamically reflect Origin when corsOrigins is wildcard to permit credentials", async () => {
+    // Port 8792 with wildcard CORS
+    // Dynamically set corsOrigins: "*" BEFORE createServer
+    const configManager = (await import("../../src/config/config-manager.js")).ConfigManager.getInstance();
+    await configManager.updateConfig({ corsOrigins: "*" }, false);
+
+    const wildcardPort = 8792;
+    const { start, stop } = createServer({
+      port: wildcardPort,
+      host: "127.0.0.1",
+    });
+
+    const wildcardServer = await start();
+    try {
+      const testOrigin = "http://client.mcp.example:3000";
+      const res = await fetch(`http://127.0.0.1:${wildcardPort}/health`, {
+        headers: { Origin: testOrigin },
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.headers.get("access-control-allow-origin"), testOrigin);
+      assert.strictEqual(res.headers.get("access-control-allow-credentials"), "true");
+    } finally {
+      await stop(wildcardServer);
+      await configManager.updateConfig({ corsOrigins: ["localhost", "127.0.0.1", "[::1]", "*.ts.net"] }, false);
+    }
   });
 
   it("should configure trust proxy loopback on Express application", () => {
@@ -403,8 +522,8 @@ describe("Server Authentication and Protected Endpoints", () => {
   it("should set Max-Age and SameSite on session authentication cookie", async () => {
     const res = await fetch(`${AUTH_BASE_URL}/api/monitor/logs?token=${TEST_TOKEN}`);
     const setCookie = res.headers.get("set-cookie");
-    assert.ok(setCookie?.includes("Max-Age=2592000"));
-    assert.ok(setCookie?.includes("SameSite=Lax"));
+    assert.ok(setCookie?.includes("Max-Age=900"));
+    assert.ok(setCookie?.includes("SameSite=Strict"));
     assert.ok(setCookie?.includes("HttpOnly"));
   });
 

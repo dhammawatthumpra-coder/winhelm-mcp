@@ -9,6 +9,8 @@ import { logger } from "../utils/logger.js";
 import { fileLogger } from "../utils/file-logger.js";
 import { taskManager } from "../engine/task-manager.js";
 import { RateLimiter } from "./rate-limiter.js";
+import { SessionManager } from "./session-manager.js";
+import { auditLogger } from "../utils/audit-logger.js";
 import { getDashboardHtml } from "./dashboard-html.js";
 import { getFilePreviewHtml } from "./preview-html.js";
 import { getGpuInfo, getSystemInfo } from "../engine/system.js";
@@ -136,6 +138,7 @@ export function createServer(options: ServerOptions): {
   app: Express;
   start: () => Promise<Server>;
   stop: (server: Server) => Promise<void>;
+  sessionManager: SessionManager;
 } {
   const app = express();
   // Trust proxy for loopback reverse proxies (Tailscale Funnel, local tunnel clients)
@@ -188,6 +191,11 @@ export function createServer(options: ServerOptions): {
   const sseGateway = new SseGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
   const streamableGateway = new StreamableGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
   const rateLimiter = new RateLimiter();
+  const sessionManager = new SessionManager(15);
+
+  // Dedicated body parsers for /auth and /api endpoints (leaving /mcp, /sse, /message raw streams untouched)
+  app.use("/auth", express.json());
+  app.use("/api", express.json());
 
   // Cache system info for 2.5s to avoid PowerShell overhead during continuous polling
   let cachedSystemInfo: SystemInfo | null = null;
@@ -234,7 +242,14 @@ export function createServer(options: ServerOptions): {
   ];
   const corsOption = config.corsOrigins;
   if (corsOption === true || corsOption === "*") {
-    app.use(cors({ origin: "*", credentials: true, exposedHeaders }));
+    // Dynamic origin reflection to comply with W3C CORS spec when credentials: true
+    app.use(
+      cors({
+        origin: (_origin, callback) => callback(null, true),
+        credentials: true,
+        exposedHeaders,
+      })
+    );
   } else if (Array.isArray(corsOption) || typeof corsOption === "string") {
     app.use(cors({ origin: corsOption, credentials: true, exposedHeaders }));
   } else {
@@ -269,7 +284,9 @@ export function createServer(options: ServerOptions): {
       if (!isInternalPolling) {
         const sessionId = (req.headers["mcp-session-id"] || req.query.sessionId) as string | undefined;
         const clientIp = req.ip || req.socket.remoteAddress || "-";
-        logger.req(req.method, req.originalUrl, res.statusCode, duration, clientIp, sessionId);
+        // Sanitize URL to strip sensitive tokens/secrets from terminal and persistent disk logs
+        const safeUrl = req.originalUrl.replace(/([?&])(token|auth|exchange)=[^&]*/gi, "$1$2=[REDACTED]");
+        logger.req(req.method, safeUrl, res.statusCode, duration, clientIp, sessionId);
       }
     });
     next();
@@ -278,12 +295,100 @@ export function createServer(options: ServerOptions): {
   // Rate Limiting Guard
   app.use(rateLimiter.middleware());
 
-  // Bearer Authentication Guard
+  // 1-Time / Ephemeral Token Exchange Endpoint
+  app.post("/auth/exchange", (req: Request, res: Response) => {
+    const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
+
+    // 1. Origin Header Validation Guard (defense-in-depth against unauthorized web clients)
+    const origin = req.get("origin");
+    const allowed = config.allowedHosts || ["localhost", "127.0.0.1", "[::1]", "*.ts.net"];
+    if (origin && !isOriginAllowed(origin, allowed, options.host)) {
+      logger.security("Blocked /auth/exchange request from unauthorized origin", `Origin: ${origin} | IP: ${req.ip}`);
+      return res.status(403).json({ error: "Forbidden: Origin not permitted by WinHelm security policy" });
+    }
+
+    if (!authToken) {
+      const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
+      res.setHeader(
+        "Set-Cookie",
+        `winhelm_session=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900${isSecure ? "; Secure" : ""}`
+      );
+      return res.json({ success: true, sessionId, expiresIn: 900 });
+    }
+
+    const providedToken = req.body?.token;
+    if (!providedToken || typeof providedToken !== "string") {
+      logger.security("Token exchange failed: Missing token in body", `IP: ${req.ip}`);
+      return res.status(401).json({ error: "Unauthorized: Missing token in request payload" });
+    }
+
+    // Accept either a single-use exchange token (invalidates immediately) or the master authToken
+    const isOneTimeValid = sessionManager.consumeExchangeToken(providedToken);
+    const isMasterValid = safeCompare(providedToken, authToken);
+
+    if (!isOneTimeValid && !isMasterValid) {
+      logger.security("Token exchange failed: Invalid or expired token", `IP: ${req.ip}`);
+      auditLogger.log({
+        event: "AUTH_EXCHANGE_FAILURE",
+        severity: "WARN",
+        actor: { ip: req.ip, authType: "none" },
+        action: "POST /auth/exchange",
+        outcome: "DENIED",
+        details: "Invalid or already consumed token in exchange payload",
+      });
+      return res.status(401).json({ error: "Unauthorized: Invalid or expired token" });
+    }
+
+    const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
+    res.setHeader(
+      "Set-Cookie",
+      `winhelm_session=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900${isSecure ? "; Secure" : ""}`
+    );
+
+    auditLogger.log({
+      event: "AUTH_EXCHANGE_SUCCESS",
+      severity: "INFO",
+      actor: { ip: req.ip, authType: "session_cookie", sessionId },
+      action: "POST /auth/exchange",
+      outcome: "ALLOWED",
+      details: isOneTimeValid
+        ? "Exchanged one-time token for ephemeral session cookie"
+        : "Exchanged master authToken for ephemeral session cookie",
+    });
+
+    return res.json({ success: true, sessionId, expiresIn: 900 });
+  });
+
+  // Ephemeral Session Logout Endpoint
+  app.post("/auth/logout", (req: Request, res: Response) => {
+    const cookieHeader = req.headers.cookie;
+    let sessionId: string | undefined;
+    if (cookieHeader) {
+      const match = cookieHeader.match(/(?:^|;\s*)winhelm_session=([^;]+)/);
+      if (match) sessionId = decodeURIComponent(match[1]);
+    }
+    if (sessionId) {
+      sessionManager.revokeSession(sessionId);
+    }
+    res.setHeader(
+      "Set-Cookie",
+      "winhelm_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+    );
+    res.json({ success: true, message: "Logged out" });
+  });
+
+  // Bearer & Ephemeral Session Authentication Guard
   if (authToken) {
-    logger.security("Bearer authentication guard is ACTIVE");
+    logger.security("Bearer & Ephemeral Session authentication guard is ACTIVE");
     app.use((req: Request, res: Response, next: NextFunction) => {
-      // Allow only lightweight public endpoints: health check and basic dashboard shell
-      if (req.path === "/health" || req.path === "/" || req.path === "/dashboard") {
+      // Allow only lightweight public endpoints: health check, auth exchange, logout, and security.txt
+      if (
+        req.path === "/health" ||
+        req.path === "/auth/exchange" ||
+        req.path === "/auth/logout" ||
+        req.path === "/.well-known/security.txt" ||
+        req.path === "/security.txt"
+      ) {
         return next();
       }
 
@@ -293,31 +398,122 @@ export function createServer(options: ServerOptions): {
         return next();
       }
 
-      // 2. Fallback for URL query parameter (Claude.ai custom connectors without header UI, browser dashboard, preview) or cookie
-      const queryToken = (req.query.token || req.query.auth) as string | undefined;
+      // 2. Check ephemeral session cookie (winhelm_session) with sliding 15-minute expiration
       const cookieHeader = req.headers.cookie;
-      let cookieToken: string | undefined;
+      let sessionCookieId: string | undefined;
       if (cookieHeader) {
-        const match = cookieHeader.match(/(?:^|;\s*)(?:authToken|token|auth)=([^;]+)/);
+        const match = cookieHeader.match(/(?:^|;\s*)winhelm_session=([^;]+)/);
         if (match) {
-          cookieToken = decodeURIComponent(match[1]);
+          sessionCookieId = decodeURIComponent(match[1]);
         }
       }
 
-      const browserToken = queryToken || cookieToken;
-      if (browserToken && safeCompare(browserToken, authToken)) {
-        if (queryToken && !cookieToken) {
+      if (sessionCookieId) {
+        if (sessionManager.validateSession(sessionCookieId)) {
+          // Sliding window: refresh cookie Max-Age only after 50% of TTL elapsed to prevent header churn
+          if (sessionManager.shouldRefreshCookie(sessionCookieId)) {
+            const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
+            res.setHeader(
+              "Set-Cookie",
+              `winhelm_session=${encodeURIComponent(sessionCookieId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900${isSecure ? "; Secure" : ""}`
+            );
+            sessionManager.markCookieRefreshed(sessionCookieId);
+          }
+          return next();
+        } else {
+          // Invalidate stale or non-existent session cookie immediately on client
+          res.setHeader(
+            "Set-Cookie",
+            "winhelm_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+          );
+        }
+      }
+
+      // 3. Fallback for URL query parameter (?exchange=..., ?token=..., ?auth=...)
+      const queryToken = (req.query.exchange || req.query.token || req.query.auth) as string | undefined;
+      if (queryToken) {
+        const isBrowserNav = req.path === "/" || req.path === "/dashboard" || req.path === "/preview";
+        const acceptHeader = req.headers["accept"] || "";
+
+        // Check if queryToken is a one-time exchange token (single-use) or master authToken
+        const isOneTimeValid = sessionManager.consumeExchangeToken(queryToken);
+        const isMasterValid = safeCompare(queryToken, authToken);
+
+        if (isOneTimeValid || isMasterValid) {
+          const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
           const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
           res.setHeader(
             "Set-Cookie",
-            `authToken=${encodeURIComponent(queryToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isSecure ? "; Secure" : ""}`
+            `winhelm_session=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900${isSecure ? "; Secure" : ""}`
           );
+
+          // For browser page navigation with HTML accept header, redirect to strip token from URL & browser history
+          if (isBrowserNav && acceptHeader.includes("text/html")) {
+            const cleanQuery = { ...req.query };
+            delete cleanQuery.exchange;
+            delete cleanQuery.token;
+            delete cleanQuery.auth;
+            const searchParams = new URLSearchParams(cleanQuery as Record<string, string>).toString();
+            const cleanUrl = searchParams ? `${req.path}?${searchParams}` : req.path;
+            return res.redirect(cleanUrl);
+          }
+
+          // For MCP protocol endpoints (/mcp, /sse, /message) and API calls, permit with security audit notice
+          logger.security(
+            "Authenticated via URL query token (prefer Authorization: Bearer header)",
+            `Path: ${req.path} | IP: ${req.ip}`
+          );
+          return next();
         }
+
+        // If client specifically used an exchange token that was already consumed or invalid on browser endpoint
+        if (req.query.exchange && isBrowserNav) {
+          logger.security("One-time exchange token rejected or already consumed (Replay prevention)", `IP: ${req.ip}`);
+          auditLogger.log({
+            event: "EXCHANGE_TOKEN_REPLAY_REJECTED",
+            severity: "WARN",
+            actor: { ip: req.ip, authType: "query_token" },
+            action: `${req.method} ${req.path}`,
+            outcome: "DENIED",
+            details: "Attempted to re-use expired or already consumed exchange token",
+          });
+          return res.status(401).json({ error: "Unauthorized: Exchange token is invalid or has already been used" });
+        }
+      }
+
+      // 4. Deprecated legacy cookie migration (authToken=...)
+      if (cookieHeader) {
+        const legacyMatch = cookieHeader.match(/(?:^|;\s*)authToken=([^;]+)/);
+        if (legacyMatch) {
+          const legacyVal = decodeURIComponent(legacyMatch[1]);
+          if (safeCompare(legacyVal, authToken)) {
+            logger.security("Deprecated authToken cookie used; upgrading to ephemeral session", `IP: ${req.ip}`);
+            const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
+            const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
+            res.setHeader(
+              "Set-Cookie",
+              `winhelm_session=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=900${isSecure ? "; Secure" : ""}`
+            );
+            return next();
+          }
+        }
+      }
+
+      // Allow unauthenticated GET / and /dashboard shell (data endpoints /api/monitor/* remain strictly guarded)
+      if (req.path === "/" || req.path === "/dashboard") {
         return next();
       }
 
       logger.security("Unauthorized request blocked", `Path: ${req.path} | IP: ${req.ip}`);
-      res.status(401).json({ error: "Unauthorized: Invalid or missing Bearer token" });
+      auditLogger.log({
+        event: "UNAUTHORIZED_REQUEST_BLOCKED",
+        severity: "WARN",
+        actor: { ip: req.ip, authType: "none" },
+        action: `${req.method} ${req.path}`,
+        outcome: "DENIED",
+        details: "Missing or invalid Bearer token / session cookie",
+      });
+      res.status(401).json({ error: "Unauthorized: Invalid or missing Bearer token / session cookie" });
     });
   } else {
     logger.info("Public network mode active (No auth token set)");
@@ -346,12 +542,24 @@ export function createServer(options: ServerOptions): {
     res.send(html);
   });
 
+  // RFC 9116 security.txt disclosure endpoint
+  app.get(["/.well-known/security.txt", "/security.txt"], (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(
+      `Contact: https://github.com/dhammawatthumpra-coder/winhelm-mcp/security/advisories\n` +
+      `Expires: 2027-12-31T23:59:59.000Z\n` +
+      `Preferred-Languages: en, th\n` +
+      `Policy: https://github.com/dhammawatthumpra-coder/winhelm-mcp/blob/main/SECURITY.md\n` +
+      `Canonical: https://raw.githubusercontent.com/dhammawatthumpra-coder/winhelm-mcp/main/public/.well-known/security.txt\n`
+    );
+  });
+
   // Health check endpoint
   app.get("/health", (_req: Request, res: Response) => {
     res.json({
       status: "ok",
       server: "winhelm-mcp",
-      version: "1.1.2",
+      version: "1.2.0",
       activeSessions: {
         sse: sseGateway.getActiveSessionCount(),
         streamableHttp: streamableGateway.getActiveSessionCount(),
@@ -367,7 +575,7 @@ export function createServer(options: ServerOptions): {
     const gpu = await getCachedGpuInfo();
     res.json({
       server: "winhelm-mcp",
-      version: "1.1.2",
+      version: "1.2.0",
       port: options.port,
       host: options.host,
       readOnly: configManager.isReadOnly(),
@@ -429,10 +637,18 @@ export function createServer(options: ServerOptions): {
   const start = (): Promise<Server> => {
     return new Promise((resolve) => {
       const server = app.listen(options.port, options.host, () => {
+        const startupToken = authToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
+        const monitorUrl = startupToken
+          ? `http://localhost:${options.port}/?exchange=${startupToken}`
+          : `http://localhost:${options.port}/`;
+
         console.log(`\n======================================================`);
         console.log(`  🚀 WinHelm MCP Server is running!`);
         console.log(`======================================================`);
-        console.log(`  - Web Monitor:     http://localhost:${options.port}/`);
+        console.log(`  - Web Monitor:     ${monitorUrl}`);
+        if (startupToken) {
+          console.log(`    (One-time login link valid for 10 minutes)`);
+        }
         console.log(`  - Streamable HTTP: http://${options.host}:${options.port}/mcp`);
         console.log(`  - SSE Endpoint:    http://${options.host}:${options.port}/sse`);
         console.log(`  - SSE Message:     http://${options.host}:${options.port}/message`);
@@ -447,13 +663,16 @@ export function createServer(options: ServerOptions): {
     // 1. Kill any active background tasks
     taskManager.killAll();
 
-    // 2. Close MCP Sessions
+    // 2. Close ephemeral session manager
+    sessionManager.close();
+
+    // 3. Close MCP Sessions
     await Promise.all([
       sseGateway.closeAll().catch(() => {}),
       streamableGateway.closeAll().catch(() => {}),
     ]);
 
-    // 3. Close network sockets
+    // 4. Close network sockets
     return new Promise((resolve) => {
       if (typeof server.closeAllConnections === "function") {
         server.closeAllConnections();
@@ -470,5 +689,5 @@ export function createServer(options: ServerOptions): {
     });
   };
 
-  return { app, start, stop };
+  return { app, start, stop, sessionManager };
 }

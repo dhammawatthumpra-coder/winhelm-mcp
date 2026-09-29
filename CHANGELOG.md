@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-29
+
+### Breaking Changes
+- **Fail-Closed System Execution Confinement (`allowSystemExecution: false`)**: Changed `allowSystemExecution` default from `true` to `false` (Fail-Closed). Access to system runtime binaries outside explicitly allowed directories (e.g. `C:\Windows\System32`) is now blocked by default. To execute system tools, opt in via CLI `--system-exec`, environment variable `WINHELM_ALLOW_SYSTEM_EXEC=1`, or config `"allowSystemExecution": true`. A prominent terminal warning is displayed whenever system execution is active.
+
+### Security & Hardening
+- **One-Time Exchange Token Architecture & Ephemeral Sessions**: Replaced long-lived master URL tokens with single-use exchange tokens (`POST /auth/exchange` or `?exchange=<token>`). Exchange tokens are immediately invalidated upon consumption to eliminate Replay Attacks. The gateway issues an ephemeral sliding session cookie (`winhelm_session`, 15-minute sliding TTL) with `SameSite=Strict; HttpOnly` flags.
+- **Browser Address Bar Token Stripping**: Browser dashboard access via query token immediately triggers an HTTP 302 redirect that sets the session cookie and strips the token from the browser address bar and history.
+- **W3C CORS Spec Compliance**: Implemented dynamic origin reflection when `corsOrigins` is set to `"*"` alongside `credentials: true`, adhering to W3C CORS specifications without browser origin rejection.
+- **Unicode Path Normalization (NFKC)**: Added NFKC normalization to `isPathAllowed()` before resolving paths, preventing directory traversal escapes via full-width Unicode dots (`\uFF0E\uFF0E/`).
+- **Request URL Log Sanitization**: Automatically masks secret tokens in `req.originalUrl` before passing requests to terminal and file loggers, preventing credentials from leaking into terminal outputs or disk logs.
+- **Dedicated JSONL Audit Logger**: Introduced append-only audit logger writing to `logs/audit.log` with automatic 10MB file rotation and 5 backup files.
+- **STRIDE Threat Model & Compliance Documentation**: Added `docs/THREAT_MODEL.md` (covering STRIDE matrix, Mermaid architecture, and residual risk assessment), bilingual `TERMS_OF_USE.md` (Shared Responsibility Model), root `SECURITY.md`, GitHub security workflow (`.github/workflows/security.yml`), and RFC 9116 `public/.well-known/security.txt`.
+- **Security Boundary Unit Test Suite**: Added 30 comprehensive unit tests (`test/unit/security-boundary.test.ts`) validating path confinement, Unicode NFKC, UNC escape, DNS rebinding, credential masking, timing attacks, rate limiting, and session lifecycle.
+
+---
+
 ## [1.1.2] - 2026-09-28
 
 ### Fixed

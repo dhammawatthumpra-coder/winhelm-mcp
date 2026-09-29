@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sanitizeText } from "./sanitizer.js";
 import { fileLogger } from "./file-logger.js";
+import { auditLogger } from "./audit-logger.js";
 
 export interface LogEntry {
   id: string;
@@ -168,6 +169,15 @@ export class Logger {
       durationMs,
       status: "SUCCESS",
     });
+
+    auditLogger.log({
+      event: "TOOL_EXECUTION",
+      severity: "INFO",
+      actor: {},
+      action: name,
+      outcome: "ALLOWED",
+      details: cleanSummary,
+    });
   }
 
   /**
@@ -187,6 +197,15 @@ export class Logger {
       durationMs,
       status: "FAILED",
     });
+
+    auditLogger.log({
+      event: "TOOL_EXECUTION",
+      severity: "WARN",
+      actor: {},
+      action: name,
+      outcome: "ERROR",
+      details: error,
+    });
   }
 
   /**
@@ -204,6 +223,15 @@ export class Logger {
       title: message,
       detail,
       status: "BLOCKED",
+    });
+
+    auditLogger.log({
+      event: "SECURITY_WARNING",
+      severity: "WARN",
+      actor: {},
+      action: message,
+      details: detail,
+      outcome: "DENIED",
     });
   }
 

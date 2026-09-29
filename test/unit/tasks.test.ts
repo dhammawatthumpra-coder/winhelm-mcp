@@ -1,8 +1,13 @@
-import test, { describe, it, after } from "node:test";
+import test, { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { taskManager } from "../../src/engine/task-manager.js";
+import { ConfigManager } from "../../src/config/config-manager.js";
 
 describe("TaskManager (Background Terminal Engine)", () => {
+  before(async () => {
+    await ConfigManager.getInstance().updateConfig({ allowedDirectories: [process.cwd()] }, false);
+  });
+
   after(() => {
     taskManager.killAll();
   });

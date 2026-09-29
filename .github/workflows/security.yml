@@ -1,0 +1,40 @@
+name: Security Hardening & CI Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run every Monday at 04:00 UTC
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  security-audit:
+    name: Security Hardening & Unit Tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Dependency Vulnerability Audit
+        run: npm audit --audit-level=high
+
+      - name: TypeScript Build & Lint Check
+        run: npm run build
+
+      - name: Run Full Unit & Integration Test Suite
+        run: npm test

@@ -7,7 +7,7 @@
     "C:\\Projects"
   ],
   "readOnly": false,
-  "allowSystemExecution": true,
+  "allowSystemExecution": false,
   "fileReadLineLimit": 2000,
   "defaultTimeoutMs": 60000,
   "rateLimitPerMinute": 120,

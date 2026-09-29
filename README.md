@@ -10,7 +10,7 @@
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
 > A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor Dashboard, 38 System Tools with Dynamic Profile Loading, and MCP File Preview Resource.
 
-[📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
+[📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [🎯 Threat Model](docs/THREAT_MODEL.md) • [📜 Terms of Use](TERMS_OF_USE.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
 
 ---
 
@@ -197,7 +197,7 @@ Visit `http://localhost:8788/health` in your browser. You should receive:
 {
   "status": "ok",
   "server": "winhelm-mcp",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "activeSessions": {
     "sse": 0,
     "streamableHttp": 0
@@ -649,7 +649,10 @@ For in-depth guides, architectural references, and developer guidelines, explore
 
 - 📖 **[Comprehensive Tools Reference](docs/TOOLS.md)**: Exhaustive documentation for all 38 tools, including parameter types, options, return formats, and JSON-RPC examples.
 - ⚙️ **[Tool Profiles & Context Optimization](docs/PROFILES.md)**: Deep dive into the 5 built-in profiles (minimal, core, dev, sysadmin, full), custom `--tools` filtering, token economics, and LLM optimization recipes.
-- 🛡️ **[Security Model & Architecture](docs/SECURITY.md)**: Deep dive into the 5-layer security model, path confinement, regex command blacklists, and secret masking.
+- 🛡️ **[Security Architecture & Model](docs/SECURITY.md)**: Deep dive into the 5-layer security model, path confinement, regex command blacklists, and secret masking.
+- 🎯 **[Threat Model & STRIDE Analysis](docs/THREAT_MODEL.md)**: Comprehensive STRIDE threat analysis, Mermaid trust boundary diagrams, assumptions, and mitigations.
+- 📜 **[Terms of Use & Disclaimer](TERMS_OF_USE.md)**: Bilingual (EN/TH) user agreement, shared responsibility model, and warranty disclaimer.
+- 🔒 **[Security Policy & Disclosure](SECURITY.md)**: Coordinated vulnerability disclosure policy, supported versions, and reporting guidelines.
 - 💡 **[Real-World Agent Examples](docs/EXAMPLES.md)**: End-to-end workflows showing how AI agents build projects, troubleshoot Windows crashes, and generate executive PDFs.
 - 📝 **[Changelog](CHANGELOG.md)**: Release notes and version history following Keep a Changelog.
 - 🤝 **[Contributing Guide](CONTRIBUTING.md)**: Instructions for developing, running tests, and opening Pull Requests.
