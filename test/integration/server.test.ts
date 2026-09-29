@@ -1,6 +1,8 @@
 import test, { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http, { type Server } from "node:http";
+import os from "node:os";
+import { ConfigManager } from "../../src/config/config-manager.js";
 import { createServer, safeCompare } from "../../src/gateway/server.js";
 
 function rawHttpRequest(
@@ -35,9 +37,16 @@ describe("Unified Gateway Server Integration", () => {
   let stopServer: (s: Server) => Promise<void>;
 
   before(async () => {
+    const configManager = ConfigManager.getInstance();
+    await configManager.updateConfig({
+      allowedDirectories: [process.cwd(), os.tmpdir(), "C:\\Windows"],
+      allowSystemExecution: true,
+      authToken: null,
+    }, false);
     const { start, stop } = createServer({
       port: TEST_PORT,
       host: "127.0.0.1",
+      authToken: null,
     });
     stopServer = stop;
     server = await start();
@@ -53,7 +62,7 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.2.0");
+    assert.strictEqual(body.version, "1.2.1");
   });
 
   it("should smoothly redirect browser visits (Accept: text/html) on GET /mcp to dashboard", async () => {

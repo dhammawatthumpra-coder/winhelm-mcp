@@ -1,9 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import type { ExecutionResult } from "../types/index.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
+import { getCleanChildEnv } from "../utils/child-env.js";
 
 let cachedPwshAvailable: boolean | null = null;
 
@@ -48,6 +50,7 @@ export function getPowerShellExecutable(preferPwsh = true): string {
 export interface PowerShellOptions {
   cwd?: string;
   timeoutMs?: number;
+  env?: Record<string, string>;
 }
 
 /**
@@ -81,6 +84,11 @@ export function runPowerShell(
   } else {
     const currentCwd = process.cwd();
     const currentCheck = configManager.isPathAllowed(currentCwd);
+    if (!currentCheck.allowed && config.allowSystemExecution === false) {
+      const reason = currentCheck.reason || `Effective working directory "${currentCwd}" is not permitted`;
+      logger.security(reason, command);
+      return Promise.reject(new Error(reason));
+    }
     if (currentCheck.allowed) {
       cwd = currentCwd;
     } else {
@@ -90,7 +98,8 @@ export function runPowerShell(
         if (/^[a-zA-Z]:?[\\/]?$/.test(first)) {
           first = first[0].toUpperCase() + ":\\";
         }
-        cwd = path.resolve(first);
+        const resolvedAllowed = path.resolve(first);
+        cwd = existsSync(resolvedAllowed) ? resolvedAllowed : currentCwd;
       } else {
         cwd = currentCwd;
       }
@@ -100,6 +109,7 @@ export function runPowerShell(
   const timeoutMs = options.timeoutMs || config.defaultTimeoutMs || 60000;
   const startTime = Date.now();
   const executionId = randomUUID();
+  const MAX_OUTPUT_BYTES = 1 * 1024 * 1024; // 1 MB cap per stream
 
   return new Promise((resolve, reject) => {
     // UTF-8 setup preamble for Windows PowerShell to prevent garbled Unicode / Thai characters
@@ -117,16 +127,27 @@ export function runPowerShell(
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        env: getCleanChildEnv(options.env),
       }
     );
 
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     let timedOut = false;
 
     const timer = setTimeout(() => {
       timedOut = true;
+      const pid = child.pid;
+      // Kill the entire process tree on Windows via taskkill before SIGKILL
+      if (pid) {
+        try {
+          spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true });
+        } catch {
+          // Best-effort; fall through to SIGKILL
+        }
+      }
       try {
         child.kill("SIGKILL");
       } catch {
@@ -135,11 +156,21 @@ export function runPowerShell(
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
+      if (stdoutBytes < MAX_OUTPUT_BYTES) {
+        const remaining = MAX_OUTPUT_BYTES - stdoutBytes;
+        const slice = chunk.length <= remaining ? chunk : chunk.subarray(0, remaining);
+        stdout += slice.toString("utf-8");
+        stdoutBytes += slice.length;
+      }
     });
 
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
+      if (stderrBytes < MAX_OUTPUT_BYTES) {
+        const remaining = MAX_OUTPUT_BYTES - stderrBytes;
+        const slice = chunk.length <= remaining ? chunk : chunk.subarray(0, remaining);
+        stderr += slice.toString("utf-8");
+        stderrBytes += slice.length;
+      }
     });
 
     child.on("close", (code) => {

@@ -53,7 +53,7 @@ Security is a foundational design pillar of WinHelm. Giving an AI agent access t
 
 By default, WinHelm binds strictly to **`127.0.0.1` (localhost loopback)**, preventing external machines on your local network (LAN) or public internet from reaching the server.
 
-If you bind WinHelm to an external interface (`--host 0.0.0.0`) without an authentication token, a prominent startup warning is emitted to alert you of open exposure. In any shared, multi-user, LAN, or remote setup, you should enforce Bearer Token authentication:
+If you attempt to bind WinHelm to an external interface (`--host 0.0.0.0` or a LAN IP) without configuring an authentication token, WinHelm activates a **Fail-Closed Startup Gate** (`validateNetworkExposure`) and immediately terminates with exit code 1 to prevent accidental open remote code execution. In any shared, multi-user, LAN, or remote setup, you must enforce Bearer Token authentication:
 
 ### CLI Flag
 ```powershell
@@ -76,7 +76,7 @@ When enabled:
 If `"authToken"` is explicitly set to `null` in `winhelm.config.json` (or `--auth` / `MCP_AUTH_TOKEN` is omitted):
 - The server operates in **No-Auth Mode** (`Public network mode active (No auth token set)`).
 - Incoming MCP requests and tools are executed without verifying any Bearer token or query token.
-- **Safety Restriction:** This mode should be strictly confined to local loopback development (`127.0.0.1`). Exposing an unauthenticated server with unrestricted drive access to public networks is dangerous and guarded by safety gates in `start-funnel.ps1`.
+- **Fail-Closed Startup Gate:** This mode is strictly confined to local loopback development (`127.0.0.1`, `localhost`). WinHelm will refuse to start on non-loopback addresses (`0.0.0.0` or LAN interfaces) without an authentication token. Safety gates in `start-funnel.ps1` also guard Tailscale Funnels.
 
 ---
 
@@ -144,13 +144,19 @@ To configure WinHelm safely, understand the distinction between hard security bo
 
 1. **Host Header Validation (DNS Rebinding Defense)**:
    - WinHelm validates incoming `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, and configured `allowedHosts` such as `*.ts.net`). Requests with unauthorized host headers are rejected with **HTTP 403 Forbidden**, preventing malicious websites from exploiting browser same-origin policies via DNS rebinding.
+   - `Host: 0.0.0.0` is explicitly rejected in all configurations, as `0.0.0.0` is a network bind address rather than a valid request host.
 2. **Unauthenticated Remote Proxy / Tunnel Guard**:
    - If WinHelm is started without an authentication token (`authToken: null`), any request detected arriving through a reverse proxy or tunnel (containing `X-Forwarded-For` or `Forwarded` headers) is immediately blocked with **HTTP 403 Forbidden** (Fail-Closed). This prevents accidental exposure of a local shell to the internet.
 3. **Content Security Policy & Security Headers**:
-   - File previews (`/preview`) enforce a strict Content Security Policy (`default-src 'none'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'`) preventing previewed Markdown files from executing network requests against the local API.
+   - Web Monitor Dashboard routes (`/`, `/dashboard`) enforce a strict Content Security Policy (`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'self';`).
+   - File previews (`/preview`) enforce an isolated CSP (`default-src 'none'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'`) preventing previewed files from executing network requests against the local API.
    - Global HTTP responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
-4. **Token Security Notice**:
-   - While `?token=...` query parameters are supported for browser dashboards and Claude.ai custom connectors, automated tools and production integrations should prefer `Authorization: Bearer <token>` headers to avoid token retention in intermediate proxy logs or browser history.
+4. **Robustness Caps & Resource Protection**:
+   - **Terminal Buffer Cap**: Standard output and standard error in `runPowerShell()` and background tasks are capped at 1 MB per stream to prevent process memory exhaustion.
+   - **Windows Process Tree Cleanup**: When commands exceed their timeout, WinHelm terminates the entire child process tree via native Windows `taskkill /PID <pid> /T /F` prior to SIGKILL.
+   - **File Preview Size Cap**: The `/preview` endpoint rejects files exceeding 5 MB before reading into memory.
+5. **Token Security Notice**:
+   - While `?token=...` query parameters are supported for browser dashboards and Claude.ai custom connectors, automated tools and production integrations should prefer `Authorization: Bearer <token>` headers to avoid token retention in intermediate proxy logs or browser history. Protocol endpoints (`/mcp`, `/sse`, `/message`) do not establish browser cookies or sessions when authenticated via query token.
 
 ---
 
@@ -200,11 +206,12 @@ Logs older than 7 days are automatically pruned to prevent disk consumption.
 ## 10. Ephemeral Session Authentication
 
 To eliminate persistent credential exposure in browser URLs, history, and bookmarks:
-- The master `authToken` can be exchanged via `POST /auth/exchange` for an ephemeral `winhelm_session` cookie.
+- The master `authToken` can be exchanged via `POST /auth/exchange` (or single-use `?exchange=<token>`) for an ephemeral `winhelm_session` cookie. Exchange tokens are immediately destroyed upon consumption to prevent replay attacks.
 - Ephemeral sessions use cryptographically secure 64-character hex identifiers (`crypto.randomBytes(32)`).
-- Sessions are subject to a **15-minute sliding expiration window** (`Max-Age=900; SameSite=Lax; HttpOnly`). Each valid request refreshes the 15-minute window.
+- Sessions are subject to a **15-minute sliding expiration window** (`Max-Age=900; SameSite=Lax; HttpOnly`). Each valid request refreshes the 15-minute window. Cookie refreshes are throttled until 50% of the sliding window has elapsed.
+- In addition to sliding expiry, sessions enforce a **12-hour absolute maximum lifetime cap** (`maxLifetimeMs`), guaranteeing that continuous activity cannot extend a session indefinitely.
 - When navigating to the Web Monitor Dashboard with a URL query token, WinHelm automatically exchanges the token for a session cookie and issues a clean 302 redirect to strip the token from the browser address bar.
-- Remote MCP connectors (such as Claude.ai) continue to support standard `Authorization: Bearer <token>` and URL query parameters with zero breaking changes.
+- Protocol endpoints (`/mcp`, `/sse`, `/message`) authenticated via query token do not set session cookies. Remote MCP connectors (such as Claude.ai) continue to support standard `Authorization: Bearer <token>` and URL query parameters with zero breaking changes.
 
 ---
 

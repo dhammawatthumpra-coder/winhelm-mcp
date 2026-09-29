@@ -73,8 +73,10 @@ export async function openTarget(target: string): Promise<{ success: boolean; ta
       throw new Error(pathCheck.reason);
     }
   }
-  const safeTarget = target.replace(/'/g, "''");
-  const result = await runPowerShell(`Start-Process '${safeTarget}'`, { timeoutMs: 5000 });
+  const result = await runPowerShell("Start-Process -FilePath $env:WH_ARG_TARGET", {
+    timeoutMs: 5000,
+    env: { WH_ARG_TARGET: target },
+  });
   if (result.exitCode !== 0 && result.stderr) {
     throw new Error(`Failed to open target: ${result.stderr}`);
   }
@@ -164,16 +166,20 @@ export async function killProcess(pid?: number, name?: string): Promise<KillResu
   }
 
   let cmd = "";
+  let env: Record<string, string> | undefined;
   if (pid) {
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error("Invalid pid");
+    }
     cmd = `Stop-Process -Id ${pid} -Force -PassThru | Select-Object Id, ProcessName | ConvertTo-Json`;
   } else if (name) {
-    const safeName = name.replace(/'/g, "''");
-    cmd = `Stop-Process -Name '${safeName}' -Force -PassThru | Select-Object Id, ProcessName | ConvertTo-Json`;
+    cmd = "Stop-Process -Name $env:WH_ARG_NAME -Force -PassThru | Select-Object Id, ProcessName | ConvertTo-Json";
+    env = { WH_ARG_NAME: name };
   } else {
     throw new Error("Must provide either pid or name");
   }
 
-  const result = await runPowerShell(cmd, { timeoutMs: 5000 });
+  const result = await runPowerShell(cmd, { timeoutMs: 5000, env });
   if (result.exitCode !== 0 && result.stderr) {
     throw new Error(`Failed to kill process: ${result.stderr}`);
   }
@@ -275,10 +281,20 @@ function mapStartType(startTypeNumOrStr: any): string {
  * List Windows Services with optional substring filter
  */
 export async function listServices(filter?: string): Promise<ServiceSummary[]> {
-  const safeFilter = filter ? filter.replace(/['"*]/g, "").trim() : "";
-  const nameArg = safeFilter ? `-Name '*${safeFilter}*'` : "";
+  let nameArg = "";
+  let env: Record<string, string> | undefined;
+  if (filter) {
+    const trimmed = filter.trim();
+    if (trimmed) {
+      if (!/^[\w .\-*]+$/.test(trimmed)) {
+        throw new Error(`Invalid service filter: '${filter}'. Service filter may only contain alphanumeric characters, spaces, dots, hyphens, and wildcards.`);
+      }
+      nameArg = "-Name $env:WH_ARG_FILTER";
+      env = { WH_ARG_FILTER: `*${trimmed.replace(/\*/g, "")}*` };
+    }
+  }
   const psCmd = `Get-Service ${nameArg} | Select-Object -First 100 Name, DisplayName, Status, StartType | ConvertTo-Json -Depth 2`;
-  const res = await runPowerShell(psCmd, { timeoutMs: 10000 });
+  const res = await runPowerShell(psCmd, { timeoutMs: 10000, env });
   if (!res.stdout || !res.stdout.trim()) {
     return [];
   }
@@ -300,15 +316,18 @@ export async function listServices(filter?: string): Promise<ServiceSummary[]> {
  * Get detailed status of a specific Windows Service
  */
 export async function getServiceStatus(serviceName: string): Promise<ServiceDetail> {
-  const safeName = serviceName.replace(/['"]/g, "").trim();
-  const psCmd = `Get-Service -Name '${safeName}' | Select-Object Name, DisplayName, Status, StartType, CanStop, CanPauseAndContinue | ConvertTo-Json -Depth 2`;
-  const res = await runPowerShell(psCmd, { timeoutMs: 5000 });
+  const trimmed = serviceName.trim();
+  if (!/^[\w .\-]+$/.test(trimmed)) {
+    throw new Error(`Invalid service name: '${serviceName}'. Service names may only contain alphanumeric characters, spaces, dots, and hyphens.`);
+  }
+  const psCmd = "Get-Service -Name $env:WH_ARG_NAME | Select-Object Name, DisplayName, Status, StartType, CanStop, CanPauseAndContinue | ConvertTo-Json -Depth 2";
+  const res = await runPowerShell(psCmd, { timeoutMs: 5000, env: { WH_ARG_NAME: trimmed } });
   if (!res.stdout || !res.stdout.trim()) {
     throw new Error(`Service '${serviceName}' not found`);
   }
   const s = JSON.parse(res.stdout);
   return {
-    name: s.Name || safeName,
+    name: s.Name || trimmed,
     displayName: s.DisplayName || "",
     status: mapServiceStatus(s.Status),
     startType: mapStartType(s.StartType),
@@ -329,13 +348,16 @@ export async function controlService(
     throw new Error("Service modification is blocked: Server is running in read-only mode.");
   }
 
-  const safeName = serviceName.replace(/['"]/g, "").trim();
+  const trimmed = serviceName.trim();
+  if (!/^[\w .\-]+$/.test(trimmed)) {
+    throw new Error(`Invalid service name: '${serviceName}'. Service names may only contain alphanumeric characters, spaces, dots, and hyphens.`);
+  }
   let verb = "Start-Service";
   if (action === "stop") verb = "Stop-Service";
   if (action === "restart") verb = "Restart-Service";
 
-  const psCmd = `${verb} -Name '${safeName}' -PassThru | Select-Object Name, Status | ConvertTo-Json`;
-  const res = await runPowerShell(psCmd, { timeoutMs: 15000 });
+  const psCmd = `${verb} -Name $env:WH_ARG_NAME -PassThru | Select-Object Name, Status | ConvertTo-Json`;
+  const res = await runPowerShell(psCmd, { timeoutMs: 15000, env: { WH_ARG_NAME: trimmed } });
   if (res.exitCode !== 0 && res.stderr) {
     throw new Error(`Failed to ${action} service '${serviceName}': ${res.stderr}`);
   }
@@ -351,7 +373,7 @@ export async function controlService(
 
   return {
     success: true,
-    serviceName: safeName,
+    serviceName: trimmed,
     action,
     currentStatus,
   };
@@ -560,32 +582,40 @@ export async function sendNotification(
   message: string,
   sound = true
 ): Promise<NotificationResult> {
-  const safeTitle = title.replace(/['"]/g, "").trim().slice(0, 100);
-  const safeMsg = message.replace(/['"]/g, "").trim().slice(0, 500);
+  const safeTitle = title.trim().slice(0, 100);
+  const safeMsg = message.trim().slice(0, 500);
   const soundTag = sound
     ? "<audio src='ms-winsoundevent:Notification.Default' />"
     : "<audio silent='true' />";
-  const toastXml = `<toast><visual><binding template='ToastGeneric'><text>${safeTitle}</text><text>${safeMsg}</text></binding></visual>${soundTag}</toast>`;
 
   const psScript = `
+$title = $env:WH_ARG_TITLE;
+$msg = $env:WH_ARG_MSG;
+$safeXmlTitle = [System.Security.SecurityElement]::Escape($title);
+$safeXmlMsg = [System.Security.SecurityElement]::Escape($msg);
+$toastXml = "<toast><visual><binding template='ToastGeneric'><text>$safeXmlTitle</text><text>$safeXmlMsg</text></binding></visual>${soundTag}</toast>";
+
 try {
   [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
   $xmlDoc = New-Object Windows.Data.Xml.Dom.XmlDocument
-  $xmlDoc.LoadXml("${toastXml}")
+  $xmlDoc.LoadXml($toastXml)
   $toast = New-Object Windows.UI.Notifications.ToastNotification $xmlDoc
   [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("WinHelm").Show($toast)
 } catch {
   Add-Type -AssemblyName System.Windows.Forms
   $balloon = New-Object System.Windows.Forms.NotifyIcon
   $balloon.Icon = [System.Drawing.SystemIcons]::Information
-  $balloon.BalloonTipTitle = '${safeTitle}'
-  $balloon.BalloonTipText = '${safeMsg}'
+  $balloon.BalloonTipTitle = $title
+  $balloon.BalloonTipText = $msg
   $balloon.Visible = $true
   $balloon.ShowBalloonTip(4000)
 }
 `;
 
-  await runPowerShell(psScript, { timeoutMs: 6000 });
+  await runPowerShell(psScript, {
+    timeoutMs: 6000,
+    env: { WH_ARG_TITLE: safeTitle, WH_ARG_MSG: safeMsg },
+  });
 
   return {
     success: true,

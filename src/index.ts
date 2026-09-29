@@ -5,6 +5,8 @@ import { ConfigManager } from "./config/config-manager.js";
 import { createServer } from "./gateway/server.js";
 import { isValidProfile, resolveCustomTools } from "./config/profiles.js";
 import { registerAllTools } from "./tools/index.js";
+import { validateNetworkExposure, isLoopbackHost } from "./utils/network-gate.js";
+import { SERVER_VERSION } from "./utils/version.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -91,22 +93,31 @@ async function main() {
     await configManager.updateConfig(updates, shouldPersist);
   }
 
-  // Security warning if bound to non-loopback with no authentication token
-  const isLoopback = HOST === "127.0.0.1" || HOST.toLowerCase() === "localhost" || HOST === "::1";
+  // Ensure security warnings print after all CLI / config overrides take effect
+  configManager.logSecurityWarnings();
+
+  // Startup Security Gate: Non-stdio + Non-loopback interface MUST have an authToken
   const effectiveAuthToken = AUTH_TOKEN || configManager.getConfig().authToken;
-  if (!isLoopback && !effectiveAuthToken && !IS_STDIO) {
-    console.warn("\n" + "=".repeat(78));
-    console.warn("⚠️  WARNING: Server is bound to a non-loopback address with NO authentication token.");
-    console.warn(`   Interface: ${HOST}:${PORT}`);
-    console.warn("   Anyone on this network can execute commands on this machine.");
-    console.warn("   To protect your system, specify --auth <token> or set MCP_AUTH_TOKEN in environment.");
-    console.warn("=".repeat(78) + "\n");
+  const exposureCheck = validateNetworkExposure({
+    host: HOST,
+    isStdio: IS_STDIO,
+    authToken: effectiveAuthToken,
+  });
+
+  if (!exposureCheck.allowed) {
+    console.error("\n" + "=".repeat(78));
+    console.error("FATAL SECURITY ERROR: Server cannot bind to a non-loopback address without authentication.");
+    console.error(`   Interface: ${HOST}:${PORT}`);
+    console.error("   Exposing WinHelm to a network without authentication permits remote code execution.");
+    console.error(`   ${exposureCheck.error}`);
+    console.error("=".repeat(78) + "\n");
+    process.exit(1);
   }
 
   if (IS_STDIO) {
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
-      version: "1.2.0",
+      version: SERVER_VERSION,
     });
     registerAllTools(mcpServer);
 
@@ -162,15 +173,20 @@ async function main() {
   process.on("SIGTERM", shutdown);
 }
 
-// Auto-run if executed directly or in standalone SEA binary
+// Auto-run if executed directly or in standalone SEA binary.
+// Guard: resolvedArgv1 must be an actual fs path, not a URL or import specifier,
+// so we do NOT trigger when this module is imported as a library (e.g. by tests).
 const argv1 = process.argv[1] || "";
 const isSeaBinary = process.execPath.toLowerCase().endsWith(".exe") && !process.execPath.toLowerCase().endsWith("node.exe");
+const resolvedArgv1 = argv1.replace(/\\/g, "/");
+const currentFileUrl = (typeof import.meta !== "undefined" && import.meta?.url) ? import.meta.url : "";
 const isDirectEntry =
   isSeaBinary ||
-  argv1.endsWith("index.ts") ||
-  argv1.endsWith("index.js") ||
-  argv1.endsWith("winhelm") ||
-  (typeof import.meta !== "undefined" && import.meta?.url && argv1 && import.meta.url.includes(argv1.replace(/\\/g, "/")));
+  (argv1 !== "" && (
+    argv1.endsWith("index.ts") ||
+    argv1.endsWith("index.js") ||
+    argv1.endsWith("winhelm")
+  ) && currentFileUrl && currentFileUrl.includes(resolvedArgv1));
 
 if (isDirectEntry) {
   main().catch((err) => {
@@ -179,4 +195,4 @@ if (isDirectEntry) {
   });
 }
 
-export { createServer, ConfigManager };
+export { createServer, ConfigManager, validateNetworkExposure, isLoopbackHost };
