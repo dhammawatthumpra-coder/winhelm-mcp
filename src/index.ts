@@ -6,6 +6,7 @@ import { createServer } from "./gateway/server.js";
 import { isValidProfile, resolveCustomTools } from "./config/profiles.js";
 import { registerAllTools } from "./tools/index.js";
 import { validateNetworkExposure, isLoopbackHost } from "./utils/network-gate.js";
+import { SERVER_VERSION } from "./utils/version.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -116,7 +117,7 @@ async function main() {
   if (IS_STDIO) {
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
-      version: "1.2.0",
+      version: SERVER_VERSION,
     });
     registerAllTools(mcpServer);
 
@@ -172,15 +173,20 @@ async function main() {
   process.on("SIGTERM", shutdown);
 }
 
-// Auto-run if executed directly or in standalone SEA binary
+// Auto-run if executed directly or in standalone SEA binary.
+// Guard: resolvedArgv1 must be an actual fs path, not a URL or import specifier,
+// so we do NOT trigger when this module is imported as a library (e.g. by tests).
 const argv1 = process.argv[1] || "";
 const isSeaBinary = process.execPath.toLowerCase().endsWith(".exe") && !process.execPath.toLowerCase().endsWith("node.exe");
+const resolvedArgv1 = argv1.replace(/\\/g, "/");
+const currentFileUrl = (typeof import.meta !== "undefined" && import.meta?.url) ? import.meta.url : "";
 const isDirectEntry =
   isSeaBinary ||
-  argv1.endsWith("index.ts") ||
-  argv1.endsWith("index.js") ||
-  argv1.endsWith("winhelm") ||
-  (typeof import.meta !== "undefined" && import.meta?.url && argv1 && import.meta.url.includes(argv1.replace(/\\/g, "/")));
+  (argv1 !== "" && (
+    argv1.endsWith("index.ts") ||
+    argv1.endsWith("index.js") ||
+    argv1.endsWith("winhelm")
+  ) && currentFileUrl && currentFileUrl.includes(resolvedArgv1));
 
 if (isDirectEntry) {
   main().catch((err) => {
