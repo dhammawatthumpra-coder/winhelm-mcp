@@ -722,5 +722,74 @@ describe("Task 7 Hardening - Startup Network Exposure Gate", () => {
   });
 });
 
+// ─── Task 9: Robustness Caps & Safe Process Cleanup ───────────────────────────
+
+import { isHostAllowed } from "../../src/gateway/server.js";
+import { getFilePreviewHtml } from "../../src/gateway/preview-html.js";
+
+describe("Task 9 — Robustness Caps & Safe Process Cleanup", () => {
+  describe("isHostAllowed — 0.0.0.0 rejection", () => {
+    it("should reject Host: 0.0.0.0 even when bindHost is 0.0.0.0", () => {
+      assert.strictEqual(
+        isHostAllowed("0.0.0.0", ["localhost"], "0.0.0.0"),
+        false,
+        "0.0.0.0 is a bind address and must never be allowed as a request Host"
+      );
+    });
+
+    it("should reject Host: 0.0.0.0:8788 with port", () => {
+      assert.strictEqual(isHostAllowed("0.0.0.0:8788", ["localhost"], "127.0.0.1"), false);
+    });
+
+    it("should still permit loopback 127.0.0.1 normally", () => {
+      assert.strictEqual(isHostAllowed("127.0.0.1", [], "127.0.0.1"), true);
+    });
+
+    it("should permit explicit bind host when it is not 0.0.0.0", () => {
+      assert.strictEqual(isHostAllowed("192.168.1.50", [], "192.168.1.50"), true);
+    });
+  });
+
+  describe("getFilePreviewHtml — 5 MB file size guard", () => {
+    let bigFilePath: string;
+
+    before(async () => {
+      bigFilePath = path.join(os.tmpdir(), `winhelm-preview-bigfile-${Date.now()}.txt`);
+      const buf = Buffer.alloc(5 * 1024 * 1024 + 1, "x");
+      await fs.writeFile(bigFilePath, buf);
+    });
+
+    after(async () => {
+      try { await fs.rm(bigFilePath, { force: true }); } catch { /* ignore */ }
+    });
+
+    it("should reject files larger than 5 MB with an error page", async () => {
+      const cm = ConfigManager.resetInstance();
+      await cm.init({ allowedDirectories: [os.tmpdir()] });
+      const html = await getFilePreviewHtml(bigFilePath);
+      assert.ok(html.includes("too large"), `Expected 'too large' in error page, got: ${html.slice(0, 200)}`);
+    });
+  });
+
+  describe("runPowerShell — stdout buffer capped at 1 MB", () => {
+    before(async () => {
+      const cm = ConfigManager.resetInstance();
+      await cm.init({ allowedDirectories: ["D:\\"] });
+    });
+
+    it("should truncate stdout to at most 1 MB when output exceeds the cap", async () => {
+      const lineKb = "A".repeat(1023);
+      const lines = 2048;
+      const command = `1..${lines} | ForEach-Object { '${lineKb}' }`;
+      const result = await runPowerShell(command, { timeoutMs: 30000 });
+      const byteLen = Buffer.byteLength(result.stdout, "utf-8");
+      assert.ok(
+        byteLen <= 1 * 1024 * 1024,
+        `stdout exceeds 1MB cap: got ${byteLen} bytes`
+      );
+    });
+  });
+});
+
 
 
