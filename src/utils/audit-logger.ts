@@ -1,7 +1,17 @@
 import fs from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { sanitizeObject, sanitizeText } from "./sanitizer.js";
+
+/**
+ * Truncate/hash raw 64-hex session IDs to sha256(id).slice(0, 12)
+ * to prevent leaking valid session tokens into persistent audit logs.
+ */
+export function hashSessionId(sessionId?: string): string | undefined {
+  if (!sessionId) return undefined;
+  return createHash("sha256").update(sessionId).digest("hex").slice(0, 12);
+}
 
 export interface AuditEvent {
   timestamp?: string;
@@ -54,7 +64,7 @@ export class AuditLogger {
       actor: {
         ip: event.actor.ip,
         authType: event.actor.authType || "none",
-        sessionId: event.actor.sessionId,
+        sessionId: hashSessionId(event.actor.sessionId),
       },
       action: sanitizeText(event.action),
       resource: event.resource ? sanitizeText(event.resource) : undefined,

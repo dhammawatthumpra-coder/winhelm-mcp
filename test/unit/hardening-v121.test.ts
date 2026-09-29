@@ -20,6 +20,10 @@ import {
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { getCleanChildEnv } from "../../src/utils/child-env.js";
 import { runPowerShell } from "../../src/engine/powershell-runner.js";
+import { createHash } from "node:crypto";
+import { hashSessionId, AuditLogger } from "../../src/utils/audit-logger.js";
+import { Logger } from "../../src/utils/logger.js";
+import { sanitizeText, sanitizeObject } from "../../src/utils/sanitizer.js";
 
 const SMART_QUOTES = ["\u2018", "\u2019", "\u201A", "\u201B"]; // ‘, ’, ‚, ‛
 
@@ -261,4 +265,103 @@ describe("Task 2 Hardening - Do Not Leak Server Auth Tokens to Child Processes",
     }
   });
 });
+
+describe("Task 3 Hardening - Audit Log and Sanitizer Security", () => {
+  it("hashSessionId should hash raw 64-hex session ID to sha256.slice(0, 12)", () => {
+    const rawSessionId = "e83cf66fa2b794dc6be44d939611b816a7f805b45129665bc7aa9580a13d7904";
+    const expected = createHash("sha256").update(rawSessionId).digest("hex").slice(0, 12);
+    const hashed = hashSessionId(rawSessionId);
+    assert.strictEqual(hashed, expected);
+    assert.strictEqual(hashed?.length, 12);
+    assert.ok(!rawSessionId.includes(hashed!));
+  });
+
+  it("hashSessionId should return undefined if sessionId is omitted", () => {
+    assert.strictEqual(hashSessionId(undefined), undefined);
+    assert.strictEqual(hashSessionId(""), undefined);
+  });
+
+  it("Logger should truncate tool input arguments to <= 500 characters", () => {
+    const logger = Logger.getInstance();
+    const giantArgs: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) {
+      giantArgs[`field_${i}`] = "x".repeat(50);
+    }
+    logger.toolStart("test_giant_args", giantArgs);
+
+    const recent = logger.getRecentLogs(1)[0];
+    assert.strictEqual(recent.type, "tool");
+    assert.ok(recent.detail!.length <= 500, `detail length ${recent.detail!.length} exceeds 500`);
+    assert.ok(recent.detail!.endsWith("..."));
+  });
+
+  it("Logger should truncate tool output summary to <= 200 characters", () => {
+    const logger = Logger.getInstance();
+    const giantSummary = "B".repeat(500);
+    logger.toolDone("test_giant_done", 10, giantSummary);
+
+    const recent = logger.getRecentLogs(1)[0];
+    assert.strictEqual(recent.type, "tool");
+    assert.ok(recent.detail!.length <= 200, `detail length ${recent.detail!.length} exceeds 200`);
+    assert.ok(recent.detail!.endsWith("..."));
+  });
+
+  it("Logger should truncate tool error to <= 200 characters", () => {
+    const logger = Logger.getInstance();
+    const giantError = "C".repeat(500);
+    logger.toolFail("test_giant_fail", 10, giantError);
+
+    const recent = logger.getRecentLogs(1)[0];
+    assert.strictEqual(recent.type, "tool");
+    assert.ok(recent.detail!.length <= 200, `detail length ${recent.detail!.length} exceeds 200`);
+    assert.ok(recent.detail!.endsWith("..."));
+  });
+
+  it("sanitizer should mask Bearer tokens with diverse boundary characters", () => {
+    const cases = [
+      'Bearer abcdef1234567890;',
+      'Bearer "abcdef1234567890"',
+      "Bearer 'abcdef1234567890'",
+      'Bearer abcdef1234567890, next',
+    ];
+    for (const c of cases) {
+      const sanitized = sanitizeText(c);
+      assert.ok(!sanitized.includes("abcdef1234567890"), `Leaked in case: ${c}`);
+      assert.ok(sanitized.includes("************"));
+      assert.ok(sanitized.toLowerCase().includes("bearer"));
+    }
+  });
+
+  it("sanitizer should mask exchange=, winhelm_session=, and session= in query and cookies", () => {
+    const query = "/auth/exchange?exchange=secret_exchange_token_12345&foo=bar";
+    const cookie = "Cookie: winhelm_session=sess_abcdef0123456789; other=123";
+    const sessQuery = "/dashboard?session=user_session_token_99999&debug=true";
+
+    const sQuery = sanitizeText(query);
+    assert.ok(!sQuery.includes("secret_exchange_token_12345"));
+    assert.ok(sQuery.includes("exchange=************"));
+
+    const sCookie = sanitizeText(cookie);
+    assert.ok(!sCookie.includes("sess_abcdef0123456789"));
+    assert.ok(sCookie.includes("winhelm_session=************"));
+    assert.ok(sCookie.includes("; other=123"));
+
+    const sSess = sanitizeText(sessQuery);
+    assert.ok(!sSess.includes("user_session_token_99999"));
+    assert.ok(sSess.includes("session=************"));
+  });
+
+  it("sanitizeObject should mask exchange and session keys", () => {
+    const obj = {
+      exchange: "my_exchange_token_val",
+      winhelm_session: "my_cookie_session_val",
+      normal: "hello",
+    };
+    const clean = sanitizeObject(obj);
+    assert.strictEqual(clean.exchange, "************");
+    assert.strictEqual(clean.winhelm_session, "************");
+    assert.strictEqual(clean.normal, "hello");
+  });
+});
+
 

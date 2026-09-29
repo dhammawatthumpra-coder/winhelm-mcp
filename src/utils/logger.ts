@@ -136,7 +136,10 @@ export class Logger {
       }
     }
 
-    const preview = sanitizeText(JSON.stringify(cleanArgs));
+    let preview = sanitizeText(JSON.stringify(cleanArgs));
+    if (preview.length > 500) {
+      preview = preview.slice(0, 497) + "...";
+    }
     console.log(
       `${C.gray}[${time}]${C.reset} ${C.magenta}[TOOL-START]${C.reset} ${C.bold}${name}${C.reset} ${C.dim}${preview}${C.reset}`
     );
@@ -155,7 +158,10 @@ export class Logger {
    */
   public toolDone(name: string, durationMs: number, summary?: string): void {
     const time = this.getFormattedTime();
-    const cleanSummary = summary ? sanitizeText(summary) : undefined;
+    let cleanSummary = summary ? sanitizeText(summary) : undefined;
+    if (cleanSummary && cleanSummary.length > 200) {
+      cleanSummary = cleanSummary.slice(0, 197) + "...";
+    }
     const sum = cleanSummary ? ` ${C.dim}-> ${cleanSummary.slice(0, 90)}${cleanSummary.length > 90 ? "..." : ""}${C.reset}` : "";
     console.log(
       `${C.gray}[${time}]${C.reset} ${C.green}[TOOL-DONE]${C.reset}  ${C.bold}${name}${C.reset} ${C.green}✔ OK${C.reset} ${C.dim}(${durationMs}ms)${C.reset}${sum}`
@@ -165,7 +171,7 @@ export class Logger {
       type: "tool",
       level: "success",
       title: `tool_done: ${name}`,
-      detail: cleanSummary ? cleanSummary.slice(0, 150) : "Success",
+      detail: cleanSummary || "Success",
       durationMs,
       status: "SUCCESS",
     });
@@ -185,15 +191,19 @@ export class Logger {
    */
   public toolFail(name: string, durationMs: number, error: string): void {
     const time = this.getFormattedTime();
+    let cleanError = error ? sanitizeText(error) : "";
+    if (cleanError.length > 200) {
+      cleanError = cleanError.slice(0, 197) + "...";
+    }
     console.log(
-      `${C.gray}[${time}]${C.reset} ${C.red}[TOOL-FAIL]${C.reset}  ${C.bold}${name}${C.reset} ${C.red}✖ ERROR${C.reset} ${C.dim}(${durationMs}ms)${C.reset} ${C.red}${error}${C.reset}`
+      `${C.gray}[${time}]${C.reset} ${C.red}[TOOL-FAIL]${C.reset}  ${C.bold}${name}${C.reset} ${C.red}✖ ERROR${C.reset} ${C.dim}(${durationMs}ms)${C.reset} ${C.red}${cleanError}${C.reset}`
     );
 
     this.addLog({
       type: "tool",
       level: "error",
       title: `tool_fail: ${name}`,
-      detail: error,
+      detail: cleanError,
       durationMs,
       status: "FAILED",
     });
