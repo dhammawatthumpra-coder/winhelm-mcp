@@ -236,8 +236,11 @@ describe("ConfigManager and Security Policy", () => {
     assert.match(content, /SECURITY ERROR.*Binding to non-loopback host/);
 
     // 3. Execute powershell test without auth -> must exit 1
+    const os = await import("node:os");
+    const tempNoAuthConfig = path.join(os.tmpdir(), `winhelm-noauth-test-${Date.now()}.json`);
+    await fs.writeFile(tempNoAuthConfig, JSON.stringify({ authToken: null }));
     try {
-      execSync("powershell.exe -ExecutionPolicy Bypass -File .\\start.ps1 -HostAddr 0.0.0.0 -Config .\\winhelm.config.json", {
+      execSync(`powershell.exe -ExecutionPolicy Bypass -File .\\start.ps1 -HostAddr 0.0.0.0 -Config "${tempNoAuthConfig}"`, {
         stdio: "pipe",
         env: { ...process.env, MCP_AUTH_TOKEN: "" },
       });
@@ -246,6 +249,8 @@ describe("ConfigManager and Security Policy", () => {
       assert.strictEqual(err.status, 1);
       const output = (err.stdout?.toString() || "") + (err.stderr?.toString() || "");
       assert.ok(output.includes("SECURITY ERROR"));
+    } finally {
+      try { await fs.rm(tempNoAuthConfig, { force: true }); } catch { /* ignore */ }
     }
   });
 
