@@ -109,6 +109,7 @@ export function runPowerShell(
   const timeoutMs = options.timeoutMs || config.defaultTimeoutMs || 60000;
   const startTime = Date.now();
   const executionId = randomUUID();
+  const MAX_OUTPUT_BYTES = 1 * 1024 * 1024; // 1 MB cap per stream
 
   return new Promise((resolve, reject) => {
     // UTF-8 setup preamble for Windows PowerShell to prevent garbled Unicode / Thai characters
@@ -132,10 +133,21 @@ export function runPowerShell(
 
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     let timedOut = false;
 
     const timer = setTimeout(() => {
       timedOut = true;
+      const pid = child.pid;
+      // Kill the entire process tree on Windows via taskkill before SIGKILL
+      if (pid) {
+        try {
+          spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true });
+        } catch {
+          // Best-effort; fall through to SIGKILL
+        }
+      }
       try {
         child.kill("SIGKILL");
       } catch {
@@ -144,11 +156,21 @@ export function runPowerShell(
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
+      if (stdoutBytes < MAX_OUTPUT_BYTES) {
+        const remaining = MAX_OUTPUT_BYTES - stdoutBytes;
+        const slice = chunk.length <= remaining ? chunk : chunk.subarray(0, remaining);
+        stdout += slice.toString("utf-8");
+        stdoutBytes += slice.length;
+      }
     });
 
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
+      if (stderrBytes < MAX_OUTPUT_BYTES) {
+        const remaining = MAX_OUTPUT_BYTES - stderrBytes;
+        const slice = chunk.length <= remaining ? chunk : chunk.subarray(0, remaining);
+        stderr += slice.toString("utf-8");
+        stderrBytes += slice.length;
+      }
     });
 
     child.on("close", (code) => {

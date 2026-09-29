@@ -29,6 +29,12 @@ export async function getFilePreviewHtml(filePath: string): Promise<string> {
   const ext = path.extname(resolvedPath).toLowerCase();
   const fileSizeKb = (stat.size / 1024).toFixed(1);
 
+  // Reject files larger than 5 MB to prevent memory exhaustion
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  if (stat.size > MAX_FILE_BYTES) {
+    return renderErrorPage(resolvedPath, `File is too large to preview (${fileSizeKb} KB). Maximum allowed size is 5 MB.`);
+  }
+
   const imageExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"];
   const isImage = imageExts.includes(ext);
   const isPdf = ext === ".pdf";

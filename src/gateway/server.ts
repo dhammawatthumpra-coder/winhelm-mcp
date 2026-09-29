@@ -62,8 +62,13 @@ export function isHostAllowed(
     return true;
   }
 
-  // Permit explicitly configured bind host interface
-  if (bindHost && hostname === bindHost.toLowerCase()) {
+  // Explicitly reject 0.0.0.0 — "all interfaces" is a bind address, not a valid request origin
+  if (hostname === "0.0.0.0") {
+    return false;
+  }
+
+  // Permit explicitly configured bind host interface (only if it is a real host, not 0.0.0.0)
+  if (bindHost && bindHost !== "0.0.0.0" && hostname === bindHost.toLowerCase()) {
     return true;
   }
 
