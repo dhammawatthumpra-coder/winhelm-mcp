@@ -27,6 +27,7 @@ import { sanitizeText, sanitizeObject } from "../../src/utils/sanitizer.js";
 import { SessionManager } from "../../src/gateway/session-manager.js";
 import { createServer } from "../../src/gateway/server.js";
 import { escapeHtml, getDashboardHtml } from "../../src/gateway/dashboard-html.js";
+import { validateNetworkExposure, isLoopbackHost } from "../../src/utils/network-gate.js";
 
 const SMART_QUOTES = ["\u2018", "\u2019", "\u201A", "\u201B"]; // ‘, ’, ‚, ‛
 
@@ -632,6 +633,91 @@ describe("Task 6 Hardening - Dashboard Output Encoding & Strict CSP", () => {
       assert.ok(csp.includes("connect-src 'self'"));
       assert.ok(csp.includes("frame-ancestors 'none'"));
       assert.ok(csp.includes("form-action 'none'"));
+    });
+  });
+});
+
+describe("Task 7 Hardening - Startup Network Exposure Gate", () => {
+  describe("isLoopbackHost", () => {
+    it("should identify IPv4 and IPv6 loopback addresses correctly", () => {
+      assert.strictEqual(isLoopbackHost("127.0.0.1"), true);
+      assert.strictEqual(isLoopbackHost("localhost"), true);
+      assert.strictEqual(isLoopbackHost("::1"), true);
+      assert.strictEqual(isLoopbackHost("[::1]"), true);
+      assert.strictEqual(isLoopbackHost("127.0.0.2"), true);
+      assert.strictEqual(isLoopbackHost("127.100.200.254"), true);
+    });
+
+    it("should reject non-loopback addresses including 0.0.0.0, LAN IPs, and wildcards", () => {
+      assert.strictEqual(isLoopbackHost("0.0.0.0"), false, "0.0.0.0 binds to all interfaces and is not loopback");
+      assert.strictEqual(isLoopbackHost("::"), false, ":: binds to all IPv6 interfaces and is not loopback");
+      assert.strictEqual(isLoopbackHost("192.168.1.1"), false);
+      assert.strictEqual(isLoopbackHost("10.0.0.1"), false);
+      assert.strictEqual(isLoopbackHost("100.64.0.1"), false);
+      assert.strictEqual(isLoopbackHost(""), false);
+      assert.strictEqual(isLoopbackHost(undefined), false);
+      assert.strictEqual(isLoopbackHost(null), false);
+    });
+  });
+
+  describe("validateNetworkExposure", () => {
+    it("should permit stdio transport without authentication regardless of host", () => {
+      const res = validateNetworkExposure({
+        host: "0.0.0.0",
+        isStdio: true,
+        authToken: undefined,
+      });
+      assert.strictEqual(res.allowed, true);
+    });
+
+    it("should permit loopback interfaces without authentication token", () => {
+      const res1 = validateNetworkExposure({
+        host: "127.0.0.1",
+        isStdio: false,
+        authToken: undefined,
+      });
+      assert.strictEqual(res1.allowed, true);
+
+      const res2 = validateNetworkExposure({
+        host: "localhost",
+        isStdio: false,
+        authToken: null,
+      });
+      assert.strictEqual(res2.allowed, true);
+    });
+
+    it("should block non-loopback interface (0.0.0.0, LAN) when authToken is missing", () => {
+      const res0 = validateNetworkExposure({
+        host: "0.0.0.0",
+        isStdio: false,
+        authToken: undefined,
+      });
+      assert.strictEqual(res0.allowed, false);
+      assert.ok(res0.error?.includes("Server cannot bind to non-loopback address"));
+
+      const resLan = validateNetworkExposure({
+        host: "192.168.1.50",
+        isStdio: false,
+        authToken: "",
+      });
+      assert.strictEqual(resLan.allowed, false);
+      assert.ok(resLan.error?.includes("without an authentication token"));
+    });
+
+    it("should permit non-loopback interface when authToken is provided", () => {
+      const res0 = validateNetworkExposure({
+        host: "0.0.0.0",
+        isStdio: false,
+        authToken: "valid-secret-token",
+      });
+      assert.strictEqual(res0.allowed, true);
+
+      const resLan = validateNetworkExposure({
+        host: "192.168.1.50",
+        isStdio: false,
+        authToken: "valid-secret-token",
+      });
+      assert.strictEqual(resLan.allowed, true);
     });
   });
 });
