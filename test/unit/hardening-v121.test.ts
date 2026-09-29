@@ -18,6 +18,8 @@ import {
   sendNotification,
 } from "../../src/engine/system.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
+import { getCleanChildEnv } from "../../src/utils/child-env.js";
+import { runPowerShell } from "../../src/engine/powershell-runner.js";
 
 const SMART_QUOTES = ["\u2018", "\u2019", "\u201A", "\u201B"]; // ‘, ’, ‚, ‛
 
@@ -40,6 +42,10 @@ describe("Task 1 Hardening - Unicode Smart Quotes & PowerShell Injection Prevent
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {}
+    await ConfigManager.getInstance().updateConfig({
+      allowedDirectories: [process.cwd(), os.tmpdir(), "C:\\Windows"],
+      allowSystemExecution: true,
+    }, false);
   });
 
   describe("psQuote helper", () => {
@@ -205,3 +211,54 @@ describe("Task 1 Hardening - Unicode Smart Quotes & PowerShell Injection Prevent
     }
   });
 });
+
+describe("Task 2 Hardening - Do Not Leak Server Auth Tokens to Child Processes", () => {
+  it("getCleanChildEnv should strip sensitive environment variables", () => {
+    process.env.MCP_AUTH_TOKEN = "CANARY_MCP_TOKEN_SECRET";
+    process.env.AUTH_TOKEN = "CANARY_AUTH_TOKEN_SECRET";
+    process.env.WINHELM_AUTH_TOKEN = "CANARY_WINHELM_SECRET";
+    process.env.MCP_SECRET_KEY = "CANARY_SECRET_KEY";
+    process.env.WINHELM_API_TOKEN = "CANARY_API_TOKEN";
+    process.env.SAFE_CUSTOM_VAR = "CANARY_SAFE_VALUE";
+
+    try {
+      const clean = getCleanChildEnv();
+      assert.strictEqual(clean.MCP_AUTH_TOKEN, undefined);
+      assert.strictEqual(clean.AUTH_TOKEN, undefined);
+      assert.strictEqual(clean.WINHELM_AUTH_TOKEN, undefined);
+      assert.strictEqual(clean.MCP_SECRET_KEY, undefined);
+      assert.strictEqual(clean.WINHELM_API_TOKEN, undefined);
+      assert.strictEqual(clean.SAFE_CUSTOM_VAR, "CANARY_SAFE_VALUE");
+      assert.strictEqual(clean.PYTHONIOENCODING, "utf-8");
+    } finally {
+      delete process.env.MCP_AUTH_TOKEN;
+      delete process.env.AUTH_TOKEN;
+      delete process.env.WINHELM_AUTH_TOKEN;
+      delete process.env.MCP_SECRET_KEY;
+      delete process.env.WINHELM_API_TOKEN;
+      delete process.env.SAFE_CUSTOM_VAR;
+    }
+  });
+
+  it("getCleanChildEnv should allow explicit non-sensitive overrides", () => {
+    const clean = getCleanChildEnv({ CUSTOM_OVERRIDE: "test123" });
+    assert.strictEqual(clean.CUSTOM_OVERRIDE, "test123");
+  });
+
+  it("child process executed via runPowerShell should not have access to server tokens", async () => {
+    process.env.MCP_AUTH_TOKEN = "CANARY_MCP_LEAK_TEST";
+    process.env.AUTH_TOKEN = "CANARY_AUTH_LEAK_TEST";
+
+    try {
+      const res = await runPowerShell("Write-Output \"MCP:$env:MCP_AUTH_TOKEN|AUTH:$env:AUTH_TOKEN\"");
+      assert.strictEqual(res.exitCode, 0);
+      assert.strictEqual(res.stdout.trim(), "MCP:|AUTH:");
+      assert.ok(!res.stdout.includes("CANARY_MCP_LEAK_TEST"));
+      assert.ok(!res.stdout.includes("CANARY_AUTH_LEAK_TEST"));
+    } finally {
+      delete process.env.MCP_AUTH_TOKEN;
+      delete process.env.AUTH_TOKEN;
+    }
+  });
+});
+

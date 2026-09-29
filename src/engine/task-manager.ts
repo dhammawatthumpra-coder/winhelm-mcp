@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
 import { getPowerShellExecutable } from "./powershell-runner.js";
+import { getCleanChildEnv } from "../utils/child-env.js";
 
 export interface BackgroundTask {
   id: string;
@@ -82,7 +83,7 @@ export class TaskManager {
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8", ...(options.env || {}) },
+        env: getCleanChildEnv(options.env),
       }
     );
 
