@@ -248,4 +248,51 @@ describe("ConfigManager and Security Policy", () => {
       assert.ok(output.includes("SECURITY ERROR"));
     }
   });
+
+  it("should have allowSystemExecution default to false and respect WINHELM_ALLOW_SYSTEM_EXEC env var", async () => {
+    const { DEFAULT_CONFIG } = await import("../../src/config/default-config.js");
+    assert.strictEqual(DEFAULT_CONFIG.allowSystemExecution, false, "DEFAULT_CONFIG.allowSystemExecution must be false (fail-closed)");
+
+    // Test env variable WINHELM_ALLOW_SYSTEM_EXEC=true
+    const origEnv = process.env.WINHELM_ALLOW_SYSTEM_EXEC;
+    const origMcpEnv = process.env.MCP_ALLOW_SYSTEM_EXEC;
+    const warnings: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: any[]) => {
+      warnings.push(args.join(" "));
+      origWarn(...args);
+    };
+
+    try {
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC = "true";
+      delete process.env.MCP_ALLOW_SYSTEM_EXEC;
+
+      const testManager = ConfigManager.resetInstance();
+      await testManager.init();
+      assert.strictEqual(testManager.getConfig().allowSystemExecution, true);
+      assert.ok(warnings.some((w) => w.includes("System execution enabled - Runtime binaries on C: are now accessible")));
+
+      // Test with env var false / disabled
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC = "false";
+      warnings.length = 0;
+      const testManager2 = ConfigManager.resetInstance();
+      await testManager2.init();
+      assert.strictEqual(testManager2.getConfig().allowSystemExecution, false);
+
+      // Test with MCP_ALLOW_SYSTEM_EXEC=true
+      delete process.env.WINHELM_ALLOW_SYSTEM_EXEC;
+      process.env.MCP_ALLOW_SYSTEM_EXEC = "true";
+      warnings.length = 0;
+      const testManager3 = ConfigManager.resetInstance();
+      await testManager3.init();
+      assert.strictEqual(testManager3.getConfig().allowSystemExecution, true);
+    } finally {
+      console.warn = origWarn;
+      if (origEnv !== undefined) process.env.WINHELM_ALLOW_SYSTEM_EXEC = origEnv;
+      else delete process.env.WINHELM_ALLOW_SYSTEM_EXEC;
+      if (origMcpEnv !== undefined) process.env.MCP_ALLOW_SYSTEM_EXEC = origMcpEnv;
+      else delete process.env.MCP_ALLOW_SYSTEM_EXEC;
+      ConfigManager.resetInstance();
+    }
+  });
 });

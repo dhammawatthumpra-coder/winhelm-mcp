@@ -10,7 +10,7 @@
     "remove-item -recurse -force c:\\"
   ],
   "allowedDirectories": [],
-  "allowSystemExecution": true,
+  "allowSystemExecution": false,
   "fileReadLineLimit": 2000,
   "defaultTimeoutMs": 60000,
   "telemetryEnabled": false,

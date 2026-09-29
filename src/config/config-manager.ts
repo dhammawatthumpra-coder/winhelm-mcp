@@ -158,6 +158,18 @@ export class ConfigManager {
     if (process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1") {
       this.config.readOnly = true;
     }
+    if (
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "true" ||
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "1" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "true" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
+    ) {
+      this.config.allowSystemExecution = true;
+    }
+
+    if (this.config.allowSystemExecution === true) {
+      console.warn("[SECURITY] ⚠️  System execution enabled - Runtime binaries on C: are now accessible");
+    }
   }
 
   public isReadOnly(): boolean {
@@ -252,7 +264,9 @@ export class ConfigManager {
       };
     }
 
-    let resolvedTarget = path.resolve(targetPath);
+    // Normalize Unicode (e.g. full-width dots ．． or full-width drive letters Ｃ：) to prevent normalization bypasses
+    const normalizedInput = typeof targetPath === "string" ? targetPath.normalize("NFKC") : targetPath;
+    let resolvedTarget = path.resolve(normalizedInput);
     // Resolve symlinks / junctions to prevent directory traversal escapes
     try {
       if (existsSync(resolvedTarget)) {

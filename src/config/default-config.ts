@@ -34,7 +34,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   ],
   blockedCommandPatterns: [...DEFAULT_BLOCKED_PATTERNS],
   allowedDirectories: [], // Empty means BLOCKED by default (fail-closed). Use ["*"] or ["all"] to allow full access.
-  allowSystemExecution: true, // Allows invoking runtimes on C: (Python/Node/Git) while restricting workspace file writes
+  allowSystemExecution: false, // Default: false (fail-closed). Set to true or WINHELM_ALLOW_SYSTEM_EXEC=true to permit invoking runtime binaries on C: (Python/Node/Git)
   fileReadLineLimit: 2000,
   defaultTimeoutMs: 60000,
   telemetryEnabled: false,

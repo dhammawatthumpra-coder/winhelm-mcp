@@ -1,0 +1,6 @@
+Contact: https://github.com/dhammawatthumpra-coder/winhelm-mcp/security/advisories
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en, th
+Policy: https://github.com/dhammawatthumpra-coder/winhelm-mcp/blob/main/SECURITY.md
+Canonical: https://raw.githubusercontent.com/dhammawatthumpra-coder/winhelm-mcp/main/public/.well-known/security.txt
+Acknowledgments: https://github.com/dhammawatthumpra-coder/winhelm-mcp/blob/main/docs/THREAT_MODEL.md

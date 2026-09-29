@@ -30,11 +30,11 @@ Options:
   --host <string>       Host interface (default: 127.0.0.1 or HOST env)
   --profile, -p <name>  Tool profile: minimal (6), core (15), dev (28), sysadmin (37), full (38) (default: full)
   --stdio               Run in stdio mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor)
-  --transport <type>    Transport mode: http (default) or stdio
   --auth <token>        Bearer authentication token (or MCP_AUTH_TOKEN env)
   --read-only           Enable read-only mode (block mutating actions)
   --allowed-dirs <list> Comma-separated allowed directories (e.g. "D:\\mcp,C:\\Projects")
   --tools <list>        Explicit comma-separated tools to load or +tool/-tool modifiers
+  --system-exec         Enable execution of runtime binaries on C: (default: false)
   --no-persist          Do not persist CLI overrides to config file (default behavior)
   --persist             Persist CLI overrides back to config file
   --help, -h            Show this help message
@@ -59,12 +59,14 @@ async function main() {
   const AUTH_TOKEN = getArg("--auth", process.env.MCP_AUTH_TOKEN || undefined);
   const ALLOWED_DIRS = getArg("--allowed-dirs", process.env.MCP_ALLOWED_DIRECTORIES || undefined);
   const READ_ONLY = args.includes("--read-only") || process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1";
+  const ALLOW_SYSTEM_EXEC = args.includes("--system-exec") || args.includes("--allow-system-exec");
   const PROFILE_ARG = getArg("--profile", getArg("-p", process.env.WINHELM_PROFILE || undefined));
   const TOOLS_ARG = getArg("--tools");
 
   const updates: Record<string, any> = {};
   if (AUTH_TOKEN) updates.authToken = AUTH_TOKEN;
   if (READ_ONLY) updates.readOnly = true;
+  if (ALLOW_SYSTEM_EXEC) updates.allowSystemExecution = true;
   if (PROFILE_ARG) {
     if (isValidProfile(PROFILE_ARG)) {
       updates.profile = PROFILE_ARG;
@@ -104,7 +106,7 @@ async function main() {
   if (IS_STDIO) {
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
-      version: "1.1.2",
+      version: "1.2.0",
     });
     registerAllTools(mcpServer);
 
