@@ -45,3 +45,5 @@ start-funnel.ps1
 *.local.ps1
 *.local.json
 winhelm.local.json
+winhelm.config.json
+test-scratch-workstation/

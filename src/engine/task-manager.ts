@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
 import { getPowerShellExecutable } from "./powershell-runner.js";
+import { getCleanChildEnv } from "../utils/child-env.js";
 
 export interface BackgroundTask {
   id: string;
@@ -47,7 +48,7 @@ export class TaskManager {
   /**
    * Start a command as a long-running background task
    */
-  public startTask(command: string, cwd = process.cwd()): TaskSummary {
+  public startTask(command: string, cwd = process.cwd(), options: { env?: Record<string, string> } = {}): TaskSummary {
     const configManager = ConfigManager.getInstance();
 
     // 1. Security Check
@@ -82,7 +83,7 @@ export class TaskManager {
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        env: getCleanChildEnv(options.env),
       }
     );
 
@@ -97,13 +98,21 @@ export class TaskManager {
       process: child,
     };
 
+    let totalBufferBytes = 0;
+    const maxBufferBytes = 1 * 1024 * 1024; // 1 MB cap
+
     const appendOutput = (chunk: Buffer) => {
       const lines = chunk.toString("utf-8").split(/\r?\n/);
       for (const line of lines) {
         if (!line && lines.length === 1) continue;
+        const lineBytes = Buffer.byteLength(line, "utf-8");
         task.outputBuffer.push(line);
-        if (task.outputBuffer.length > this.maxBufferLines) {
-          task.outputBuffer.shift();
+        totalBufferBytes += lineBytes;
+        while (task.outputBuffer.length > this.maxBufferLines || totalBufferBytes > maxBufferBytes) {
+          const removed = task.outputBuffer.shift();
+          if (removed) {
+            totalBufferBytes -= Buffer.byteLength(removed, "utf-8");
+          }
         }
       }
     };

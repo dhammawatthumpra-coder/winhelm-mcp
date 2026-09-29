@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { createServer } from "../../src/gateway/server.js";
 import { taskManager } from "../../src/engine/task-manager.js";
 import { execSync } from "node:child_process";
+import { ConfigManager } from "../../src/config/config-manager.js";
 
 describe("Deep Dive System Stability & Concurrency Stress Test", () => {
   const STRESS_PORT = 8799;
@@ -11,12 +12,15 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
   let stopServer: (s: Server) => Promise<void>;
 
   before(async () => {
-    const { ConfigManager } = await import("../../src/config/config-manager.js");
-    await ConfigManager.getInstance().updateConfig({ allowedDirectories: [process.cwd()] }, false);
+    await ConfigManager.getInstance().updateConfig({
+      allowedDirectories: [process.cwd()],
+      authToken: null,
+    }, false);
 
     const gateway = createServer({
       port: STRESS_PORT,
       host: "127.0.0.1",
+      authToken: null,
     });
     stopServer = gateway.stop;
     server = await gateway.start();
@@ -92,7 +96,7 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
 
   it("should gracefully stop server and immediately rebind without EADDRINUSE", async () => {
     const REBIND_PORT = 8791;
-    const g1 = createServer({ port: REBIND_PORT, host: "127.0.0.1" });
+    const g1 = createServer({ port: REBIND_PORT, host: "127.0.0.1", authToken: null });
     const s1 = await g1.start();
 
     // Verify s1 is responding
@@ -104,7 +108,7 @@ describe("Deep Dive System Stability & Concurrency Stress Test", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     // Immediately start s2 on the exact same port
-    const g2 = createServer({ port: REBIND_PORT, host: "127.0.0.1" });
+    const g2 = createServer({ port: REBIND_PORT, host: "127.0.0.1", authToken: null });
     let bindError: Error | null = null;
     let s2: Server | null = null;
     try {

@@ -1,5 +1,7 @@
-import test, { describe, it } from "node:test";
+import test, { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
+import { ConfigManager } from "../../src/config/config-manager.js";
 import {
   runPowerShell,
   isPwshAvailable,
@@ -8,6 +10,13 @@ import {
 } from "../../src/engine/powershell-runner.js";
 
 describe("PowerShell Runner Engine", () => {
+  before(async () => {
+    const configManager = ConfigManager.getInstance();
+    await configManager.updateConfig({
+      allowedDirectories: [process.cwd(), os.tmpdir(), "C:\\Windows"],
+      allowSystemExecution: true,
+    }, false);
+  });
   it("should execute command and return UTF-8 output without corruption", async () => {
     const res = await runPowerShell('Write-Output "สวัสดี Windows Native MCP UTF-8"');
     assert.strictEqual(res.exitCode, 0);

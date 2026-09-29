@@ -39,19 +39,26 @@ export class ConfigManager {
       return;
     }
 
-    // Check multiple candidate locations so external MCP clients (Claude/Cursor) find it regardless of CWD
+    // Check multiple candidate locations so external MCP clients (Claude/Cursor) find it regardless of CWD.
+    // winhelm.local.json takes precedence over winhelm.config.json for local overrides.
     const candidates = [
+      path.resolve(process.cwd(), "winhelm.local.json"),
       path.resolve(process.cwd(), "winhelm.config.json"),
       path.resolve(process.cwd(), "win-commander.config.json"),
+      process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "..", "winhelm.local.json") : "",
       process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "..", "winhelm.config.json") : "",
+      process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "winhelm.local.json") : "",
       process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "winhelm.config.json") : "",
+      process.execPath ? path.resolve(path.dirname(process.execPath), "..", "winhelm.local.json") : "",
       process.execPath ? path.resolve(path.dirname(process.execPath), "..", "winhelm.config.json") : "",
+      process.execPath ? path.resolve(path.dirname(process.execPath), "winhelm.local.json") : "",
       process.execPath ? path.resolve(path.dirname(process.execPath), "winhelm.config.json") : "",
+      path.join(os.homedir(), ".winhelm", "local.json"),
       path.join(os.homedir(), ".winhelm", "config.json"),
       path.join(os.homedir(), ".win-commander", "config.json"),
     ].filter(Boolean);
 
-    let chosen = candidates[0];
+    let chosen = candidates[1] || candidates[0];
     for (const c of candidates) {
       if (existsSync(c)) {
         chosen = c;
@@ -165,10 +172,34 @@ export class ConfigManager {
       process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
     ) {
       this.config.allowSystemExecution = true;
+    } else if (
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "0" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "0"
+    ) {
+      this.config.allowSystemExecution = false;
     }
 
-    if (this.config.allowSystemExecution === true) {
+    this.logSecurityWarnings();
+  }
+
+  private static hasLoggedSystemExecWarning = false;
+  private static hasWarnedWildcardDirectories = false;
+
+  public static resetWarningFlags(): void {
+    ConfigManager.hasLoggedSystemExecWarning = false;
+    ConfigManager.hasWarnedWildcardDirectories = false;
+  }
+
+  public logSecurityWarnings(): void {
+    if (this.config.allowSystemExecution === true && !ConfigManager.hasLoggedSystemExecWarning) {
+      ConfigManager.hasLoggedSystemExecWarning = true;
       console.warn("[SECURITY] ⚠️  System execution enabled - Runtime binaries on C: are now accessible");
+    }
+    if (isWildcardAllowAll(this.config.allowedDirectories) && !ConfigManager.hasWarnedWildcardDirectories) {
+      ConfigManager.hasWarnedWildcardDirectories = true;
+      console.warn("[SECURITY] ⚠️  allowedDirectories set to wildcard '*' - Filesystem boundary is open to all paths");
     }
   }
 
@@ -224,16 +255,31 @@ export class ConfigManager {
       }
     }
 
-    // If allowSystemExecution is explicitly false, strictly block referencing unallowed drives in commands
+    // If allowSystemExecution is explicitly false, strictly block referencing unallowed paths in commands
     if (this.config.allowSystemExecution === false) {
       if (
         this.config.allowedDirectories &&
         this.config.allowedDirectories.length > 0 &&
         !isWildcardAllowAll(this.config.allowedDirectories)
       ) {
-        const driveMatches = command.match(/\b([a-zA-Z]):(?=[\\/\s"']|$)/g);
-        if (driveMatches) {
-          for (const match of driveMatches) {
+        // Extract absolute Windows paths like C:\Windows\System32\cmd.exe or D:/project/file
+        const pathMatches = command.match(/[A-Za-z]:[\\/][^\s"'`|;&]*/g);
+        if (pathMatches) {
+          for (const token of pathMatches) {
+            const check = this.isPathAllowed(token);
+            if (!check.allowed) {
+              return {
+                allowed: false,
+                reason: `Command execution blocked: references forbidden path "${token}" outside allowedDirectories (${this.config.allowedDirectories.join(", ")})`,
+              };
+            }
+          }
+        }
+
+        // Also check standalone drive references like "C:" or "D:"
+        const bareDriveMatches = command.match(/\b([a-zA-Z]):(?=[\s"'`|;&]|$)/g);
+        if (bareDriveMatches) {
+          for (const match of bareDriveMatches) {
             const driveLetter = match[0].toUpperCase() + ":\\";
             const check = this.isPathAllowed(driveLetter);
             if (!check.allowed) {

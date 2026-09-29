@@ -5,7 +5,7 @@ import http from "node:http";
 import { createServer } from "../../src/gateway/server.js";
 
 describe("SSE Gateway Integration", () => {
-  const TEST_PORT = 8796;
+  const TEST_PORT = 18796;
   let server: Server;
   let stopServer: (s: Server) => Promise<void>;
 
@@ -13,6 +13,7 @@ describe("SSE Gateway Integration", () => {
     const { start, stop } = createServer({
       port: TEST_PORT,
       host: "127.0.0.1",
+      authToken: null,
     });
     stopServer = stop;
     server = await start();

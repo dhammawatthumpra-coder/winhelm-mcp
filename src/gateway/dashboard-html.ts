@@ -1,6 +1,19 @@
 import { PROFILES, type ToolProfile } from "../config/profiles.js";
 
 /**
+ * Escape HTML special characters to prevent Cross-Site Scripting (XSS).
+ */
+export function escapeHtml(str: any): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Lightweight, zero-dependency, self-contained Web Monitor Dashboard for WinHelm.
  * Served directly by Express without external CDN dependencies.
  */
@@ -453,6 +466,16 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
       return d.toLocaleTimeString();
     }
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function setFilter(type, el) {
       currentFilter = type;
       document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -488,16 +511,18 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
         if (log.status === 'FAILED' || log.status === 'BLOCKED' || (typeof log.status === 'number' && log.status >= 400)) statusClass = 'status-fail';
 
         const duration = log.durationMs !== undefined ? \`\${log.durationMs}ms\` : '-';
-        const detail = log.detail ? log.detail.replace(/</g, '&lt;').replace(/>/g, '&gt;') : '-';
+        const detail = log.detail ? escapeHtml(log.detail) : '-';
+        const title = escapeHtml(log.title || '');
+        const statusText = escapeHtml(log.status !== undefined && log.status !== null ? String(log.status) : 'OK');
 
         return \`
           <tr>
             <td style="color: var(--text-muted)">\${formatTime(log.timestamp)}</td>
             <td><span class="badge \${badgeClass}">\${typeLabel}</span></td>
-            <td style="font-weight: 600; color: #fff;">\${log.title}</td>
+            <td style="font-weight: 600; color: #fff;">\${title}</td>
             <td style="color: #cbd5e1; word-break: break-all;">\${detail}</td>
             <td style="color: var(--text-muted)">\${duration}</td>
-            <td><span class="status-tag \${statusClass}">\${log.status || 'OK'}</span></td>
+            <td><span class="status-tag \${statusClass}">\${statusText}</span></td>
           </tr>
         \`;
       }).join('');
@@ -568,7 +593,7 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
             return \`
               <div style="background: #161f30; padding: 12px; border-radius: 6px; border: 1px solid var(--card-border);">
                 <div class="drive-row" style="font-weight: 600; color: #fff;">
-                  <span>Drive \${d.Name}:</span>
+                  <span>Drive \${escapeHtml(d.Name)}:</span>
                   <span>\${d.FreeGB} GB Free / \${d.TotalGB} GB</span>
                 </div>
                 <div class="progress-bar-bg" style="margin-top: 6px;">
@@ -590,13 +615,13 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
             return \`
               <div style="background: #161f30; padding: 12px; border-radius: 6px; border: 1px solid var(--card-border); margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; font-weight: 600; color: #fff;">
-                  <span>\${g.name}</span>
-                  <span style="color: \${tempColor};">\${tempText}</span>
+                  <span>\${escapeHtml(g.name)}</span>
+                  <span style="color: \${tempColor};">\${escapeHtml(tempText)}</span>
                 </div>
                 \${g.memoryTotalMB ? \`
                   <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 4px;">
                     <span>VRAM: \${g.memoryUsedMB} MB / \${g.memoryTotalMB} MB</span>
-                    <span>Driver: \${g.driverVersion || 'N/A'}</span>
+                    <span>Driver: \${escapeHtml(g.driverVersion || 'N/A')}</span>
                   </div>
                   <div class="progress-bar-bg" style="margin-top: 6px;">
                     <div class="progress-bar-fill \${vramPct > 85 ? 'fill-red' : 'fill-green'}" style="width: \${vramPct}%"></div>

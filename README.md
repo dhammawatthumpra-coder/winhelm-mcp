@@ -197,7 +197,7 @@ Visit `http://localhost:8788/health` in your browser. You should receive:
 {
   "status": "ok",
   "server": "winhelm-mcp",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "activeSessions": {
     "sse": 0,
     "streamableHttp": 0
