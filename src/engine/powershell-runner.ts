@@ -1,9 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import type { ExecutionResult } from "../types/index.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { logger } from "../utils/logger.js";
+import { getCleanChildEnv } from "../utils/child-env.js";
 
 let cachedPwshAvailable: boolean | null = null;
 
@@ -91,7 +93,8 @@ export function runPowerShell(
         if (/^[a-zA-Z]:?[\\/]?$/.test(first)) {
           first = first[0].toUpperCase() + ":\\";
         }
-        cwd = path.resolve(first);
+        const resolvedAllowed = path.resolve(first);
+        cwd = existsSync(resolvedAllowed) ? resolvedAllowed : currentCwd;
       } else {
         cwd = currentCwd;
       }
@@ -118,7 +121,7 @@ export function runPowerShell(
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8", ...(options.env || {}) },
+        env: getCleanChildEnv(options.env),
       }
     );
 
