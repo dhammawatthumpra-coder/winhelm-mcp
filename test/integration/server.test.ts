@@ -41,10 +41,12 @@ describe("Unified Gateway Server Integration", () => {
     await configManager.updateConfig({
       allowedDirectories: [process.cwd(), os.tmpdir(), "C:\\Windows"],
       allowSystemExecution: true,
+      authToken: null,
     }, false);
     const { start, stop } = createServer({
       port: TEST_PORT,
       host: "127.0.0.1",
+      authToken: null,
     });
     stopServer = stop;
     server = await start();

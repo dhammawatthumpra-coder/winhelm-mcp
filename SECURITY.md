@@ -10,7 +10,8 @@ Only the latest minor release is actively maintained and receives security patch
 
 | Version | Supported          | Security Status |
 | ------- | ------------------ | --------------- |
-| 1.1.x   | :white_check_mark: | Active Support  |
+| 1.2.x   | :white_check_mark: | Active Support  |
+| 1.1.x   | :x:                | End of Life     |
 | 1.0.x   | :x:                | End of Life     |
 
 ---
@@ -45,6 +46,6 @@ For in-depth architectural details, please refer to:
 ## Security Best Practices for Administrators
 
 1. **Keep `allowSystemExecution: false`:** WinHelm defaults to fail-closed containment. Only enable `--system-exec` if you explicitly require access to Windows system binaries on `C:\`.
-2. **Always Use Authentication on Shared Networks:** If exposing WinHelm beyond localhost (via LAN, Tailscale, or Cloudflare Tunnel), always pass `--auth <token>` or set `MCP_AUTH_TOKEN`.
+2. **Always Use Authentication on Shared Networks:** If exposing WinHelm beyond localhost (via LAN, Tailscale, or Cloudflare Tunnel), always pass `--auth <token>` or set `MCP_AUTH_TOKEN`. WinHelm enforces a fail-closed startup gate that refuses to run on non-loopback interfaces without authentication.
 3. **Restrict `allowedDirectories`:** Specify only the directory trees the AI agent needs access to (e.g. `D:\projects\app`). Avoid setting `allowedDirectories: ["*"]`.
 4. **Run under Standard User:** Do not run WinHelm from an elevated Administrator command prompt unless strictly required.
