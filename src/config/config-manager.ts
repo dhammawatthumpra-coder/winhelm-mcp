@@ -39,19 +39,26 @@ export class ConfigManager {
       return;
     }
 
-    // Check multiple candidate locations so external MCP clients (Claude/Cursor) find it regardless of CWD
+    // Check multiple candidate locations so external MCP clients (Claude/Cursor) find it regardless of CWD.
+    // winhelm.local.json takes precedence over winhelm.config.json for local overrides.
     const candidates = [
+      path.resolve(process.cwd(), "winhelm.local.json"),
       path.resolve(process.cwd(), "winhelm.config.json"),
       path.resolve(process.cwd(), "win-commander.config.json"),
+      process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "..", "winhelm.local.json") : "",
       process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "..", "winhelm.config.json") : "",
+      process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "winhelm.local.json") : "",
       process.argv[1] ? path.resolve(path.dirname(process.argv[1]), "winhelm.config.json") : "",
+      process.execPath ? path.resolve(path.dirname(process.execPath), "..", "winhelm.local.json") : "",
       process.execPath ? path.resolve(path.dirname(process.execPath), "..", "winhelm.config.json") : "",
+      process.execPath ? path.resolve(path.dirname(process.execPath), "winhelm.local.json") : "",
       process.execPath ? path.resolve(path.dirname(process.execPath), "winhelm.config.json") : "",
+      path.join(os.homedir(), ".winhelm", "local.json"),
       path.join(os.homedir(), ".winhelm", "config.json"),
       path.join(os.homedir(), ".win-commander", "config.json"),
     ].filter(Boolean);
 
-    let chosen = candidates[0];
+    let chosen = candidates[1] || candidates[0];
     for (const c of candidates) {
       if (existsSync(c)) {
         chosen = c;
@@ -165,6 +172,13 @@ export class ConfigManager {
       process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
     ) {
       this.config.allowSystemExecution = true;
+    } else if (
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "0" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "0"
+    ) {
+      this.config.allowSystemExecution = false;
     }
 
     this.logSecurityWarnings();

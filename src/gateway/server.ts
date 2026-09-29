@@ -15,6 +15,7 @@ import { getDashboardHtml } from "./dashboard-html.js";
 import { getFilePreviewHtml } from "./preview-html.js";
 import { getGpuInfo, getSystemInfo } from "../engine/system.js";
 import type { GpuInfoResult, SystemInfo } from "../types/index.js";
+import { SERVER_VERSION } from "../utils/version.js";
 
 export interface ServerOptions {
   port: number;
@@ -570,7 +571,7 @@ export function createServer(options: ServerOptions): {
     res.json({
       status: "ok",
       server: "winhelm-mcp",
-      version: "1.2.0",
+      version: SERVER_VERSION,
       activeSessions: {
         sse: sseGateway.getActiveSessionCount(),
         streamableHttp: streamableGateway.getActiveSessionCount(),
@@ -586,7 +587,7 @@ export function createServer(options: ServerOptions): {
     const gpu = await getCachedGpuInfo();
     res.json({
       server: "winhelm-mcp",
-      version: "1.2.0",
+      version: SERVER_VERSION,
       port: options.port,
       host: options.host,
       readOnly: configManager.isReadOnly(),

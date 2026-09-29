@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { registerAllTools } from "../tools/index.js";
+import { SERVER_VERSION } from "../utils/version.js";
 
 interface SseSession {
   transport: SSEServerTransport;
@@ -31,7 +32,7 @@ export class SseGateway {
   private createMcpServerInstance(): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
-      version: "1.2.0",
+      version: SERVER_VERSION,
     });
     registerAllTools(server);
     return server;
