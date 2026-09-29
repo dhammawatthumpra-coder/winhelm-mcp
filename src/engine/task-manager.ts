@@ -47,7 +47,7 @@ export class TaskManager {
   /**
    * Start a command as a long-running background task
    */
-  public startTask(command: string, cwd = process.cwd()): TaskSummary {
+  public startTask(command: string, cwd = process.cwd(), options: { env?: Record<string, string> } = {}): TaskSummary {
     const configManager = ConfigManager.getInstance();
 
     // 1. Security Check
@@ -82,7 +82,7 @@ export class TaskManager {
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        env: { ...process.env, PYTHONIOENCODING: "utf-8", ...(options.env || {}) },
       }
     );
 

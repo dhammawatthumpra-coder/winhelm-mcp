@@ -48,6 +48,7 @@ export function getPowerShellExecutable(preferPwsh = true): string {
 export interface PowerShellOptions {
   cwd?: string;
   timeoutMs?: number;
+  env?: Record<string, string>;
 }
 
 /**
@@ -117,7 +118,7 @@ export function runPowerShell(
       {
         cwd,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        env: { ...process.env, PYTHONIOENCODING: "utf-8", ...(options.env || {}) },
       }
     );
 
