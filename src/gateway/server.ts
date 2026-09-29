@@ -151,7 +151,7 @@ export function createServer(options: ServerOptions): {
   app.set("trust proxy", "loopback");
   const configManager = ConfigManager.getInstance();
   const config = configManager.getConfig();
-  const authToken = options.authToken ?? config.authToken;
+  const authToken = options.authToken !== undefined ? options.authToken : config.authToken;
 
   // 1. Global Security Headers (Prevent MIME sniffing and Clickjacking)
   app.use((_req: Request, res: Response, next: NextFunction) => {

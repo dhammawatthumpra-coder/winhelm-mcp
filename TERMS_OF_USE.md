@@ -25,11 +25,13 @@ WinHelm MCP เป็นซอฟต์แวร์โอเพนซอร์�
 │   ความรับผิดชอบของ WinHelm MCP    │  ความรับผิดชอบของผู้ดูแลระบบ / ผู้ใช้  │
 ├───────────────────────────────────┼────────────────────────────────────┤
 │ ✔ กลไก Fail-Closed ป้องกันไดรฟ์ระบบ │ 🔹 การรักษาความลับของ authToken     │
-│ ✔ Host Header Guard (DNS Rebinding│ 🔹 การเปิดพอร์ต / Tunneling ข้ามเน็ต │
-│ ✔ การตรวจสอบ Path Traversal & UNC │ 🔹 สิทธิ์ของ Windows User ที่สั่งรัน   │
-│ ✔ การซ่อน Credentials (Sanitizer) │ 🔹 การตรวจสอบคำสั่งก่อนให้ AI ทำงาน │
-│ ✔ Ephemeral Session Cookie (15m)  │ 🔹 การตัดสินใจเปิดใช้ --system-exec   │
-│ ✔ Audit Logging (logs/audit.log)  │ 🔹 การสำรองข้อมูลสำคัญในเครื่อง       │
+│ ✔ Fail-Closed Network Startup Gate │ 🔹 การเปิดพอร์ต / Tunneling ข้ามเน็ต │
+│ ✔ Host Header Guard (DNS Rebinding│ 🔹 สิทธิ์ของ Windows User ที่สั่งรัน   │
+│ ✔ การตรวจสอบ Path Traversal & UNC │ 🔹 การตรวจสอบคำสั่งก่อนให้ AI ทำงาน │
+│ ✔ การซ่อน Credentials (Sanitizer) │ 🔹 การตัดสินใจเปิดใช้ --system-exec   │
+│ ✔ Ephemeral Session Cookie (15m/12h│ 🔹 การสำรองข้อมูลสำคัญในเครื่อง       │
+│ ✔ Robustness Caps (1MB Out/5MB Prv│ 🔹 การเลือก allowedDirectories     │
+│ ✔ Audit Logging (logs/audit.log)  │ 🔹 การอัปเดตเวอร์ชันความปลอดภัยสม่ำเสมอ│
 └───────────────────────────────────┴────────────────────────────────────┘
 ```
 
@@ -62,10 +64,12 @@ Operating an agentic interface safely requires a shared security partnership:
 
 1. **WinHelm MCP's Scope of Responsibility:**
    - Enforcing fail-closed containment policies by default (`allowSystemExecution: false`).
-   - Mitigating cross-origin DNS Rebinding attacks via strict Host header validation.
+   - Blocking unauthenticated non-loopback exposure via a fail-closed network startup gate.
+   - Mitigating cross-origin DNS Rebinding attacks via strict Host header validation (`Host: 0.0.0.0` rejected).
    - Defeating path traversal, UNC escapes, and symlink bypasses via canonical filesystem resolution.
    - Redacting secrets and tokens from console, logs, and outputs.
-   - Enforcing ephemeral session lifecycles (15-minute sliding window) and timing-safe authentication.
+   - Enforcing ephemeral session lifecycles (15-minute sliding window with 12-hour absolute cap) and timing-safe authentication.
+   - Applying robustness caps (1MB process stream buffer, 5MB file preview limit) and process tree cleanup (`taskkill /PID /T /F`).
    - Maintaining append-only structured audit logs (`logs/audit.log`).
 
 2. **Administrator & Operator Scope of Responsibility:**
