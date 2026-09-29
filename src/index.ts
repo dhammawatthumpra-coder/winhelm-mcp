@@ -91,6 +91,9 @@ async function main() {
     await configManager.updateConfig(updates, shouldPersist);
   }
 
+  // Ensure security warnings print after all CLI / config overrides take effect
+  configManager.logSecurityWarnings();
+
   // Security warning if bound to non-loopback with no authentication token
   const isLoopback = HOST === "127.0.0.1" || HOST.toLowerCase() === "localhost" || HOST === "::1";
   const effectiveAuthToken = AUTH_TOKEN || configManager.getConfig().authToken;

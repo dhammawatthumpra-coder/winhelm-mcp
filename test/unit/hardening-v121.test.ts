@@ -364,4 +364,81 @@ describe("Task 3 Hardening - Audit Log and Sanitizer Security", () => {
   });
 });
 
+describe("Task 4 Hardening - allowSystemExecution: false consistency", () => {
+  const configManager = ConfigManager.getInstance();
+
+  after(async () => {
+    await configManager.updateConfig({
+      allowedDirectories: [process.cwd(), os.tmpdir(), "C:\\Windows"],
+      allowSystemExecution: true,
+    }, false);
+    ConfigManager.resetWarningFlags();
+  });
+
+  it("powershell-runner should reject when cwd is omitted, allowSystemExecution is false, and process.cwd() is outside allowedDirectories", async () => {
+    const isolatedDir = path.join(os.tmpdir(), `isolated-${Date.now()}`);
+    await configManager.updateConfig({
+      allowedDirectories: [isolatedDir],
+      allowSystemExecution: false,
+    }, false);
+
+    await assert.rejects(
+      async () => {
+        await runPowerShell("Write-Output 'should fail'");
+      },
+      /(forbidden|not permitted)/
+    );
+  });
+
+  it("isCommandAllowed should extract path tokens and allow permitted paths while blocking forbidden paths", async () => {
+    const allowedDir = "D:\\mcp\\winhelm-mcp";
+    await configManager.updateConfig({
+      allowedDirectories: [allowedDir],
+      allowSystemExecution: false,
+    }, false);
+
+    // Permitted absolute path
+    const safeCmd = "Get-ChildItem -Path D:\\mcp\\winhelm-mcp\\src\\index.ts";
+    const resSafe = configManager.isCommandAllowed(safeCmd);
+    assert.strictEqual(resSafe.allowed, true, "Permitted path inside allowedDirectories should be allowed");
+
+    // Forbidden absolute path
+    const forbiddenCmd = "Start-Process C:\\Windows\\System32\\calc.exe";
+    const resForbidden = configManager.isCommandAllowed(forbiddenCmd);
+    assert.strictEqual(resForbidden.allowed, false, "Forbidden path outside allowedDirectories should be blocked");
+    assert.ok(resForbidden.reason?.includes("references forbidden path"));
+
+    // Forbidden bare drive
+    const forbiddenDrive = "dir C:\\";
+    const resDrive = configManager.isCommandAllowed(forbiddenDrive);
+    assert.strictEqual(resDrive.allowed, false, "Forbidden drive should be blocked");
+  });
+
+  it("ConfigManager should log one-time warning on wildcard '*' in allowedDirectories", async () => {
+    ConfigManager.resetWarningFlags();
+    const originalConsoleWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: any[]) => {
+      warnings.push(args.join(" "));
+    };
+
+    try {
+      await configManager.updateConfig({
+        allowedDirectories: ["*"],
+        allowSystemExecution: false,
+      }, false);
+      configManager.logSecurityWarnings();
+
+      // Trigger second time - should be one-time only
+      configManager.logSecurityWarnings();
+
+      const wildcardWarns = warnings.filter((w) => w.includes("allowedDirectories set to wildcard '*'"));
+      assert.strictEqual(wildcardWarns.length, 1, "Wildcard warning should be logged exactly once");
+    } finally {
+      console.warn = originalConsoleWarn;
+    }
+  });
+});
+
+
 
