@@ -26,6 +26,7 @@ import { Logger } from "../../src/utils/logger.js";
 import { sanitizeText, sanitizeObject } from "../../src/utils/sanitizer.js";
 import { SessionManager } from "../../src/gateway/session-manager.js";
 import { createServer } from "../../src/gateway/server.js";
+import { escapeHtml, getDashboardHtml } from "../../src/gateway/dashboard-html.js";
 
 const SMART_QUOTES = ["\u2018", "\u2019", "\u201A", "\u201B"]; // ‘, ’, ‚, ‛
 
@@ -556,6 +557,81 @@ describe("Task 5 Hardening - URL Auth Token & Session Absolute Lifetime", () => 
 
       assert.strictEqual(res.status, 302);
       assert.strictEqual(res.headers.get("location"), "/dashboard");
+    });
+  });
+});
+
+describe("Task 6 Hardening - Dashboard Output Encoding & Strict CSP", () => {
+  describe("escapeHtml utility", () => {
+    it("should escape special HTML characters", () => {
+      const malicious = `<script>alert("XSS & injection 'test'")</script>`;
+      const escaped = escapeHtml(malicious);
+      assert.strictEqual(
+        escaped,
+        "&lt;script&gt;alert(&quot;XSS &amp; injection &#39;test&#39;&quot;)&lt;/script&gt;"
+      );
+    });
+
+    it("should safely handle null, undefined, numbers, and boolean values", () => {
+      assert.strictEqual(escapeHtml(null), "");
+      assert.strictEqual(escapeHtml(undefined), "");
+      assert.strictEqual(escapeHtml(123), "123");
+      assert.strictEqual(escapeHtml(0), "0");
+      assert.strictEqual(escapeHtml(false), "false");
+    });
+  });
+
+  describe("getDashboardHtml template security", () => {
+    it("should include client-side escapeHtml function and escape log elements", () => {
+      const html = getDashboardHtml("full");
+      assert.ok(html.includes("function escapeHtml("), "Dashboard must include client-side escapeHtml function");
+      assert.ok(html.includes("escapeHtml(log.detail)"), "log.detail must be escaped via escapeHtml");
+      assert.ok(html.includes("escapeHtml(log.title"), "log.title must be escaped via escapeHtml");
+      assert.ok(html.includes("escapeHtml(log.status"), "log.status must be escaped via escapeHtml");
+      assert.ok(html.includes("escapeHtml(d.Name)"), "Drive name must be escaped via escapeHtml");
+      assert.ok(html.includes("escapeHtml(g.name)"), "GPU name must be escaped via escapeHtml");
+    });
+  });
+
+  describe("Dashboard Content-Security-Policy headers", () => {
+    let serverInstance: any;
+    let runningServer: any;
+    const testPort = 18792; // Ground rules: Do NOT bind to 8788
+
+    before(async () => {
+      serverInstance = createServer({
+        port: testPort,
+        host: "127.0.0.1",
+      });
+      runningServer = await serverInstance.start();
+    });
+
+    after(async () => {
+      if (serverInstance && runningServer) {
+        await serverInstance.stop(runningServer);
+      }
+    });
+
+    it("should return strict Content-Security-Policy headers on GET /", async () => {
+      const res = await fetch(`http://127.0.0.1:${testPort}/`);
+      assert.strictEqual(res.status, 200);
+      const csp = res.headers.get("content-security-policy");
+      assert.ok(csp, "CSP header must be present on /");
+      assert.ok(csp.includes("default-src 'none'"));
+      assert.ok(csp.includes("connect-src 'self'"));
+      assert.ok(csp.includes("frame-ancestors 'none'"));
+      assert.ok(csp.includes("form-action 'none'"));
+    });
+
+    it("should return strict Content-Security-Policy headers on GET /dashboard", async () => {
+      const res = await fetch(`http://127.0.0.1:${testPort}/dashboard`);
+      assert.strictEqual(res.status, 200);
+      const csp = res.headers.get("content-security-policy");
+      assert.ok(csp, "CSP header must be present on /dashboard");
+      assert.ok(csp.includes("default-src 'none'"));
+      assert.ok(csp.includes("connect-src 'self'"));
+      assert.ok(csp.includes("frame-ancestors 'none'"));
+      assert.ok(csp.includes("form-action 'none'"));
     });
   });
 });
