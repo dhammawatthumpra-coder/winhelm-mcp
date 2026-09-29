@@ -433,6 +433,7 @@ export function createServer(options: ServerOptions): {
       const queryToken = (req.query.exchange || req.query.token || req.query.auth) as string | undefined;
       if (queryToken) {
         const isBrowserNav = req.path === "/" || req.path === "/dashboard" || req.path === "/preview";
+        const isMcpProtocol = req.path === "/mcp" || req.path === "/sse" || req.path === "/message";
         const acceptHeader = req.headers["accept"] || "";
 
         // Check if queryToken is a one-time exchange token (single-use) or master authToken
@@ -440,6 +441,17 @@ export function createServer(options: ServerOptions): {
         const isMasterValid = safeCompare(queryToken, authToken);
 
         if (isOneTimeValid || isMasterValid) {
+          // For MCP protocol endpoints (/mcp, /sse, /message), permit with query token
+          // WITHOUT creating a session or sending Set-Cookie headers
+          if (isMcpProtocol) {
+            logger.security(
+              "Authenticated MCP protocol request via URL query token (prefer Authorization: Bearer header)",
+              `Path: ${req.path} | IP: ${req.ip}`
+            );
+            return next();
+          }
+
+          // For dashboard and other endpoints, establish ephemeral session and Set-Cookie
           const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
           const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
           res.setHeader(
@@ -458,11 +470,6 @@ export function createServer(options: ServerOptions): {
             return res.redirect(cleanUrl);
           }
 
-          // For MCP protocol endpoints (/mcp, /sse, /message) and API calls, permit with security audit notice
-          logger.security(
-            "Authenticated via URL query token (prefer Authorization: Bearer header)",
-            `Path: ${req.path} | IP: ${req.ip}`
-          );
           return next();
         }
 
