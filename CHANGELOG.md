@@ -9,34 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.1] - 2026-09-29
 
-### Security & Hardening
-- **PowerShell Injection Defense (Unicode Smart Quotes)**: Added `psQuote()` escaping for Unicode smart quotes (`\u2018`, `\u2019`, `\u201A`, `\u201B`) and rejection of null bytes and unescaped newlines. Migrated PowerShell engine parameter passing in filesystem and system tools to isolated environment variables (`$env:WH_ARG_*`).
-- **Child Process Environment Scrubbing**: Created `getCleanChildEnv()` to sanitize inherited environment variables before spawning child processes, blocking leakage of `MCP_AUTH_TOKEN`, `WINHELM_AUTH_TOKEN`, and related server secrets to subshells or child tools.
-- **Audit Logger & Data Sanitizer Hardening**:
-  - Structured audit logger hashes session IDs with SHA-256 (first 12 chars) to avoid logging raw session tokens.
+### Security & Hardening (Tasks 1–10)
+- **Task 1: PowerShell Injection Defense (Unicode Smart Quotes)** [`323a7f2`]: Added `psQuote()` escaping for Unicode smart quotes (`\u2018`, `\u2019`, `\u201A`, `\u201B`), rejected null bytes (`\0`) and unescaped newlines. Migrated PowerShell engine parameter passing in filesystem and system tools to isolated environment variables (`$env:WH_ARG_*`).
+- **Task 2: Child Process Environment Scrubbing** [`43c316f`]: Created `getCleanChildEnv()` to sanitize inherited environment variables before spawning child processes, blocking leakage of `MCP_AUTH_TOKEN`, `WINHELM_AUTH_TOKEN`, `AUTH_TOKEN`, and `SECRET` to subshells or child tools.
+- **Task 3: Audit Log & Sanitizer Hardening** [`9beaf58`]:
+  - Structured audit logger hashes session IDs with SHA-256 (first 12 chars) to prevent raw session token persistence.
   - Hardened credential masking regexes to support quoted strings, Bearer variations, and query parameters (`exchange=`, `winhelm_session=`, `session=`).
   - Terminal logs enforce a 500-char cap on tool inputs and 200-char cap on outputs/errors.
-- **Fail-Closed Boundary Consistency**:
-  - `powershell-runner` enforces `allowedDirectories` boundary on the effective working directory when no explicit `cwd` is supplied.
-  - Command path checker now verifies all absolute path tokens against `allowedDirectories` rather than only drive root prefixes.
+- **Task 4: Fail-Closed Boundary Consistency (`allowSystemExecution: false`)** [`eb9904f`]:
+  - `powershell-runner` validates effective working directory against `allowedDirectories` when no explicit `cwd` is supplied.
+  - Command path checker verifies all absolute path tokens against `allowedDirectories` rather than only drive root prefixes.
   - Security warning emitted immediately whenever CLI flags enable system execution.
-- **Session Absolute Lifetime & MCP Protocol Token Isolation**:
+- **Task 5: Session Absolute Lifetime & MCP Protocol Token Isolation** [`496ee10`]:
   - Implemented 12-hour absolute maximum lifetime cap (`maxLifetimeMs`) on ephemeral sessions in addition to the 15-minute sliding window.
   - Separated protocol handling: query-token authenticated requests to `/mcp`, `/sse`, and `/message` do not generate browser session cookies or trigger `Set-Cookie` headers.
-- **Dashboard Output HTML Encoding & Strict CSP**:
+- **Task 6: Dashboard Output HTML Encoding & Strict CSP** [`bd12937`]:
   - Exported `escapeHtml()` and applied server-side and client-side HTML encoding to all dynamic monitor fields (log titles, details, statuses, drive names, GPU metadata).
   - Enforced strict Content-Security-Policy on `/` and `/dashboard`.
-- **Fail-Closed Startup Gate for Network Exposure**:
+- **Task 7: Startup Gate for Network Exposure** [`80ca9d9`]:
   - Introduced `validateNetworkExposure()`: WinHelm rejects startup with exit code 1 if configured with a non-loopback host interface without an active authentication token.
-- **Robustness Caps & Safe Process Cleanup**:
+- **Task 8: Repo Hygiene & Version Centralization** [`17824df`]:
+  - Untracked `winhelm.config.json` from git and updated `.gitignore`.
+  - Added priority loading for `winhelm.local.json` before `winhelm.config.json`.
+  - Centralized server version reporting to `src/utils/version.ts` dynamically sourced from `package.json`.
+- **Task 9: Robustness Caps & Safe Process Cleanup** [`ff68554`]:
   - Capped stdout and stderr at 1 MB per stream in `runPowerShell()` and limited task output buffers to 1 MB in `TaskManager`.
   - Implemented Windows process tree termination on timeout using `taskkill /PID <pid> /T /F` prior to SIGKILL.
   - Restricted `/preview` to files ≤ 5 MB to prevent memory exhaustion.
   - Explicitly blocked `Host: 0.0.0.0` in `isHostAllowed()`.
-- **Repo Hygiene & Single Source of Truth**:
-  - Untracked `winhelm.config.json` from git and updated `.gitignore`.
-  - Added priority loading for `winhelm.local.json` before `winhelm.config.json`.
-  - Centralized server version reporting to `src/utils/version.ts` dynamically sourced from `package.json`.
+- **Task 10: Documentation Accuracy & Test Suite Verification** [`6d7be10`]:
+  - Updated documentation accuracy across `README.md`, `SECURITY.md`, `docs/SECURITY.md`, `docs/THREAT_MODEL.md`, `TERMS_OF_USE.md`, and `CHANGELOG.md`.
+  - Fixed test harness `authToken: null` handling in `createServer` options so unauthenticated tests are isolated from local machine config tokens.
+  - Full suite verification: 219/219 tests passing across 62 suites (0 failures).
 
 ---
 
