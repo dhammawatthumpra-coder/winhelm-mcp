@@ -529,6 +529,10 @@ export function createServer(options: ServerOptions): {
   // Web Monitor Dashboard
   app.get(["/", "/dashboard"], (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'self';"
+    );
     const activeProfile = configManager.getConfig().profile || "full";
     res.send(getDashboardHtml(activeProfile));
   });
