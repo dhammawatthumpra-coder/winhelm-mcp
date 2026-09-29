@@ -303,13 +303,12 @@ export async function deleteFileToRecycleBin(targetPath: string): Promise<FileDe
 
   const stat = await fs.stat(resolved);
   const isDir = stat.isDirectory();
-  const safePath = resolved.replace(/'/g, "''");
 
   const psCmd = isDir
-    ? `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory('${safePath}', 'OnlyErrorDialogs', 'SendToRecycleBin')`
-    : `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('${safePath}', 'OnlyErrorDialogs', 'SendToRecycleBin')`;
+    ? `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:WH_ARG_PATH, 'OnlyErrorDialogs', 'SendToRecycleBin')`
+    : `Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:WH_ARG_PATH, 'OnlyErrorDialogs', 'SendToRecycleBin')`;
 
-  await runPowerShell(psCmd, { timeoutMs: 15000 });
+  await runPowerShell(psCmd, { timeoutMs: 15000, env: { WH_ARG_PATH: resolved } });
   return {
     success: true,
     path: resolved,
@@ -442,11 +441,12 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
     await fs.unlink(resolvedZip);
   }
 
-  const safeSource = resolvedSource.replace(/'/g, "''");
-  const safeZip = resolvedZip.replace(/'/g, "''");
-  const psCmd = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${safeSource}', '${safeZip}', [System.IO.Compression.CompressionLevel]::Optimal, $false)`;
+  const psCmd = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory($env:WH_ARG_SOURCE, $env:WH_ARG_ZIP, [System.IO.Compression.CompressionLevel]::Optimal, $false)`;
 
-  const res = await runPowerShell(psCmd, { timeoutMs: 30000 });
+  const res = await runPowerShell(psCmd, {
+    timeoutMs: 30000,
+    env: { WH_ARG_SOURCE: resolvedSource, WH_ARG_ZIP: resolvedZip },
+  });
   if (res.exitCode !== 0 && res.stderr) {
     throw new Error(`Failed to create zip archive: ${res.stderr}`);
   }
@@ -491,11 +491,12 @@ export async function extractZip(
 
   await fs.mkdir(resolvedTarget, { recursive: true });
 
-  const safeZip = resolvedZip.replace(/'/g, "''");
-  const safeTarget = resolvedTarget.replace(/'/g, "''");
-  const psCmd = `Expand-Archive -LiteralPath '${safeZip}' -DestinationPath '${safeTarget}' ${overwrite ? "-Force" : ""}`;
+  const psCmd = `Expand-Archive -LiteralPath $env:WH_ARG_ZIP -DestinationPath $env:WH_ARG_TARGET ${overwrite ? "-Force" : ""}`;
 
-  const res = await runPowerShell(psCmd, { timeoutMs: 30000 });
+  const res = await runPowerShell(psCmd, {
+    timeoutMs: 30000,
+    env: { WH_ARG_ZIP: resolvedZip, WH_ARG_TARGET: resolvedTarget },
+  });
   if (res.exitCode !== 0 && res.stderr) {
     throw new Error(`Failed to extract zip archive: ${res.stderr}`);
   }

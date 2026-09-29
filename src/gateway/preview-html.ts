@@ -359,5 +359,5 @@ function escapeHtml(str: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/['\u2018\u2019\u201A\u201B]/g, "&#039;");
 }
