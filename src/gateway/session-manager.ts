@@ -26,9 +26,11 @@ export interface ExchangeTokenData {
  *    requests (including top-level navigation from external origins). Because WinHelm controls
  *    local OS commands and filesystem mutations, strict CSRF immunity is non-negotiable.
  *
- * 2. 15-Minute Sliding Expiration Window (900 seconds):
+ * 2. 15-Minute Sliding Expiration Window (900 seconds) with 12-Hour Absolute Lifetime:
  *    Balances operational convenience during active dashboard monitoring with a bounded exposure
  *    window if a workstation is left unattended. Every active request resets the sliding timer.
+ *    In addition, an absolute lifetime cap (defaults to 12 hours) prevents sessions from being
+ *    kept alive indefinitely via automated background polling or perpetual activity.
  *
  * 3. One-Time Exchange Tokens (5-minute TTL):
  *    URL-based authentication tokens (e.g. ?exchange=... or ?token=...) are single-use only.
@@ -43,10 +45,12 @@ export class SessionManager {
   private sessions = new Map<string, SessionData>();
   private exchangeTokens = new Map<string, ExchangeTokenData>();
   private readonly ttlMs: number;
+  private readonly maxLifetimeMs: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
-  constructor(ttlMinutes = 15) {
+  constructor(ttlMinutes = 15, maxAbsoluteLifetimeHours = 12) {
     this.ttlMs = ttlMinutes * 60 * 1000;
+    this.maxLifetimeMs = maxAbsoluteLifetimeHours * 60 * 60 * 1000;
     // Periodic cleanup of expired sessions and exchange tokens every minute
     this.cleanupTimer = setInterval(() => {
       this.cleanupExpiredSessions();
@@ -82,6 +86,13 @@ export class SessionManager {
     if (!session) return false;
 
     const now = Date.now();
+    // 1. Enforce absolute lifetime cap (e.g. 12 hours max regardless of active polling)
+    if (now - session.createdAt > this.maxLifetimeMs) {
+      this.sessions.delete(id);
+      return false;
+    }
+
+    // 2. Enforce sliding expiration window (15 minutes inactivity)
     if (now - session.lastAccessedAt > this.ttlMs) {
       this.sessions.delete(id);
       return false;
@@ -178,9 +189,12 @@ export class SessionManager {
     const now = Date.now();
     let count = 0;
 
-    // Prune expired sessions
+    // Prune expired sessions (either exceeding absolute lifetime or idle timeout)
     for (const [id, session] of this.sessions.entries()) {
-      if (now - session.lastAccessedAt > this.ttlMs) {
+      if (
+        now - session.createdAt > this.maxLifetimeMs ||
+        now - session.lastAccessedAt > this.ttlMs
+      ) {
         this.sessions.delete(id);
         count++;
       }

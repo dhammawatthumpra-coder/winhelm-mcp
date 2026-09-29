@@ -24,6 +24,8 @@ import { createHash } from "node:crypto";
 import { hashSessionId, AuditLogger } from "../../src/utils/audit-logger.js";
 import { Logger } from "../../src/utils/logger.js";
 import { sanitizeText, sanitizeObject } from "../../src/utils/sanitizer.js";
+import { SessionManager } from "../../src/gateway/session-manager.js";
+import { createServer } from "../../src/gateway/server.js";
 
 const SMART_QUOTES = ["\u2018", "\u2019", "\u201A", "\u201B"]; // ‘, ’, ‚, ‛
 
@@ -437,6 +439,124 @@ describe("Task 4 Hardening - allowSystemExecution: false consistency", () => {
     } finally {
       console.warn = originalConsoleWarn;
     }
+  });
+});
+
+describe("Task 5 Hardening - URL Auth Token & Session Absolute Lifetime", () => {
+  describe("SessionManager Absolute Lifetime", () => {
+    it("should enforce absolute lifetime cap (12 hours) even if session is continuously accessed", () => {
+      const sm = new SessionManager(15, 12);
+      const sid = sm.createSession();
+
+      assert.strictEqual(sm.validateSession(sid), true);
+
+      // Simulate perpetual activity: lastAccessedAt is recent, but createdAt is 13 hours ago
+      const session = (sm as any).sessions.get(sid);
+      session.createdAt = Date.now() - 13 * 60 * 60 * 1000; // 13 hours ago
+      session.lastAccessedAt = Date.now() - 1000; // 1 second ago
+
+      assert.strictEqual(sm.validateSession(sid), false, "Session exceeding absolute lifetime must be invalidated");
+      assert.strictEqual(sm.validateSession(sid), false, "Session must have been deleted from memory");
+      sm.close();
+    });
+
+    it("should prune sessions exceeding absolute lifetime in cleanupExpiredSessions", () => {
+      const sm = new SessionManager(15, 12);
+      const sidValid = sm.createSession();
+      const sidOverAbsolute = sm.createSession();
+
+      const sOld = (sm as any).sessions.get(sidOverAbsolute);
+      sOld.createdAt = Date.now() - 13 * 60 * 60 * 1000;
+      sOld.lastAccessedAt = Date.now() - 1000;
+
+      const pruned = sm.cleanupExpiredSessions();
+      assert.ok(pruned >= 1, "Should prune at least 1 session exceeding absolute lifetime");
+      assert.strictEqual(sm.validateSession(sidOverAbsolute), false);
+      assert.strictEqual(sm.validateSession(sidValid), true);
+      sm.close();
+    });
+  });
+
+  describe("Server URL Query Token Protocol Isolation", () => {
+    let serverInstance: any;
+    let runningServer: any;
+    const testPort = 18791; // Ground rules: Do NOT bind to 8788
+    const testAuthToken = "test-secret-hardening-v121";
+
+    before(async () => {
+      serverInstance = createServer({
+        port: testPort,
+        host: "127.0.0.1",
+        authToken: testAuthToken,
+      });
+      runningServer = await serverInstance.start();
+    });
+
+    after(async () => {
+      if (serverInstance && runningServer) {
+        await serverInstance.stop(runningServer);
+      }
+    });
+
+    it("should NOT create session or send Set-Cookie when authenticating /mcp via query token", async () => {
+      const initialSessions = serverInstance.sessionManager.getSessionCount();
+
+      const res = await fetch(`http://127.0.0.1:${testPort}/mcp?token=${testAuthToken}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+      });
+
+      const setCookie = res.headers.get("set-cookie");
+      assert.strictEqual(setCookie, null, "/mcp query token must not issue Set-Cookie");
+
+      const currentSessions = serverInstance.sessionManager.getSessionCount();
+      assert.strictEqual(currentSessions, initialSessions, "/mcp query token must not allocate ephemeral session");
+    });
+
+    it("should NOT create session or send Set-Cookie when authenticating /sse via query token", async () => {
+      const initialSessions = serverInstance.sessionManager.getSessionCount();
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 400);
+
+      try {
+        const res = await fetch(`http://127.0.0.1:${testPort}/sse?token=${testAuthToken}`, {
+          headers: {
+            "Accept": "text/event-stream",
+          },
+          signal: controller.signal,
+        });
+
+        const setCookie = res.headers.get("set-cookie");
+        assert.strictEqual(setCookie, null, "/sse query token must not issue Set-Cookie");
+      } catch (err: any) {
+        if (err.name !== "AbortError") throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      const currentSessions = serverInstance.sessionManager.getSessionCount();
+      assert.strictEqual(currentSessions, initialSessions, "/sse query token must not allocate ephemeral session");
+    });
+
+    it("should create session and Set-Cookie when authenticating browser endpoint via query token", async () => {
+      const res = await fetch(`http://127.0.0.1:${testPort}/dashboard?token=${testAuthToken}`, {
+        headers: {
+          "Accept": "text/html",
+        },
+        redirect: "manual",
+      });
+
+      const setCookie = res.headers.get("set-cookie");
+      assert.ok(setCookie && setCookie.includes("winhelm_session="), "Browser endpoint must issue winhelm_session cookie");
+
+      assert.strictEqual(res.status, 302);
+      assert.strictEqual(res.headers.get("location"), "/dashboard");
+    });
   });
 });
 
