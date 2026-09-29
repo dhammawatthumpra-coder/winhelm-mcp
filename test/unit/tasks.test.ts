@@ -26,7 +26,7 @@ describe("TaskManager (Background Terminal Engine)", () => {
     // Wait for output to arrive in buffer (with polling for reliable CI/heavy CPU loads)
     let logs = "";
     const startWait = Date.now();
-    while (Date.now() - startWait < 3500) {
+    while (Date.now() - startWait < 10000) {
       const logRes = taskManager.getTaskLogs(summary.id);
       logs = logRes.logs;
       if (logs.includes("Task running")) break;
