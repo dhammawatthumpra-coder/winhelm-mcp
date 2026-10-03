@@ -4,6 +4,7 @@ import http, { type Server } from "node:http";
 import os from "node:os";
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { createServer, safeCompare } from "../../src/gateway/server.js";
+import { getSessionClientInfo } from "../../src/gateway/session-context.js";
 
 function rawHttpRequest(
   port: number,
@@ -136,6 +137,10 @@ describe("Unified Gateway Server Integration", () => {
     assert.strictEqual(initRes.status, 200);
     const sessionId = initRes.headers.get("mcp-session-id");
     assert.ok(sessionId, "Expected mcp-session-id header");
+    assert.deepStrictEqual(getSessionClientInfo(sessionId), {
+      name: "integration-test-client",
+      version: "1.0",
+    });
 
     // 2. Send notifications/initialized
     await fetch(`${BASE_URL}/mcp`, {

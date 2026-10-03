@@ -7,6 +7,11 @@ import {
   getProvenanceTracker,
   resetProvenanceTracker,
 } from "../../src/approval/provenance.js";
+import {
+  getSessionClientInfo,
+  resetSessionRuntimeContexts,
+  setSessionClientInfo,
+} from "../../src/gateway/session-context.js";
 
 describe("Session Lifecycle & Eviction Engine", () => {
   it("should evict idle sessions in StreamableGateway when exceeding idle timeout", async () => {
@@ -157,6 +162,7 @@ describe("Session Lifecycle & Eviction Engine", () => {
   it("should cancel pending approval jobs when StreamableGateway evicts an idle session", async () => {
     resetApprovalEngine();
     resetProvenanceTracker();
+    resetSessionRuntimeContexts();
     const gateway = new StreamableGateway(50, 10);
 
     try {
@@ -169,6 +175,10 @@ describe("Session Lifecycle & Eviction Engine", () => {
         execute: async () => "should-not-run",
       });
 
+      setSessionClientInfo("sess-approval-idle", {
+        name: "Idle Client",
+        version: "1",
+      });
       getProvenanceTracker().recordResult(
         "sess-approval-idle",
         "file_read",
@@ -195,6 +205,10 @@ describe("Session Lifecycle & Eviction Engine", () => {
         getProvenanceTracker().getRecent("sess-approval-idle"),
         []
       );
+      assert.strictEqual(
+        getSessionClientInfo("sess-approval-idle"),
+        undefined
+      );
     } finally {
       await gateway.closeAll();
       resetApprovalEngine();
@@ -205,6 +219,7 @@ describe("Session Lifecycle & Eviction Engine", () => {
   it("should cancel pending approval jobs on SseGateway closeAll", async () => {
     resetApprovalEngine();
     resetProvenanceTracker();
+    resetSessionRuntimeContexts();
     const sse = new SseGateway(60_000, 10);
 
     try {
@@ -217,6 +232,10 @@ describe("Session Lifecycle & Eviction Engine", () => {
         execute: async () => "should-not-run",
       });
 
+      setSessionClientInfo("sse-approval-close", {
+        name: "SSE Client",
+        version: "1",
+      });
       getProvenanceTracker().recordResult(
         "sse-approval-close",
         "system_info",
@@ -234,6 +253,10 @@ describe("Session Lifecycle & Eviction Engine", () => {
       assert.deepStrictEqual(
         getProvenanceTracker().getRecent("sse-approval-close"),
         []
+      );
+      assert.strictEqual(
+        getSessionClientInfo("sse-approval-close"),
+        undefined
       );
     } finally {
       await sse.closeAll();

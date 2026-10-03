@@ -5,16 +5,25 @@ import { registerAllTools } from "../tools/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { getProvenanceTracker } from "../approval/provenance.js";
+import {
+  clearSessionRuntimeContext,
+  normalizeClientInfo,
+  setServerRuntimeContext,
+  setSessionClientInfo,
+  type McpServerRuntimeContext,
+} from "./session-context.js";
 
 interface SseSession {
   transport: SSEServerTransport;
   mcpServer: McpServer;
+  runtimeContext: McpServerRuntimeContext;
   lastActivityAt: number;
 }
 
 function clearSseSessionState(sessionId: string): void {
   getApprovalEngine().cancelSession(sessionId);
   getProvenanceTracker().clearSession(sessionId);
+  clearSessionRuntimeContext(sessionId);
 }
 
 export class SseGateway {
@@ -36,11 +45,14 @@ export class SseGateway {
     }
   }
 
-  private createMcpServerInstance(): McpServer {
+  private createMcpServerInstance(
+    runtimeContext: McpServerRuntimeContext
+  ): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
       version: SERVER_VERSION,
     });
+    setServerRuntimeContext(server, runtimeContext);
     registerAllTools(server);
     return server;
   }
@@ -98,14 +110,17 @@ export class SseGateway {
     try {
       this.evictOldestIfNeeded();
 
-      const mcpServer = this.createMcpServerInstance();
+      const runtimeContext: McpServerRuntimeContext = {};
+      const mcpServer = this.createMcpServerInstance(runtimeContext);
       const transport = new SSEServerTransport("/message", res);
+      const sessionId = transport.sessionId;
+      runtimeContext.sessionId = sessionId;
       await mcpServer.connect(transport);
 
-      const sessionId = transport.sessionId;
       this.sessions.set(sessionId, {
         transport,
         mcpServer,
+        runtimeContext,
         lastActivityAt: Date.now(),
       });
       console.log(`[SSE] Session initialized: ${sessionId}`);
@@ -144,6 +159,14 @@ export class SseGateway {
 
     try {
       await session.transport.handlePostMessage(req, res);
+
+      const clientInfo = normalizeClientInfo(
+        session.mcpServer.server.getClientVersion()
+      );
+      if (clientInfo) {
+        session.runtimeContext.clientInfo = clientInfo;
+        setSessionClientInfo(sessionId, clientInfo);
+      }
     } catch (err) {
       console.error(`[SSE] Error processing POST message for session ${sessionId}:`, err);
       if (!res.headersSent) {
@@ -171,12 +194,18 @@ export class SseGateway {
 
   public registerSessionForTest(
     sessionId: string,
-    session: { transport?: any; mcpServer?: any; lastActivityAt?: number } = {}
+    session: {
+      transport?: any;
+      mcpServer?: any;
+      runtimeContext?: McpServerRuntimeContext;
+      lastActivityAt?: number;
+    } = {}
   ): void {
     this.evictOldestIfNeeded();
     this.sessions.set(sessionId, {
       transport: session.transport || ({} as any),
       mcpServer: session.mcpServer || ({ close: async () => {} } as any),
+      runtimeContext: session.runtimeContext ?? { sessionId },
       lastActivityAt: session.lastActivityAt ?? Date.now(),
     });
   }

@@ -15,6 +15,10 @@ import {
   getProvenanceTracker,
   resetProvenanceTracker,
 } from "../../src/approval/provenance.js";
+import {
+  resetSessionRuntimeContexts,
+  setSessionClientInfo,
+} from "../../src/gateway/session-context.js";
 
 function cookiePair(setCookie: string | null): string {
   assert.ok(setCookie, "Expected Set-Cookie header");
@@ -27,6 +31,7 @@ describe("Isolated admin HTTP plane", () => {
     resetAdminAuthManager();
     resetApprovalEngine();
     resetProvenanceTracker();
+    resetSessionRuntimeContexts();
 
     const instance = createServer({
       port: 0,
@@ -108,6 +113,10 @@ describe("Isolated admin HTTP plane", () => {
       });
       assert.strictEqual(adminAsMcp.status, 401);
 
+      setSessionClientInfo("fixture-session", {
+        name: "Claude Desktop",
+        version: "fixture-1",
+      });
       getProvenanceTracker().recordResult(
         "fixture-session",
         "file_read",
@@ -168,6 +177,10 @@ describe("Isolated admin HTTP plane", () => {
         "fixture-session",
         "Admin approval API must not expose raw MCP session IDs"
       );
+      assert.deepStrictEqual(approvalView.clientInfo, {
+        name: "Claude Desktop",
+        version: "fixture-1",
+      });
       assert.strictEqual(approvalView.risk.class, "R3");
       assert.strictEqual(approvalView.risk.level, "elevated");
       assert.match(
@@ -311,6 +324,7 @@ describe("Isolated admin HTTP plane", () => {
       resetAdminAuthManager();
       resetApprovalEngine();
       resetProvenanceTracker();
+      resetSessionRuntimeContexts();
     }
   });
 });

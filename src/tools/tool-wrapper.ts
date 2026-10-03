@@ -12,6 +12,7 @@ import {
 } from "../approval/provenance.js";
 import { isRecoveryToolName } from "./registry.js";
 import { getToolMetadata } from "./metadata.js";
+import { getServerRuntimeContext } from "../gateway/session-context.js";
 
 function createPolicyError(
   code: string,
@@ -82,7 +83,10 @@ export function registerTracedTool(
     const liveConfigManager = ConfigManager.getInstance();
     const liveMode = liveConfigManager.getConfigMode();
     const provenance = getProvenanceTracker();
-    const sessionKey = approvalSessionKey(extra?.sessionId);
+    const runtimeContext = getServerRuntimeContext(server);
+    const effectiveSessionId =
+      extra?.sessionId ?? runtimeContext?.sessionId;
+    const sessionKey = approvalSessionKey(effectiveSessionId);
 
     const executeAndRecord = async (executionExtra: any) => {
       try {
@@ -163,7 +167,7 @@ export function registerTracedTool(
             args: args ?? {},
             approval: liveConfig.approval,
             context: {
-              sessionId: extra?.sessionId,
+              sessionId: effectiveSessionId,
               requestId,
               signal: extra?.signal,
             },
