@@ -127,8 +127,17 @@ export function resolveLocale(input?: string | null): SupportedLocale {
   return "en";
 }
 
+let configuredLocale: SupportedLocale = "en";
+
+export function setConfiguredLocale(input?: string | null): SupportedLocale {
+  configuredLocale = resolveLocale(input);
+  return configuredLocale;
+}
+
 export function getRuntimeLocale(): SupportedLocale {
-  return resolveLocale(process.env.WINHELM_LOCALE);
+  return process.env.WINHELM_LOCALE
+    ? resolveLocale(process.env.WINHELM_LOCALE)
+    : configuredLocale;
 }
 
 function placeholders(template: string): string[] {

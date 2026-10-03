@@ -5,6 +5,7 @@ export type FolderPermissionMode = "read" | "readwrite";
 export type TerminalMode = "off" | "safe" | "ask" | "full" | "dangerous";
 export type ToolPolicy = "auto" | "ask" | "off";
 export type ApprovalChannel = "dashboard" | "toast" | "cli";
+export type UiLanguage = "en" | "th";
 export type ProfilePreset =
   | "safe"
   | "balanced"
@@ -38,6 +39,10 @@ export interface NetworkPermissionConfig {
   allowLoopback: boolean;
 }
 
+export interface UiConfig {
+  language: UiLanguage;
+}
+
 export interface ProfileState {
   preset: ProfilePreset;
   appliedAt: string;
@@ -57,6 +62,7 @@ export interface SchemaV2PermissionConfig {
   toolPolicy: Record<string, ToolPolicy>;
   approval: ApprovalConfig;
   network: NetworkPermissionConfig;
+  ui?: UiConfig;
   profileState?: ProfileState;
 }
 
@@ -323,6 +329,18 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
     }
   }
 
+  let ui: UiConfig | undefined;
+  if (input.ui !== undefined) {
+    if (!input.ui || typeof input.ui !== "object" || Array.isArray(input.ui)) {
+      ui = { language: "en" };
+    } else {
+      const rawUi = input.ui as Record<string, unknown>;
+      ui = {
+        language: rawUi.language === "th" ? "th" : "en",
+      };
+    }
+  }
+
   const valid = errors.length === 0;
   return {
     valid,
@@ -335,6 +353,7 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
       toolPolicy: valid ? toolPolicy : {},
       approval: approvalResult.value,
       network: valid ? network : { ...DEFAULT_NETWORK_CONFIG },
+      ...(ui ? { ui } : {}),
       ...(valid && input.profileState && typeof input.profileState === "object"
         ? { profileState: input.profileState as unknown as ProfileState }
         : {}),

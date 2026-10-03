@@ -7,7 +7,9 @@ import {
   isSchemaV2Config,
   normalizeApprovalConfig,
   validateApprovalConfig,
+  validateSchemaV2Config,
 } from "../../src/config/schema-v2.js";
+import { getRuntimeLocale } from "../../src/i18n/messages.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "../../src/permissions/policy.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAllTools } from "../../src/tools/index.js";
@@ -57,6 +59,20 @@ describe("Schema-v2 configuration primitives", () => {
 
     assert.strictEqual(result.valid, true);
     assert.deepStrictEqual(result.errors, []);
+  });
+
+  it("normalizes ui.language to English when the configured locale is unsupported", () => {
+    const result = validateSchemaV2Config({
+      schemaVersion: 2,
+      profilePreset: "balanced",
+      folders: [],
+      terminal: { mode: "ask" },
+      toolPolicy: { system_info: "auto" },
+      ui: { language: "fr-FR" },
+    });
+
+    assert.strictEqual(result.valid, true);
+    assert.deepStrictEqual(result.value.ui, { language: "en" });
   });
 
   it("rejects unsafe or nonsensical approval timing values", () => {
@@ -148,6 +164,38 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         });
       }
     );
+  });
+
+  it("syncs ui.language from config into runtime i18n selection", async () => {
+    const previous = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+
+    try {
+      await withTempConfig(
+        "thai-ui.json",
+        {
+          schemaVersion: 2,
+          profilePreset: "balanced",
+          folders: [],
+          terminal: { mode: "ask" },
+          toolPolicy: { system_info: "auto" },
+          ui: { language: "th" },
+        },
+        async (manager) => {
+          assert.deepStrictEqual(manager.getConfig().ui, {
+            language: "th",
+          });
+          assert.strictEqual(getRuntimeLocale(), "th");
+        }
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.WINHELM_LOCALE;
+      } else {
+        process.env.WINHELM_LOCALE = previous;
+      }
+      ConfigManager.resetInstance();
+    }
   });
 
   it("fails closed for semantic-invalid schema-v2 without losing diagnostics", async () => {
