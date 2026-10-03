@@ -17,6 +17,10 @@ import type {
   SystemInfo,
 } from "../types/index.js";
 import { ConfigManager } from "../config/config-manager.js";
+import {
+  rewriteNotificationTitle,
+  sanitizeNotificationMessage,
+} from "../utils/notification-policy.js";
 
 /**
  * Read text from Windows Clipboard
@@ -586,8 +590,8 @@ export async function sendNotification(
   message: string,
   sound = true
 ): Promise<NotificationResult> {
-  const safeTitle = title.trim().slice(0, 100);
-  const safeMsg = message.trim().slice(0, 500);
+  const safeTitle = rewriteNotificationTitle(title);
+  const safeMsg = sanitizeNotificationMessage(message);
   const soundTag = sound
     ? "<audio src='ms-winsoundevent:Notification.Default' />"
     : "<audio silent='true' />";
