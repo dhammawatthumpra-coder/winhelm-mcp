@@ -30,7 +30,7 @@ export function registerCommandTools(server: McpServer): void {
         .string()
         .optional()
         .describe(
-          "Optional retry hint. WinHelm approval dedupe does not rely on this value alone."
+          "Optional hint that binds this request to an existing WinHelm approval job after a dropped connection; it is not permission to re-run a side effect."
         ),
       timeoutMs: z
         .number()

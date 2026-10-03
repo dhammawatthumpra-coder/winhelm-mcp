@@ -1,16 +1,57 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ALL_V13_TOOL_NAMES,
   RECOVERY_TOOL_NAMES,
 } from "../../src/tools/registry.js";
 import {
+  DESCRIPTION_MAX_LENGTH,
+  DESCRIPTION_MIN_LENGTH,
+  PC_SCOPE_STATEMENT,
   TOOL_METADATA,
+  USER_ACTION_STATEMENT,
   getToolMetadata,
   validateToolMetadataRegistry,
 } from "../../src/tools/metadata.js";
+import { collectParameterDescriptionIssues } from "../../src/tools/metadata-lint.js";
+import { registerAllTools } from "../../src/tools/index.js";
 import { registerTracedTool } from "../../src/tools/tool-wrapper.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
+
+async function withRegisteredV13Tools<T>(
+  fn: (tools: Record<string, any>) => T
+): Promise<T> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-metadata-"));
+  const configFile = path.join(dir, "config.json");
+  await fs.writeFile(
+    configFile,
+    JSON.stringify({
+      schemaVersion: 2,
+      folders: [],
+      terminal: { mode: "off" },
+      toolPolicy: {},
+    }),
+    "utf8"
+  );
+
+  try {
+    const manager = ConfigManager.resetInstance(configFile);
+    await manager.init(configFile);
+    const server = new McpServer({
+      name: "metadata-fixture",
+      version: "1.0.0",
+    });
+    registerAllTools(server);
+    return fn((server as any)._registeredTools);
+  } finally {
+    ConfigManager.resetInstance();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
 
 describe("MCP tool metadata and annotations", () => {
   it("passes metadata through registerTracedTool into the MCP SDK registration config", () => {
@@ -126,5 +167,44 @@ describe("MCP tool metadata and annotations", () => {
       assert.strictEqual(annotations.destructiveHint, false);
       assert.strictEqual(annotations.openWorldHint, false);
     }
+  });
+
+  it("carries the mandated 5.2 guidance in every description", () => {
+    for (const name of ALL_V13_TOOL_NAMES) {
+      const { description } = getToolMetadata(name);
+      assert.ok(
+        description.includes(PC_SCOPE_STATEMENT),
+        name + " must state the real-PC scope"
+      );
+      assert.ok(
+        description.includes(USER_ACTION_STATEMENT),
+        name + " must tell the model to relay userAction"
+      );
+      assert.ok(
+        description.length >= DESCRIPTION_MIN_LENGTH &&
+          description.length <= DESCRIPTION_MAX_LENGTH,
+        `${name} description length ${description.length} outside ${DESCRIPTION_MIN_LENGTH}-${DESCRIPTION_MAX_LENGTH}`
+      );
+    }
+  });
+
+  it("gives the model the 5.2 idempotencyKey semantics where it is accepted", async () => {
+    await withRegisteredV13Tools((tools) => {
+      for (const name of ["command_run", "winhelm_job_status"]) {
+        const field = tools[name].inputSchema.shape.idempotencyKey;
+        const description = String(field._def.description);
+        assert.match(description, /dropped connection|recovers the same/i, name);
+        assert.match(description, /not permission to re-run|never authorizes/i, name);
+      }
+      return undefined;
+    });
+  });
+
+  it("describes every parameter of every registered tool", async () => {
+    await withRegisteredV13Tools((tools) => {
+      assert.strictEqual(Object.keys(tools).length, 41);
+      assert.deepStrictEqual(collectParameterDescriptionIssues(tools), []);
+      return undefined;
+    });
   });
 });

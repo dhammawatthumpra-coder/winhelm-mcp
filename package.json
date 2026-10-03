@@ -63,6 +63,7 @@
     "dev:type-check": "tsc --noEmit --watch",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "type-check": "tsc --noEmit",
+    "lint:tools": "tsx scripts/lint-tool-metadata.ts",
     "service:install": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action install",
     "service:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action uninstall",
     "service:start": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action start",
