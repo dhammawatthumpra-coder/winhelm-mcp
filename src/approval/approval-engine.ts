@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { ApprovalDecision } from "./audit.js";
 
 export type ApprovalJobState =
   | "awaiting_approval"
@@ -76,6 +77,16 @@ export interface ApprovalEngineOptions {
    * notification). It never affects the approval flow.
    */
   onCreated?: (job: ApprovalJob) => void;
+  /**
+   * Advisory hook fired once per terminal decision (approved, denied, expired,
+   * cancelled) so the decision and its latency can be audited. It never affects
+   * the approval flow.
+   */
+  onDecision?: (
+    job: ApprovalJob,
+    decision: ApprovalDecision,
+    channel: string
+  ) => void;
   /**
    * Set when the durable journal could not be trusted at startup. Creating new
    * approval jobs is then refused, because retry protection cannot be
@@ -179,6 +190,11 @@ export class ApprovalEngine {
   private readonly retryRetentionMs: number;
   private readonly persist?: (job: RecoverableApprovalJob) => void;
   private readonly onCreated?: (job: ApprovalJob) => void;
+  private readonly onDecision?: (
+    job: ApprovalJob,
+    decision: ApprovalDecision,
+    channel: string
+  ) => void;
   private readonly journalIntegrityFailed: boolean;
 
   constructor(options: ApprovalEngineOptions = {}) {
@@ -186,6 +202,7 @@ export class ApprovalEngine {
     this.retryRetentionMs = options.retryRetentionMs ?? 60_000;
     this.persist = options.persist;
     this.onCreated = options.onCreated;
+    this.onDecision = options.onDecision;
     this.journalIntegrityFailed = options.journalIntegrityFailed ?? false;
   }
 
@@ -359,7 +376,10 @@ export class ApprovalEngine {
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  approve(jobId: string): ApprovalTransitionOutcome {
+  approve(
+    jobId: string,
+    channel = "unknown"
+  ): ApprovalTransitionOutcome {
     this.expireDueJobs();
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -391,14 +411,21 @@ export class ApprovalEngine {
       return this.journalUnavailable(job);
     }
 
+    this.emitDecision(job, "approved", channel);
     return { ok: true, job: publicJob(job) };
   }
 
-  deny(jobId: string): ApprovalTransitionOutcome {
-    return this.transitionAwaitingToTerminal(jobId, "denied");
+  deny(
+    jobId: string,
+    channel = "unknown"
+  ): ApprovalTransitionOutcome {
+    return this.transitionAwaitingToTerminal(jobId, "denied", channel);
   }
 
-  cancel(jobId: string): ApprovalTransitionOutcome {
+  cancel(
+    jobId: string,
+    channel = "unknown"
+  ): ApprovalTransitionOutcome {
     const job = this.jobs.get(jobId);
     if (!job) {
       return { ok: false, status: 404, code: "NOT_FOUND" };
@@ -416,6 +443,7 @@ export class ApprovalEngine {
     job.state = "cancelled";
     job.updatedAt = this.now();
     this.persistBestEffort(job);
+    this.emitDecision(job, "cancelled", channel);
     return { ok: true, job: publicJob(job) };
   }
 
@@ -429,6 +457,7 @@ export class ApprovalEngine {
         job.state = "cancelled";
         job.updatedAt = this.now();
         this.persistBestEffort(job);
+        this.emitDecision(job, "cancelled", "session_close");
         cancelled.push(publicJob(job));
       }
     }
@@ -459,6 +488,7 @@ export class ApprovalEngine {
           job.state = "cancelled";
           job.updatedAt = this.now();
           this.persistBestEffort(job);
+          this.emitDecision(job, "cancelled", "request_aborted");
         }
         return { kind: "terminal", job: publicJob(job) };
       }
@@ -473,7 +503,8 @@ export class ApprovalEngine {
 
   private transitionAwaitingToTerminal(
     jobId: string,
-    state: "denied" | "expired"
+    state: "denied" | "expired",
+    channel = "unknown"
   ): ApprovalTransitionOutcome {
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -492,6 +523,7 @@ export class ApprovalEngine {
     job.state = state;
     job.updatedAt = this.now();
     this.persistBestEffort(job);
+    this.emitDecision(job, state, channel);
     return { ok: true, job: publicJob(job) };
   }
 
@@ -539,6 +571,7 @@ export class ApprovalEngine {
       job.state = "expired";
       job.updatedAt = this.now();
       this.persistBestEffort(job);
+      this.emitDecision(job, "expired", "expiry");
     }
   }
 
@@ -546,6 +579,18 @@ export class ApprovalEngine {
    * Read through a method because the executor mutates the job inside the
    * `void` call above; local control-flow narrowing cannot see that.
    */
+  private emitDecision(
+    job: InternalJob,
+    decision: ApprovalDecision,
+    channel: string
+  ): void {
+    try {
+      this.onDecision?.(publicJob(job), decision, channel);
+    } catch {
+      // Advisory only: an audit sink failure must not affect approvals.
+    }
+  }
+
   private claimWasRefused(job: InternalJob): boolean {
     return job.state === "unknown";
   }

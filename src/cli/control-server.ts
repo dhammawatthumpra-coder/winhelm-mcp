@@ -175,7 +175,7 @@ export class LocalControlServer {
             error: { code: "INVALID_ARGUMENT", message: "jobId is required." },
           };
         }
-        const outcome = getApprovalEngine().approve(request.jobId);
+        const outcome = getApprovalEngine().approve(request.jobId, "cli");
         return outcome.ok
           ? { ok: true, job: outcome.job }
           : { ok: false, error: { code: outcome.code, status: outcome.status } };
@@ -188,7 +188,7 @@ export class LocalControlServer {
             error: { code: "INVALID_ARGUMENT", message: "jobId is required." },
           };
         }
-        const outcome = getApprovalEngine().deny(request.jobId);
+        const outcome = getApprovalEngine().deny(request.jobId, "cli");
         return outcome.ok
           ? { ok: true, job: outcome.job }
           : { ok: false, error: { code: outcome.code, status: outcome.status } };
