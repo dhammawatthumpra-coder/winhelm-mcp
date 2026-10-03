@@ -24,6 +24,12 @@ import {
   getToolRiskPresentation,
 } from "../permissions/risk.js";
 import { getSessionClientInfo } from "../gateway/session-context.js";
+import {
+  applyClientConnection,
+  previewClientConnection,
+  ClientConnectionError,
+  type SupportedMcpClient,
+} from "../config/client-connect.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
   isLoopbackOrigin,
@@ -228,6 +234,37 @@ function profileErrorStatus(err: ProfileServiceError): number {
     return 409;
   }
   return 400;
+}
+
+function parseClientName(
+  value: string | string[] | undefined
+): SupportedMcpClient {
+  const normalized =
+    typeof value === "string"
+      ? value.trim().toLowerCase()
+      : "";
+  if (normalized === "claude" || normalized === "cursor") {
+    return normalized;
+  }
+  throw new ClientConnectionError(
+    "INVALID_CLIENT",
+    "client must be claude or cursor."
+  );
+}
+
+function clientConnectionErrorStatus(
+  err: ClientConnectionError
+): number {
+  if (
+    err.code === "CLIENT_CONFIG_INVALID_JSON" ||
+    err.code === "CLIENT_CONFIG_INVALID_MCP_SERVERS" ||
+    err.code === "NODE_EXECUTABLE_NOT_FOUND" ||
+    err.code === "WINHELM_ENTRYPOINT_NOT_FOUND"
+  ) {
+    return 409;
+  }
+  if (err.code === "INVALID_CLIENT") return 400;
+  return 500;
 }
 
 function adminApprovalView(job: any): Record<string, unknown> {
@@ -733,6 +770,124 @@ export function registerAdminRoutes(app: Express): void {
           500,
           "INTERNAL_ERROR",
           (err as Error).message || "Profile apply failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/clients/:client/preview",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      try {
+        const client = parseClientName(req.params.client);
+        const manager = ConfigManager.getInstance();
+        const preview = await previewClientConnection(
+          client,
+          manager.getConfigFilePath()
+        );
+        res.json({ preview });
+      } catch (err) {
+        if (err instanceof ClientConnectionError) {
+          structuredError(
+            res,
+            clientConnectionErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Client connection preview failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/clients/:client/apply",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      try {
+        const client = parseClientName(req.params.client);
+        const manager = ConfigManager.getInstance();
+        const result = await applyClientConnection(
+          client,
+          manager.getConfigFilePath()
+        );
+
+        auditLogger.log({
+          event: "MCP_CLIENT_CONFIG_APPLIED",
+          severity: "INFO",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: `POST /admin/clients/${client}/apply`,
+          resource: client,
+          outcome: "ALLOWED",
+          details: {
+            changed: result.preview.changed,
+            configFileExisted:
+              result.preview.target.configFileExists,
+            backupCreated: Boolean(result.backupPath),
+          },
+        });
+
+        res.json({
+          success: true,
+          backupPath: result.backupPath,
+          bytesWritten: result.bytesWritten,
+          preview: result.preview,
+        });
+      } catch (err) {
+        if (err instanceof ClientConnectionError) {
+          auditLogger.log({
+            event: "MCP_CLIENT_CONFIG_REJECTED",
+            severity: "WARN",
+            actor: {
+              ip: req.ip,
+              authType: "session_cookie",
+              sessionId: res.locals.adminSessionId as string,
+            },
+            action: "POST /admin/clients/:client/apply",
+            outcome: "DENIED",
+            details: { code: err.code },
+          });
+          structuredError(
+            res,
+            clientConnectionErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+
+        auditLogger.log({
+          event: "MCP_CLIENT_CONFIG_ERROR",
+          severity: "CRITICAL",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/clients/:client/apply",
+          outcome: "ERROR",
+          details: (err as Error).message || String(err),
+        });
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Client connection apply failed."
         );
       }
     }

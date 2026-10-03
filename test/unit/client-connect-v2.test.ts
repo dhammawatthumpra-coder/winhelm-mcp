@@ -87,6 +87,11 @@ describe("MCP client connection config", () => {
     );
     const configPath = path.join(root, "mcp.json");
     const winhelmConfig = path.join(root, "winhelm.config.json");
+    const nodeExecutable = path.join(root, "node.exe");
+    const entryPoint = path.join(root, "dist", "index.js");
+    await fs.mkdir(path.dirname(entryPoint), { recursive: true });
+    await fs.writeFile(nodeExecutable, "fixture", "utf8");
+    await fs.writeFile(entryPoint, "fixture", "utf8");
     const original = {
       theme: "dark",
       mcpServers: {
@@ -111,8 +116,8 @@ describe("MCP client connection config", () => {
         winhelmConfig,
         {
           cursorConfigPath: configPath,
-          nodeExecutable: path.join(root, "node.exe"),
-          entryPoint: path.join(root, "dist", "index.js"),
+          nodeExecutable,
+          entryPoint,
         }
       );
 
@@ -133,8 +138,8 @@ describe("MCP client connection config", () => {
       assert.deepStrictEqual(
         persisted.mcpServers.winhelm,
         buildWinHelmLocalMcpEntry(winhelmConfig, {
-          nodeExecutable: path.join(root, "node.exe"),
-          entryPoint: path.join(root, "dist", "index.js"),
+          nodeExecutable,
+          entryPoint,
         })
       );
     } finally {
@@ -153,6 +158,11 @@ describe("MCP client connection config", () => {
       "Claude",
       "claude_desktop_config.json"
     );
+    const nodeExecutable = path.join(root, "node.exe");
+    const entryPoint = path.join(root, "dist", "index.js");
+    await fs.mkdir(path.dirname(entryPoint), { recursive: true });
+    await fs.writeFile(nodeExecutable, "fixture", "utf8");
+    await fs.writeFile(entryPoint, "fixture", "utf8");
 
     try {
       const result = await applyClientConnection(
@@ -160,8 +170,8 @@ describe("MCP client connection config", () => {
         path.join(root, "winhelm.config.json"),
         {
           claudeConfigPath: configPath,
-          nodeExecutable: path.join(root, "node.exe"),
-          entryPoint: path.join(root, "dist", "index.js"),
+          nodeExecutable,
+          entryPoint,
         }
       );
 
@@ -170,6 +180,45 @@ describe("MCP client connection config", () => {
         await fs.readFile(configPath, "utf8")
       );
       assert.ok(persisted.mcpServers.winhelm);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to write a client config when the WinHelm entrypoint is missing", async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "winhelm-client-missing-entry-")
+    );
+    const configPath = path.join(root, "mcp.json");
+    const nodeExecutable = path.join(root, "node.exe");
+    const missingEntryPoint = path.join(root, "dist", "index.js");
+    await fs.writeFile(nodeExecutable, "fixture", "utf8");
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({ mcpServers: {} }, null, 2),
+      "utf8"
+    );
+    const before = await fs.readFile(configPath, "utf8");
+
+    try {
+      await assert.rejects(
+        () =>
+          applyClientConnection(
+            "cursor",
+            path.join(root, "winhelm.config.json"),
+            {
+              cursorConfigPath: configPath,
+              nodeExecutable,
+              entryPoint: missingEntryPoint,
+            }
+          ),
+        /entrypoint was not found/i
+      );
+
+      assert.strictEqual(
+        await fs.readFile(configPath, "utf8"),
+        before
+      );
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
