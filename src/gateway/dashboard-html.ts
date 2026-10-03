@@ -1,4 +1,10 @@
 import { PROFILES, type ToolProfile } from "../config/profiles.js";
+import {
+  ALL_TOOL_NAMES,
+  ALL_V13_TOOL_NAMES,
+  RECOVERY_TOOL_NAMES,
+  SCHEMA_V2_TOOL_NAMES,
+} from "../tools/registry.js";
 
 /**
  * Escape HTML special characters to prevent Cross-Site Scripting (XSS).
@@ -29,9 +35,18 @@ export function getDashboardHtml(
   permissionSummary?: DashboardPermissionSummary
 ): string {
   const profileDef = PROFILES[activeProfile] || PROFILES.full;
-  const activeTools = profileDef.tools;
-  const activeCount = activeTools.length;
   const schemaMode = permissionSummary?.schemaMode ?? "legacy";
+  const schemaV2Surface = schemaMode !== "legacy";
+  const legacyActiveTools = new Set<string>([
+    ...profileDef.tools,
+    ...RECOVERY_TOOL_NAMES,
+  ]);
+  const displayedToolNames = schemaV2Surface
+    ? [...ALL_V13_TOOL_NAMES]
+    : [...ALL_TOOL_NAMES, ...RECOVERY_TOOL_NAMES];
+  const exposedToolCount = schemaV2Surface
+    ? displayedToolNames.length
+    : displayedToolNames.filter((name) => legacyActiveTools.has(name)).length;
   const displayProfile =
     schemaMode === "v2"
       ? String(permissionSummary?.preset ?? "modified")
@@ -42,8 +57,10 @@ export function getDashboardHtml(
       : "";
   const headerProfileText =
     schemaMode === "v2"
-      ? `PROFILE: ${displayProfile.toUpperCase()}${modifiedText} · 41 SCHEMAS`
-      : `PROFILE: ${profileDef.name.toUpperCase()} · ${activeCount} LEGACY + 2 RECOVERY`;
+      ? `PROFILE: ${displayProfile.toUpperCase()}${modifiedText} · ${ALL_V13_TOOL_NAMES.length} SCHEMAS`
+      : schemaMode === "invalid"
+        ? `SCHEMA-V2 INVALID · ${ALL_V13_TOOL_NAMES.length} SCHEMAS`
+        : `PROFILE: ${profileDef.name.toUpperCase()} · ${profileDef.tools.length} LEGACY + ${RECOVERY_TOOL_NAMES.length} RECOVERY`;
   const terminalMode = permissionSummary?.terminalMode ?? null;
   const riskBannerHtml =
     schemaMode === "invalid"
@@ -51,16 +68,72 @@ export function getDashboardHtml(
       : terminalMode === "dangerous"
         ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>DANGEROUS terminal mode is active.</strong> Command blocklists may be bypassed for the current configured window.</div>`
         : terminalMode === "full"
-          ? `<div id="runtimeRiskBanner" class="risk-banner warning"><strong>Full terminal access is active.</strong> AI commands can execute automatically with your user-level filesystem reach.</div>`
+          ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>Full terminal access is active.</strong> AI commands can execute automatically with your user-level filesystem reach.</div>`
           : `<div id="runtimeRiskBanner" class="risk-banner" style="display:none;"></div>`;
 
-  const renderTool = (name: string, color: string) => {
-    const isAct = activeTools.includes(name);
-    if (isAct) {
-      return `<div class="tool-item"><span class="tool-dot" style="background: ${color};"></span> ${name}</div>`;
+  const toolColor = (name: string): string => {
+    if (RECOVERY_TOOL_NAMES.includes(name as any)) return "#a78bfa";
+    if (
+      name === SCHEMA_V2_TOOL_NAMES.COMMAND_RUN ||
+      name.startsWith("terminal_")
+    ) {
+      return "#10b981";
     }
-    return `<div class="tool-item inactive" title="Not loaded in ${profileDef.name} profile"><span class="tool-dot" style="background: #4b5563;"></span> <span style="text-decoration: line-through; opacity: 0.6;">${name}</span></div>`;
+    if (
+      name === "file_search_ripgrep" ||
+      name === "pdf_generate" ||
+      name === "file_preview"
+    ) {
+      return "#f59e0b";
+    }
+    if (name.startsWith("file_") || name.startsWith("archive_")) {
+      return "#3b82f6";
+    }
+    if (
+      name.startsWith("clipboard_") ||
+      name === "screen_capture" ||
+      name === "system_open" ||
+      name === "notification_send"
+    ) {
+      return "#ec4899";
+    }
+    if (name.startsWith("http_") || name === "network_info") {
+      return "#14b8a6";
+    }
+    return "#06b6d4";
   };
+
+  const renderTool = (name: string) => {
+    const isExposed = schemaV2Surface || legacyActiveTools.has(name);
+    const label =
+      name === SCHEMA_V2_TOOL_NAMES.COMMAND_RUN
+        ? `${name} · terminal=${terminalMode ?? "n/a"}`
+        : name;
+    const safeLabel = escapeHtml(label);
+
+    if (isExposed) {
+      return `<div class="tool-item" data-tool-name="${escapeHtml(name)}"><span class="tool-dot" style="background: ${toolColor(name)};"></span> ${safeLabel}</div>`;
+    }
+    return `<div class="tool-item inactive" data-tool-name="${escapeHtml(name)}" title="Not loaded in ${escapeHtml(profileDef.name)} profile"><span class="tool-dot" style="background: #4b5563;"></span> <span style="text-decoration: line-through; opacity: 0.6;">${safeLabel}</span></div>`;
+  };
+
+  const primaryToolHtml = displayedToolNames
+    .filter(
+      (name) =>
+        !RECOVERY_TOOL_NAMES.includes(name as any) &&
+        name !== SCHEMA_V2_TOOL_NAMES.COMMAND_RUN
+    )
+    .map(renderTool)
+    .join("");
+  const commandRunHtml = displayedToolNames.includes(
+    SCHEMA_V2_TOOL_NAMES.COMMAND_RUN
+  )
+    ? renderTool(SCHEMA_V2_TOOL_NAMES.COMMAND_RUN)
+    : "";
+  const recoveryToolHtml = RECOVERY_TOOL_NAMES
+    .filter((name) => displayedToolNames.includes(name))
+    .map(renderTool)
+    .join("");
 
   const renderResource = () => {
     if (profileDef.includesResource) {
@@ -412,6 +485,17 @@ export function getDashboardHtml(
       border: 1px dashed #374151;
       color: #6b7280;
     }
+    .tool-group-label {
+      grid-column: 1 / -1;
+      margin-top: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -592,7 +676,7 @@ export function getDashboardHtml(
     <!-- Registered Tools Reference -->
     <div class="card" style="margin-top: 24px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div class="card-title" style="margin-bottom: 0;">Registered Tools (${activeCount} Active in ${profileDef.name} Profile / 38 Total)</div>
+        <div class="card-title" style="margin-bottom: 0;">${schemaV2Surface ? "Exposed Tool Schemas" : "Registered Tools"} (${exposedToolCount} Exposed / ${displayedToolNames.length} Available)</div>
         <div style="font-size: 12px; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap;">
           <span><span class="tool-dot" style="background: #10b981;"></span> Terminal</span>
           <span><span class="tool-dot" style="background: #8b5cf6;"></span> Background Tasks</span>
@@ -603,52 +687,12 @@ export function getDashboardHtml(
           <span><span class="tool-dot" style="background: #14b8a6;"></span> Network</span>
         </div>
       </div>
-      <div class="tools-grid">
-        <!-- Terminal & Tasks -->
-        ${renderTool("terminal_run", "#10b981")}
-        ${renderTool("terminal_task_start", "#8b5cf6")}
-        ${renderTool("terminal_task_list", "#8b5cf6")}
-        ${renderTool("terminal_task_logs", "#8b5cf6")}
-        ${renderTool("terminal_task_send", "#8b5cf6")}
-        ${renderTool("terminal_task_kill", "#8b5cf6")}
-        <!-- Filesystem & Archives -->
-        ${renderTool("file_read", "#3b82f6")}
-        ${renderTool("file_write", "#3b82f6")}
-        ${renderTool("file_edit", "#3b82f6")}
-        ${renderTool("file_list", "#3b82f6")}
-        ${renderTool("file_search", "#3b82f6")}
-        ${renderTool("file_delete_safe", "#3b82f6")}
-        ${renderTool("file_move", "#3b82f6")}
-        ${renderTool("file_copy", "#3b82f6")}
-        ${renderTool("archive_zip", "#3b82f6")}
-        ${renderTool("archive_unzip", "#3b82f6")}
-        ${renderTool("file_tail", "#3b82f6")}
-        ${renderTool("file_hash", "#3b82f6")}
-        <!-- Search & Documents -->
-        ${renderTool("file_search_ripgrep", "#f59e0b")}
-        ${renderTool("pdf_generate", "#f59e0b")}
-        ${renderTool("file_preview", "#f59e0b")}
-        <!-- Desktop, Clipboard & Toast -->
-        ${renderTool("clipboard_get", "#ec4899")}
-        ${renderTool("clipboard_set", "#ec4899")}
-        ${renderTool("screen_capture", "#ec4899")}
-        ${renderTool("system_open", "#ec4899")}
-        ${renderTool("notification_send", "#ec4899")}
-        <!-- System, Hardware & Services -->
-        ${renderTool("system_info", "#06b6d4")}
-        ${renderTool("gpu_info", "#06b6d4")}
-        ${renderTool("process_list", "#06b6d4")}
-        ${renderTool("process_kill", "#06b6d4")}
-        ${renderTool("port_check", "#06b6d4")}
-        ${renderTool("eventlog_query", "#06b6d4")}
-        ${renderTool("service_list", "#06b6d4")}
-        ${renderTool("service_status", "#06b6d4")}
-        ${renderTool("service_control", "#06b6d4")}
-        <!-- Network & Probe -->
-        ${renderTool("http_ping", "#14b8a6")}
-        ${renderTool("http_request", "#14b8a6")}
-        ${renderTool("network_info", "#14b8a6")}
-        <!-- MCP Resource -->
+      <div class="tools-grid" data-tool-surface="${schemaMode}">
+        ${primaryToolHtml}
+        ${commandRunHtml ? '<div class="tool-group-label">Terminal adapter</div>' + commandRunHtml : ''}
+        <div class="tool-group-label">Recovery tools</div>
+        ${recoveryToolHtml}
+        <div class="tool-group-label">MCP resource</div>
         ${renderResource()}
       </div>
     </div>
@@ -790,7 +834,7 @@ export function getDashboardHtml(
 
       if (profile.terminalMode === 'full') {
         banner.style.display = 'block';
-        banner.classList.add('warning');
+        banner.classList.add('danger');
         banner.textContent =
           'Full terminal access is active. AI commands can execute automatically with your user-level filesystem reach.';
         return;

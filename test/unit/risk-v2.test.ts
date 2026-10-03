@@ -74,6 +74,7 @@ describe("Approval risk presentation", () => {
     );
     assert.strictEqual(safe.maxAutoPolicyRisk, "R0");
     assert.strictEqual(safe.terminalExecution, "disabled");
+    assert.strictEqual(safe.protectedPathBoundary, "enforced");
     assert.strictEqual(safe.readwriteFolderCount, 0);
     assert.strictEqual(safe.totalFolderCount, 1);
 
@@ -85,7 +86,18 @@ describe("Approval risk presentation", () => {
       balanced.terminalExecution,
       "approval-required"
     );
+    assert.strictEqual(
+      balanced.protectedPathBoundary,
+      "terminal-command-outside-boundary"
+    );
     assert.strictEqual(balanced.readwriteFolderCount, 1);
+
+    const safeAdapter = summarizeRuntimeRisk({
+      ...buildPresetConfig("balanced", { folders: ["D:\\Workspace"] }),
+      terminal: { mode: "safe" },
+    });
+    assert.strictEqual(safeAdapter.terminalExecution, "safe-adapter");
+    assert.strictEqual(safeAdapter.protectedPathBoundary, "enforced");
 
     const power = summarizeRuntimeRisk(
       buildPresetConfig("power", { folders: ["D:\\Workspace"] })
@@ -94,6 +106,10 @@ describe("Approval risk presentation", () => {
     assert.strictEqual(
       power.terminalExecution,
       "unrestricted-auto"
+    );
+    assert.strictEqual(
+      power.protectedPathBoundary,
+      "terminal-command-outside-boundary"
     );
     assert.ok(power.policyByRisk.R3.ask > 0);
     assert.ok(power.policyByRisk.R4.ask > 0);
@@ -106,5 +122,6 @@ describe("Approval risk presentation", () => {
       dangerous.terminalExecution,
       "dangerous-blocked"
     );
+    assert.strictEqual(dangerous.protectedPathBoundary, "enforced");
   });
 });

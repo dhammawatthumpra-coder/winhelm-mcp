@@ -104,6 +104,9 @@ export type TerminalExecutionState =
 export interface RuntimeRiskState {
   available: true;
   maxAutoPolicyRisk: ToolRiskClass | null;
+  protectedPathBoundary:
+    | "enforced"
+    | "terminal-command-outside-boundary";
   policyByRisk: Record<
     ToolRiskClass,
     { auto: number; ask: number; off: number; unknown: number }
@@ -131,6 +134,14 @@ function terminalExecutionState(
     case "dangerous":
       return "dangerous-blocked";
   }
+}
+
+function protectedPathBoundaryState(
+  mode: SchemaV2PermissionConfig["terminal"]["mode"]
+): RuntimeRiskState["protectedPathBoundary"] {
+  return mode === "ask" || mode === "full"
+    ? "terminal-command-outside-boundary"
+    : "enforced";
 }
 
 function emptyRiskCounts(): RuntimeRiskState["policyByRisk"] {
@@ -171,6 +182,8 @@ export function summarizeRuntimeRisk(
   return {
     available: true,
     maxAutoPolicyRisk,
+    protectedPathBoundary:
+      protectedPathBoundaryState(config.terminal.mode),
     policyByRisk,
     terminalExecution: terminalExecutionState(config.terminal.mode),
     terminalMode: config.terminal.mode,
