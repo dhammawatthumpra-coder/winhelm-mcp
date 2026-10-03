@@ -4,6 +4,7 @@ import {
 } from "./control-client.js";
 
 export const CONTROL_CLI_COMMANDS = new Set([
+  "status",
   "jobs",
   "approve",
   "deny",
@@ -47,6 +48,10 @@ export async function runControlCliCommand(
     let requireInteractive = false;
 
     switch (command) {
+      case "status":
+        request = { command: "status" };
+        break;
+
       case "jobs":
         request = { command: "jobs" };
         break;
@@ -103,6 +108,14 @@ export async function runControlCliCommand(
           response?.error?.message ??
           response?.error?.code ??
           "WinHelm local control request failed.",
+      };
+    }
+
+    if (command === "status") {
+      return {
+        handled: true,
+        exitCode: 0,
+        output: JSON.stringify(response.status ?? {}, null, 2),
       };
     }
 

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { getAdminAuthManager } from "../admin/runtime.js";
+import { buildRuntimeStatusSnapshot } from "../status/runtime-status.js";
 
 export interface ControlServerOptions {
   metadataPath?: string;
@@ -161,6 +162,9 @@ export class LocalControlServer {
     }
 
     switch (request.command) {
+      case "status":
+        return { ok: true, status: buildRuntimeStatusSnapshot() };
+
       case "jobs":
         return { ok: true, jobs: getApprovalEngine().list() };
 

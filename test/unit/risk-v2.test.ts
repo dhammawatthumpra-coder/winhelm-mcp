@@ -8,7 +8,9 @@ import {
   getDesktopDataDisclosure,
   getToolRiskClass,
   getToolRiskPresentation,
+  summarizeRuntimeRisk,
 } from "../../src/permissions/risk.js";
+import { buildPresetConfig } from "../../src/permissions/presets.js";
 
 describe("Approval risk presentation", () => {
   it("maps representative tools to Appendix A R0-R5 classes", () => {
@@ -64,5 +66,36 @@ describe("Approval risk presentation", () => {
     const risk = getToolRiskPresentation("future_unknown_tool");
     assert.strictEqual(risk.class, "R5");
     assert.strictEqual(risk.level, "high");
+  });
+
+  it("summarizes automatic policy risk separately from terminal execution", () => {
+    const safe = summarizeRuntimeRisk(
+      buildPresetConfig("safe", { folders: ["D:\\Workspace"] })
+    );
+    assert.strictEqual(safe.maxAutoPolicyRisk, "R0");
+    assert.strictEqual(safe.terminalExecution, "disabled");
+    assert.strictEqual(safe.readwriteFolderCount, 0);
+    assert.strictEqual(safe.totalFolderCount, 1);
+
+    const balanced = summarizeRuntimeRisk(
+      buildPresetConfig("balanced", { folders: ["D:\\Workspace"] })
+    );
+    assert.strictEqual(balanced.maxAutoPolicyRisk, "R1");
+    assert.strictEqual(
+      balanced.terminalExecution,
+      "approval-required"
+    );
+    assert.strictEqual(balanced.readwriteFolderCount, 1);
+
+    const power = summarizeRuntimeRisk(
+      buildPresetConfig("power", { folders: ["D:\\Workspace"] })
+    );
+    assert.strictEqual(power.maxAutoPolicyRisk, "R2");
+    assert.strictEqual(
+      power.terminalExecution,
+      "unrestricted-auto"
+    );
+    assert.ok(power.policyByRisk.R3.ask > 0);
+    assert.ok(power.policyByRisk.R4.ask > 0);
   });
 });

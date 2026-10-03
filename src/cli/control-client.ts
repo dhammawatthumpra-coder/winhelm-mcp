@@ -9,7 +9,7 @@ export interface ControlClientOptions {
 }
 
 export interface ControlCommand {
-  command: "jobs" | "approve" | "deny" | "admin-code";
+  command: "status" | "jobs" | "approve" | "deny" | "admin-code";
   jobId?: string;
   refresh?: boolean;
 }
