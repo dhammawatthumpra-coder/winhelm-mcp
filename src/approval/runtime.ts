@@ -6,6 +6,18 @@ import {
 } from "./approval-engine.js";
 import { notifyApprovalPending } from "./notify.js";
 import {
+  logApprovalDecision,
+  type ApprovalDecision,
+} from "./audit.js";
+
+const defaultDecisionSink = (
+  job: ApprovalJob,
+  decision: ApprovalDecision,
+  channel: string
+): void => {
+  logApprovalDecision(job, decision, { channel });
+};
+import {
   ApprovalJournal,
   defaultApprovalJournalPath,
   type ApprovalJournalIntegrityFailure,
@@ -47,6 +59,18 @@ export interface ApprovalPersistenceOptions {
   notifyApprovals?: boolean;
   /** Notification adapter; defaults to WinHelm's own desktop toast. */
   notifier?: (job: ApprovalJob) => void;
+  /**
+   * Write an audit record for every terminal approval decision, including the
+   * decision latency. Off by default so tests and library callers do not append
+   * to the audit log.
+   */
+  auditDecisions?: boolean;
+  /** Audit sink; defaults to the append-only audit log. */
+  decisionSink?: (
+    job: ApprovalJob,
+    decision: ApprovalDecision,
+    channel: string
+  ) => void;
 }
 
 /**
@@ -72,6 +96,21 @@ export function initializeApprovalPersistence(
       ? {
           onCreated: (job: ApprovalJob) => {
             (options.notifier ?? notifyApprovalPending)(job);
+          },
+        }
+      : {}),
+    ...(options.auditDecisions
+      ? {
+          onDecision: (
+            job: ApprovalJob,
+            decision: ApprovalDecision,
+            channel: string
+          ) => {
+            (options.decisionSink ?? defaultDecisionSink)(
+              job,
+              decision,
+              channel
+            );
           },
         }
       : {}),

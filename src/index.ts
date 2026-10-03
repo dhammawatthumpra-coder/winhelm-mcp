@@ -106,7 +106,7 @@ async function main() {
 
   const approvalPersistence = initializeApprovalPersistence(
     defaultApprovalJournalPath(),
-    { notifyApprovals: true }
+    { notifyApprovals: true, auditDecisions: true }
   );
   if (approvalPersistence.integrityFailure) {
     console.error(

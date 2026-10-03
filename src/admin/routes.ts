@@ -992,7 +992,7 @@ export function registerAdminRoutes(app: Express): void {
         structuredError(res, 400, "INVALID_ARGUMENT", "A valid jobId is required.");
         return;
       }
-      const outcome = getApprovalEngine().approve(jobId);
+      const outcome = getApprovalEngine().approve(jobId, "dashboard");
       if (!outcome.ok) {
         structuredError(
           res,
@@ -1021,7 +1021,7 @@ export function registerAdminRoutes(app: Express): void {
         structuredError(res, 400, "INVALID_ARGUMENT", "A valid jobId is required.");
         return;
       }
-      const outcome = getApprovalEngine().deny(jobId);
+      const outcome = getApprovalEngine().deny(jobId, "dashboard");
       if (!outcome.ok) {
         structuredError(
           res,
