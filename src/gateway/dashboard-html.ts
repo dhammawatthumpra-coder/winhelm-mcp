@@ -66,6 +66,16 @@ export function getDashboardHtml(
     tokenLoading: t("dashboard.token.loading"),
     tokenNew: t("dashboard.token.new"),
     tokenOnce: t("dashboard.token.once"),
+    teachTitle: t("dashboard.teach.title"),
+    teachIntro: t("dashboard.teach.intro"),
+    teachExamples: t("dashboard.teach.examples"),
+    teachExample1: t("dashboard.teach.example1"),
+    teachExample2: t("dashboard.teach.example2"),
+    teachInstructions: t("dashboard.teach.instructions"),
+    teachInstructionText: t("dashboard.teach.instructionText"),
+    teachClaudeTip: t("dashboard.teach.claudeTip"),
+    teachSandboxHint: t("dashboard.teach.sandboxHint"),
+    teachCopy: t("dashboard.teach.copy"),
   };
   const dashboardMessagesScript = `const DASHBOARD_MESSAGES = ${JSON.stringify({
     fullWarn: uiMessages.fullWarn,
@@ -82,6 +92,8 @@ export function getDashboardHtml(
     tokenLoading: uiMessages.tokenLoading,
     tokenNew: uiMessages.tokenNew,
     tokenOnce: uiMessages.tokenOnce,
+    teachCopied: t("dashboard.teach.copied"),
+    teachCopyFailed: t("dashboard.teach.copyFailed"),
   }).replace(/</g, "\\u003c")};`;
   const schemaV2Surface = schemaMode !== "legacy";
   const legacyActiveTools = new Set<string>([
@@ -684,6 +696,45 @@ export function getDashboardHtml(
       </div>
     </div>
 
+    <!-- Wizard step 5: test and teach the AI -->
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-title">
+        <span>${escapeHtml(uiMessages.teachTitle)}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.55;">
+        ${escapeHtml(uiMessages.teachIntro)}
+      </div>
+
+      <div style="margin-top:14px;font-weight:600;font-size:13px;">
+        ${escapeHtml(uiMessages.teachExamples)}
+      </div>
+      <div class="permission-summary" id="teachExamples">
+        <div>${escapeHtml(uiMessages.teachExample1)}</div>
+        <div style="margin-top:6px;">${escapeHtml(uiMessages.teachExample2)}</div>
+      </div>
+      <div class="permissions-actions">
+        <button onclick="copyTeachBlock('teachExamples')">${escapeHtml(uiMessages.teachCopy)}</button>
+      </div>
+
+      <div style="margin-top:14px;font-weight:600;font-size:13px;">
+        ${escapeHtml(uiMessages.teachInstructions)}
+      </div>
+      <div class="permission-summary" id="teachInstructions">
+        ${escapeHtml(uiMessages.teachInstructionText)}
+      </div>
+      <div class="permissions-actions">
+        <button onclick="copyTeachBlock('teachInstructions')">${escapeHtml(uiMessages.teachCopy)}</button>
+        <span id="teachCopyStatus" style="font-size:12px;color:var(--text-muted);align-self:center;"></span>
+      </div>
+
+      <div style="margin-top:14px;font-size:12px;color:var(--text-muted);line-height:1.55;">
+        ${escapeHtml(uiMessages.teachClaudeTip)}
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted);line-height:1.55;">
+        ${escapeHtml(uiMessages.teachSandboxHint)}
+      </div>
+    </div>
+
     <!-- Top Metrics -->
     <div class="grid">
       <!-- Card 1: Server Status -->
@@ -1195,6 +1246,20 @@ export function getDashboardHtml(
         target.className = 'admin-error';
         target.textContent =
           (err.code ? err.code + ': ' : '') + (err.message || String(err));
+      }
+    }
+
+    async function copyTeachBlock(elementId) {
+      const status = document.getElementById('teachCopyStatus');
+      const source = document.getElementById(elementId);
+      const text = source ? String(source.textContent || '').trim() : '';
+      if (!text) return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        if (status) status.textContent = DASHBOARD_MESSAGES.teachCopied;
+      } catch (err) {
+        if (status) status.textContent = DASHBOARD_MESSAGES.teachCopyFailed;
       }
     }
 
