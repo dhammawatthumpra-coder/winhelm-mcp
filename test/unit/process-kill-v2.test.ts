@@ -17,7 +17,9 @@ import { taskManager } from "../../src/engine/task-manager.js";
 
 async function waitForApprovalJob(
   tool: string,
-  timeoutMs = 5000
+  // The identity probe itself may take up to its 5s PowerShell budget before
+  // the approval job is created, so this wait must exceed that budget.
+  timeoutMs = 20000
 ): Promise<any> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
