@@ -2,6 +2,7 @@ import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { StreamableGateway } from "../../src/gateway/streamable-gateway.js";
 import { SseGateway } from "../../src/gateway/sse-gateway.js";
+import { getApprovalEngine, resetApprovalEngine } from "../../src/approval/runtime.js";
 
 describe("Session Lifecycle & Eviction Engine", () => {
   it("should evict idle sessions in StreamableGateway when exceeding idle timeout", async () => {
@@ -146,6 +147,68 @@ describe("Session Lifecycle & Eviction Engine", () => {
       assert.strictEqual(gateway.getActiveSessionCount(), 0, "No server should be created or tracked for missing session");
     } finally {
       await gateway.closeAll();
+    }
+  });
+
+  it("should cancel pending approval jobs when StreamableGateway evicts an idle session", async () => {
+    resetApprovalEngine();
+    const gateway = new StreamableGateway(50, 10);
+
+    try {
+      const created = getApprovalEngine().request({
+        tool: "screen_capture",
+        args: {},
+        sessionId: "sess-approval-idle",
+        ttlMs: 180_000,
+        maxPending: 5,
+        execute: async () => "should-not-run",
+      });
+
+      gateway.registerSessionForTest("sess-approval-idle", {
+        lastActivityAt: Date.now() - 100,
+      });
+
+      assert.strictEqual(
+        getApprovalEngine().get(created.job.id)?.state,
+        "awaiting_approval"
+      );
+
+      gateway.cleanupIdleSessions();
+
+      assert.strictEqual(
+        getApprovalEngine().get(created.job.id)?.state,
+        "cancelled"
+      );
+    } finally {
+      await gateway.closeAll();
+      resetApprovalEngine();
+    }
+  });
+
+  it("should cancel pending approval jobs on SseGateway closeAll", async () => {
+    resetApprovalEngine();
+    const sse = new SseGateway(60_000, 10);
+
+    try {
+      const created = getApprovalEngine().request({
+        tool: "http_request",
+        args: { url: "https://example.com" },
+        sessionId: "sse-approval-close",
+        ttlMs: 180_000,
+        maxPending: 5,
+        execute: async () => "should-not-run",
+      });
+
+      sse.registerSessionForTest("sse-approval-close");
+      await sse.closeAll();
+
+      assert.strictEqual(
+        getApprovalEngine().get(created.job.id)?.state,
+        "cancelled"
+      );
+    } finally {
+      await sse.closeAll();
+      resetApprovalEngine();
     }
   });
 
