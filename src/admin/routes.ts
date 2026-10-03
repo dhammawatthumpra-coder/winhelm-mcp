@@ -20,6 +20,7 @@ import {
   getDesktopDataDisclosure,
   getToolRiskPresentation,
 } from "../permissions/risk.js";
+import { getSessionClientInfo } from "../gateway/session-context.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
   isLoopbackOrigin,
@@ -177,6 +178,7 @@ function adminApprovalView(job: any): Record<string, unknown> {
     tool: job.tool,
     args: sanitizeObject(job.args ?? {}),
     sessionId: hashSessionId(job.sessionId),
+    clientInfo: getSessionClientInfo(job.sessionId) ?? null,
     createdAt: job.createdAt,
     expiresAt: job.expiresAt,
     updatedAt: job.updatedAt,

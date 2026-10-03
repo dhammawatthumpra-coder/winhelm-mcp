@@ -1011,13 +1011,20 @@ export function getDashboardHtml(
 
           const meta = document.createElement('div');
           meta.className = 'approval-meta';
+          const client = job.clientInfo || null;
+          const clientText = client && client.name
+            ? String(client.name) +
+              (client.version ? ' ' + String(client.version) : '')
+            : 'unknown client';
           addTextElement(
             meta,
             'span',
-            'Job ' +
-              String(job.id || '') +
+            'From ' +
+              clientText +
               ' · session ' +
               String(job.sessionId || 'n/a') +
+              ' · job ' +
+              String(job.id || '') +
               ' · '
           );
           const countdown = addTextElement(

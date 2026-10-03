@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import http from "node:http";
 import { createServer } from "../../src/gateway/server.js";
+import { getSessionClientInfo } from "../../src/gateway/session-context.js";
 
 describe("SSE Gateway Integration", () => {
   const TEST_PORT = 18796;
@@ -53,6 +54,11 @@ describe("SSE Gateway Integration", () => {
 
     const { sseReq, messageUri } = await sseInitPromise;
     assert.ok(messageUri.includes("/message?sessionId="));
+    const sessionId = new URL(
+      messageUri,
+      `http://127.0.0.1:${TEST_PORT}`
+    ).searchParams.get("sessionId");
+    assert.ok(sessionId);
 
     // 2. Post initialize request
     const postRes = await fetch(`http://127.0.0.1:${TEST_PORT}${messageUri}`, {
@@ -71,8 +77,14 @@ describe("SSE Gateway Integration", () => {
     });
 
     assert.strictEqual(postRes.status, 202);
+    assert.deepStrictEqual(getSessionClientInfo(sessionId!), {
+      name: "sse-test-client",
+      version: "1.0",
+    });
 
-    // Clean up SSE connection
+    // Clean up SSE connection and ensure display metadata does not outlive it.
     sseReq.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.strictEqual(getSessionClientInfo(sessionId!), undefined);
   });
 });

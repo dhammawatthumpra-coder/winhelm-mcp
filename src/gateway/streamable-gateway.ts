@@ -6,16 +6,25 @@ import { registerAllTools } from "../tools/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { getProvenanceTracker } from "../approval/provenance.js";
+import {
+  clearSessionRuntimeContext,
+  normalizeClientInfo,
+  setServerRuntimeContext,
+  setSessionClientInfo,
+  type McpServerRuntimeContext,
+} from "./session-context.js";
 
 interface StreamableSession {
   transport: StreamableHTTPServerTransport;
   mcpServer: McpServer;
+  runtimeContext: McpServerRuntimeContext;
   lastActivityAt: number;
 }
 
 function clearStreamableSessionState(sessionId: string): void {
   getApprovalEngine().cancelSession(sessionId);
   getProvenanceTracker().clearSession(sessionId);
+  clearSessionRuntimeContext(sessionId);
 }
 
 export class StreamableGateway {
@@ -38,11 +47,14 @@ export class StreamableGateway {
     }
   }
 
-  private createMcpServerInstance(): McpServer {
+  private createMcpServerInstance(
+    runtimeContext: McpServerRuntimeContext
+  ): McpServer {
     const server = new McpServer({
       name: "winhelm-mcp",
       version: SERVER_VERSION,
     });
+    setServerRuntimeContext(server, runtimeContext);
     registerAllTools(server);
     return server;
   }
@@ -118,15 +130,19 @@ export class StreamableGateway {
         return;
       }
 
-      // Create a new session for initialize requests
-      const mcpServer = this.createMcpServerInstance();
+      // Create a new session for initialize requests. clientInfo is
+      // read from the SDK after initialization so the raw MCP stream remains untouched.
+      const runtimeContext: McpServerRuntimeContext = {};
+      const mcpServer = this.createMcpServerInstance(runtimeContext);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (newSessionId: string) => {
           this.evictOldestIfNeeded();
+          runtimeContext.sessionId = newSessionId;
           this.sessions.set(newSessionId, {
             transport,
             mcpServer,
+            runtimeContext,
             lastActivityAt: Date.now(),
           });
         },
@@ -154,6 +170,16 @@ export class StreamableGateway {
       await mcpServer.connect(transport);
 
       await transport.handleRequest(req, res);
+
+      if (transport.sessionId) {
+        const clientInfo = normalizeClientInfo(
+          mcpServer.server.getClientVersion()
+        );
+        if (clientInfo) {
+          runtimeContext.clientInfo = clientInfo;
+          setSessionClientInfo(transport.sessionId, clientInfo);
+        }
+      }
 
       // If transport.sessionId is still undefined after handleRequest
       // (not an initialize request or request was rejected/invalid), clean up immediately to prevent leaks
@@ -188,12 +214,18 @@ export class StreamableGateway {
 
   public registerSessionForTest(
     sessionId: string,
-    session: { transport?: any; mcpServer?: any; lastActivityAt?: number } = {}
+    session: {
+      transport?: any;
+      mcpServer?: any;
+      runtimeContext?: McpServerRuntimeContext;
+      lastActivityAt?: number;
+    } = {}
   ): void {
     this.evictOldestIfNeeded();
     this.sessions.set(sessionId, {
       transport: session.transport || ({} as any),
       mcpServer: session.mcpServer || ({ close: async () => {} } as any),
+      runtimeContext: session.runtimeContext ?? { sessionId },
       lastActivityAt: session.lastActivityAt ?? Date.now(),
     });
   }
