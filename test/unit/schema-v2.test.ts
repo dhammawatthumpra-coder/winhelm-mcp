@@ -166,6 +166,117 @@ describe("ConfigManager schema-v2 runtime mode", () => {
     );
   });
 
+  it("makes schema-v2 governed fields authoritative over legacy keys in the same raw file", async () => {
+    await withTempConfig(
+      "v2-wins-legacy.json",
+      {
+        schemaVersion: 2,
+        profilePreset: "balanced",
+        folders: [{ path: "D:\\V2Workspace", permission: "readwrite" }],
+        terminal: { mode: "ask" },
+        toolPolicy: { system_info: "auto" },
+        allowedDirectories: ["*"],
+        readOnly: true,
+        profile: "full",
+        customTools: ["process_kill"],
+      },
+      async (manager) => {
+        const effective = manager.getConfig();
+        assert.strictEqual(manager.getConfigMode(), "v2");
+        assert.strictEqual(manager.isReadOnly(), false);
+        assert.deepStrictEqual(effective.allowedDirectories, []);
+        assert.strictEqual(effective.profile, undefined);
+        assert.strictEqual(effective.customTools, undefined);
+        assert.deepStrictEqual(effective.folders, [
+          { path: "D:\\V2Workspace", permission: "readwrite" },
+        ]);
+        assert.deepStrictEqual(effective.terminal, { mode: "ask" });
+      }
+    );
+  });
+
+  it("maps MCP_ALLOWED_DIRECTORIES and MCP_READ_ONLY into schema-v2 folders/terminal", async () => {
+    const previousAllowed = process.env.MCP_ALLOWED_DIRECTORIES;
+    const previousReadOnly = process.env.MCP_READ_ONLY;
+    process.env.MCP_ALLOWED_DIRECTORIES = "D:\\EnvOne,D:\\EnvTwo";
+    process.env.MCP_READ_ONLY = "true";
+
+    try {
+      await withTempConfig(
+        "v2-env-map.json",
+        {
+          schemaVersion: 2,
+          profilePreset: "power",
+          folders: [{ path: "D:\\FileValue", permission: "readwrite" }],
+          terminal: { mode: "full" },
+          toolPolicy: { system_info: "auto" },
+        },
+        async (manager) => {
+          const effective = manager.getConfig();
+          assert.strictEqual(manager.getConfigMode(), "v2");
+          assert.deepStrictEqual(effective.folders, [
+            { path: "D:\\EnvOne", permission: "read" },
+            { path: "D:\\EnvTwo", permission: "read" },
+          ]);
+          assert.deepStrictEqual(effective.terminal, { mode: "off" });
+          assert.strictEqual(manager.isReadOnly(), false);
+          assert.deepStrictEqual(effective.allowedDirectories, []);
+        }
+      );
+    } finally {
+      if (previousAllowed === undefined) {
+        delete process.env.MCP_ALLOWED_DIRECTORIES;
+      } else {
+        process.env.MCP_ALLOWED_DIRECTORIES = previousAllowed;
+      }
+      if (previousReadOnly === undefined) {
+        delete process.env.MCP_READ_ONLY;
+      } else {
+        process.env.MCP_READ_ONLY = previousReadOnly;
+      }
+      ConfigManager.resetInstance();
+    }
+  });
+
+  it("maps MCP_ALLOWED_DIRECTORIES to readwrite folders in schema-v2 by default", async () => {
+    const previousAllowed = process.env.MCP_ALLOWED_DIRECTORIES;
+    const previousReadOnly = process.env.MCP_READ_ONLY;
+    process.env.MCP_ALLOWED_DIRECTORIES = "D:\\EnvWrite";
+    delete process.env.MCP_READ_ONLY;
+
+    try {
+      await withTempConfig(
+        "v2-env-readwrite.json",
+        {
+          schemaVersion: 2,
+          folders: [],
+          terminal: { mode: "ask" },
+          toolPolicy: { system_info: "auto" },
+        },
+        async (manager) => {
+          assert.deepStrictEqual(manager.getConfig().folders, [
+            { path: "D:\\EnvWrite", permission: "readwrite" },
+          ]);
+          assert.deepStrictEqual(manager.getConfig().terminal, {
+            mode: "ask",
+          });
+        }
+      );
+    } finally {
+      if (previousAllowed === undefined) {
+        delete process.env.MCP_ALLOWED_DIRECTORIES;
+      } else {
+        process.env.MCP_ALLOWED_DIRECTORIES = previousAllowed;
+      }
+      if (previousReadOnly === undefined) {
+        delete process.env.MCP_READ_ONLY;
+      } else {
+        process.env.MCP_READ_ONLY = previousReadOnly;
+      }
+      ConfigManager.resetInstance();
+    }
+  });
+
   it("syncs ui.language from config into runtime i18n selection", async () => {
     const previous = process.env.WINHELM_LOCALE;
     delete process.env.WINHELM_LOCALE;
