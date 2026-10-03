@@ -11,6 +11,10 @@ import {
 import { evaluateTerminalMode, evaluateToolPolicy } from "../../src/permissions/policy.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAllTools } from "../../src/tools/index.js";
+import {
+  getApprovalEngine,
+  resetApprovalEngine,
+} from "../../src/approval/runtime.js";
 
 describe("Schema-v2 configuration primitives", () => {
   it("keeps the v1.2.1 default config on the legacy path", () => {
@@ -217,37 +221,70 @@ describe("ConfigManager schema-v2 runtime mode", () => {
           http_request: "ask",
           process_kill: "off",
         },
+        approval: {
+          channels: ["dashboard"],
+          blockHoldMs: 1000,
+          jobTtlMs: 30000,
+          maxPending: 5,
+        },
       },
       async () => {
+        resetApprovalEngine();
         const server = new McpServer({ name: "schema-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 38);
+        assert.strictEqual(Object.keys(tools).length, 40);
 
         const autoResult = await tools["system_info"].handler({}, {});
         assert.notStrictEqual(autoResult.isError, true);
 
-        const askResult = await tools["http_request"].handler(
+        const askPromise = tools["http_request"].handler(
           { url: "http://127.0.0.1:1/" },
-          {}
+          {
+            sessionId: "test-session",
+            requestId: 101,
+            signal: new AbortController().signal,
+          }
         );
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const httpJob = getApprovalEngine()
+          .list()
+          .find((job) => job.tool === "http_request");
+        assert.ok(httpJob);
+        assert.strictEqual(httpJob.state, "awaiting_approval");
+        assert.strictEqual(httpJob.executionCount, 0);
+        assert.strictEqual(getApprovalEngine().deny(httpJob.id).ok, true);
+
+        const askResult = await askPromise;
         assert.strictEqual(askResult.isError, true);
         const askPayload = JSON.parse(askResult.content[0].text);
-        assert.strictEqual(askPayload.error.code, "APPROVAL_REQUIRED");
-        assert.strictEqual(askPayload.error.details.tool, "http_request");
+        assert.strictEqual(askPayload.error.code, "PERMISSION_DENIED");
 
         const offResult = await tools["process_kill"].handler({ pid: 4 }, {});
         assert.strictEqual(offResult.isError, true);
         const offPayload = JSON.parse(offResult.content[0].text);
         assert.strictEqual(offPayload.error.code, "TOOL_POLICY_OFF");
 
-        const terminalAsk = await tools["terminal_run"].handler(
+        const terminalPromise = tools["terminal_run"].handler(
           { command: "Write-Output should-not-run" },
-          {}
+          {
+            sessionId: "test-session",
+            requestId: 102,
+            signal: new AbortController().signal,
+          }
         );
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const terminalJob = getApprovalEngine()
+          .list()
+          .find((job) => job.tool === "terminal_run");
+        assert.ok(terminalJob);
+        assert.strictEqual(terminalJob.executionCount, 0);
+        assert.strictEqual(getApprovalEngine().deny(terminalJob.id).ok, true);
+
+        const terminalAsk = await terminalPromise;
         assert.strictEqual(terminalAsk.isError, true);
         const terminalPayload = JSON.parse(terminalAsk.content[0].text);
-        assert.strictEqual(terminalPayload.error.code, "APPROVAL_REQUIRED");
+        assert.strictEqual(terminalPayload.error.code, "PERMISSION_DENIED");
       }
     );
   });
@@ -264,7 +301,7 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const server = new McpServer({ name: "invalid-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 38);
+        assert.strictEqual(Object.keys(tools).length, 40);
 
         const result = await tools["system_info"].handler({}, {});
         assert.strictEqual(result.isError, true);

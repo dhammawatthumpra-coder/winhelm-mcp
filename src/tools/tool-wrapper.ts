@@ -4,6 +4,9 @@ import { ConfigManager } from "../config/config-manager.js";
 import { isToolInProfile } from "../config/profiles.js";
 import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import { evaluateSchemaV2ToolAccess } from "../permissions/tool-access.js";
+import { getApprovalEngine } from "../approval/runtime.js";
+import { runToolWithHybridApproval } from "../approval/tool-flow.js";
+import { isRecoveryToolName } from "./registry.js";
 
 function createPolicyError(
   code: string,
@@ -58,6 +61,7 @@ export function registerTracedTool(
   const configManager = ConfigManager.getInstance();
   const config = configManager.getConfig();
   const configMode = configManager.getConfigMode();
+  const recoveryTool = isRecoveryToolName(name);
 
   if (configMode === "legacy") {
     const profile = config.profile || "full";
@@ -72,8 +76,9 @@ export function registerTracedTool(
 
     const liveConfigManager = ConfigManager.getInstance();
     const liveMode = liveConfigManager.getConfigMode();
+    let executeTool = () => handler(args, extra);
 
-    if (liveMode === "invalid") {
+    if (liveMode === "invalid" && !recoveryTool) {
       return logAndReturnPolicyError(
         name,
         startTime,
@@ -84,7 +89,7 @@ export function registerTracedTool(
       );
     }
 
-    if (liveMode === "v2") {
+    if (liveMode === "v2" && !recoveryTool) {
       const liveConfig =
         liveConfigManager.getConfig() as unknown as SchemaV2PermissionConfig;
       const access = evaluateSchemaV2ToolAccess(name, args ?? {}, liveConfig);
@@ -111,19 +116,35 @@ export function registerTracedTool(
       }
 
       if (access.decision === "ask") {
-        return logAndReturnPolicyError(
-          name,
-          startTime,
-          "APPROVAL_REQUIRED",
-          access.reason,
-          access.userAction ?? "Approve this action in WinHelm.",
-          { tool: name, approvalEngine: "pending" }
-        );
+        const executionController = new AbortController();
+        const executionExtra = {
+          ...extra,
+          signal: executionController.signal,
+        };
+        const requestId =
+          typeof extra?.requestId === "string" ||
+          typeof extra?.requestId === "number"
+            ? extra.requestId
+            : undefined;
+
+        executeTool = () =>
+          runToolWithHybridApproval({
+            engine: getApprovalEngine(),
+            tool: name,
+            args: args ?? {},
+            approval: liveConfig.approval,
+            context: {
+              sessionId: extra?.sessionId,
+              requestId,
+              signal: extra?.signal,
+            },
+            execute: () => handler(args, executionExtra),
+          });
       }
     }
 
     try {
-      const res = await handler(args, extra);
+      const res = await executeTool();
       const durationMs = Date.now() - startTime;
 
       if (res && res.isError) {

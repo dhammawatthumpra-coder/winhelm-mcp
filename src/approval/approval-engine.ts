@@ -215,6 +215,21 @@ export class ApprovalEngine {
     return job;
   }
 
+  findForSessionByIdempotencyKey(
+    idempotencyKey: string,
+    sessionId: string
+  ): ApprovalJob | undefined {
+    this.expireDueJobs();
+    const match = [...this.jobs.values()]
+      .filter(
+        (job) =>
+          job.sessionId === sessionId &&
+          job.args.idempotencyKey === idempotencyKey
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    return match ? publicJob(match) : undefined;
+  }
+
   list(): ApprovalJob[] {
     this.expireDueJobs();
     return [...this.jobs.values()]
