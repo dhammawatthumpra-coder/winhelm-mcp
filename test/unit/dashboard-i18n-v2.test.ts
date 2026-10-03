@@ -83,4 +83,69 @@ describe("Dashboard baseline message locale", () => {
     );
     assert.ok(thai.includes("' · ' + DASHBOARD_MESSAGES.expiry"));
   });
+
+  it("localizes the admin unlock and approval decision surface", () => {
+    const keys = [
+      "dashboard.admin.locked",
+      "dashboard.admin.instructions",
+      "dashboard.admin.placeholder",
+      "dashboard.admin.unlock",
+      "dashboard.admin.loading",
+      "dashboard.approvals.title",
+      "dashboard.approvals.note",
+    ] as const;
+
+    const thai = withLocale("th", () =>
+      getDashboardHtml("full", { schemaMode: "v2" })
+    );
+    const english = withLocale("en", () =>
+      getDashboardHtml("full", { schemaMode: "v2" })
+    );
+
+    for (const key of keys) {
+      const th = translate(key, {}, "th");
+      const en = translate(key, {}, "en");
+      assert.ok(
+        thai.includes(escapeHtml(th)),
+        `${key} must render the Thai message`
+      );
+      assert.ok(
+        english.includes(escapeHtml(en)),
+        `${key} must render the English message`
+      );
+      // Short English words also appear inside script identifiers, so only
+      // distinctive messages are checked for leaks.
+      if (en.length >= 12) {
+        assert.strictEqual(
+          thai.includes(escapeHtml(en)),
+          false,
+          `${key} must not leak the English message in Thai mode`
+        );
+      }
+    }
+  });
+
+  it("ships the interactive approval strings to the live script", () => {
+    const thai = withLocale("th", () =>
+      getDashboardHtml("full", FULL_MODE)
+    );
+
+    for (const key of [
+      "dashboard.admin.code_hint",
+      "dashboard.admin.unlocked",
+      "dashboard.approvals.empty",
+      "dashboard.approvals.approve",
+      "dashboard.approvals.deny",
+    ] as const) {
+      assert.ok(
+        thai.includes(
+          JSON.stringify(translate(key, {}, "th")).replace(
+            /</g,
+            "\\u003c"
+          )
+        ),
+        `${key} must be injected into DASHBOARD_MESSAGES`
+      );
+    }
+  });
 });

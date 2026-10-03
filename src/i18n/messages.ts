@@ -13,6 +13,30 @@ export const EN_MESSAGES = {
     "An AI action is waiting for your approval in WinHelm.",
   "notify.approval.action":
     "Open WinHelm",
+  "dashboard.admin.locked":
+    "Locked · local admin code required",
+  "dashboard.admin.unlocked":
+    "Unlocked · local admin session",
+  "dashboard.admin.instructions":
+    "Run winhelm admin-code in a local terminal, then enter the one-time code here. The admin credential is separate from MCP authentication. Never paste the code into an AI chat.",
+  "dashboard.admin.placeholder":
+    "One-time admin code",
+  "dashboard.admin.unlock":
+    "Unlock",
+  "dashboard.admin.code_hint":
+    'Enter the one-time code from "winhelm admin-code".',
+  "dashboard.admin.loading":
+    "Unlock completed. Loading current permissions…",
+  "dashboard.approvals.title":
+    "Approval Jobs",
+  "dashboard.approvals.note":
+    "Pending approvals are local-only. Arguments are displayed as text, never rendered as HTML/Markdown.",
+  "dashboard.approvals.empty":
+    "No approval jobs.",
+  "dashboard.approvals.approve":
+    "Approve",
+  "dashboard.approvals.deny":
+    "Deny",
 
   "action.folder.readwrite":
     "Choose a readwrite folder or change its permission in WinHelm settings.",
@@ -78,6 +102,30 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "มีคำสั่งจาก AI รอการอนุมัติของคุณใน WinHelm",
   "notify.approval.action":
     "เปิด WinHelm",
+  "dashboard.admin.locked":
+    "ล็อกอยู่ · ต้องใช้รหัสผู้ดูแลในเครื่อง",
+  "dashboard.admin.unlocked":
+    "ปลดล็อกแล้ว · เซสชันผู้ดูแลในเครื่อง",
+  "dashboard.admin.instructions":
+    "รัน winhelm admin-code ในเทอร์มินัลบนเครื่องนี้ แล้วกรอกรหัสใช้ครั้งเดียวที่นี่ รหัสผู้ดูแลแยกจากรหัส MCP และห้ามวางรหัสลงในแชต AI",
+  "dashboard.admin.placeholder":
+    "รหัสผู้ดูแลใช้ครั้งเดียว",
+  "dashboard.admin.unlock":
+    "ปลดล็อก",
+  "dashboard.admin.code_hint":
+    'กรอกรหัสใช้ครั้งเดียวจาก "winhelm admin-code"',
+  "dashboard.admin.loading":
+    "ปลดล็อกแล้ว กำลังโหลดสิทธิ์ปัจจุบัน…",
+  "dashboard.approvals.title":
+    "งานที่รออนุมัติ",
+  "dashboard.approvals.note":
+    "งานที่รออนุมัติดูได้เฉพาะในเครื่องนี้ และอาร์กิวเมนต์แสดงเป็นข้อความเท่านั้น ไม่เรนเดอร์เป็น HTML/Markdown",
+  "dashboard.approvals.empty":
+    "ไม่มีงานที่รออนุมัติ",
+  "dashboard.approvals.approve":
+    "อนุมัติ",
+  "dashboard.approvals.deny":
+    "ปฏิเสธ",
 
   "action.folder.readwrite":
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",
