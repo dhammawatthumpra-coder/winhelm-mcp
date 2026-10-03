@@ -154,7 +154,16 @@ export function createServer(options: ServerOptions): {
   app.set("trust proxy", "loopback");
   const configManager = ConfigManager.getInstance();
   const config = configManager.getConfig();
-  const authToken = options.authToken !== undefined ? options.authToken : config.authToken;
+  const configuredAuthToken = options.authToken !== undefined ? options.authToken : config.authToken;
+  // Keep the live holder in step with the effective token so an admin rotation
+  // has a defined "current" value from the first request onward.
+  if (configuredAuthToken) {
+    configManager.setRuntimeAuthToken(configuredAuthToken);
+  }
+  // The startup shape decides which guards are registered, but every comparison
+  // reads the current token so an admin rotation takes effect immediately.
+  const currentAuthToken = (): string | null | undefined =>
+    configManager.getRuntimeAuthToken() ?? configuredAuthToken;
 
   // 1. Global Security Headers (Prevent MIME sniffing and Clickjacking)
   app.use((_req: Request, res: Response, next: NextFunction) => {
@@ -181,7 +190,7 @@ export function createServer(options: ServerOptions): {
   });
 
   // 3. Remote Proxy / Tunnel Security Guard (Fail-closed when no auth token is configured)
-  if (!authToken) {
+  if (!configuredAuthToken) {
     app.use((req: Request, res: Response, next: NextFunction) => {
       if (req.headers["x-forwarded-for"] || req.headers["forwarded"]) {
         logger.security(
@@ -321,7 +330,7 @@ export function createServer(options: ServerOptions): {
       return res.status(403).json({ error: "Forbidden: Origin not permitted by WinHelm security policy" });
     }
 
-    if (!authToken) {
+    if (!configuredAuthToken) {
       const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
       res.setHeader(
         "Set-Cookie",
@@ -337,8 +346,11 @@ export function createServer(options: ServerOptions): {
     }
 
     // Accept either a single-use exchange token (invalidates immediately) or the master authToken
+    const exchangeActiveToken = currentAuthToken();
     const isOneTimeValid = sessionManager.consumeExchangeToken(providedToken);
-    const isMasterValid = safeCompare(providedToken, authToken);
+    const isMasterValid = exchangeActiveToken
+      ? safeCompare(providedToken, exchangeActiveToken)
+      : false;
 
     if (!isOneTimeValid && !isMasterValid) {
       logger.security("Token exchange failed: Invalid or expired token", `IP: ${req.ip}`);
@@ -392,7 +404,7 @@ export function createServer(options: ServerOptions): {
   });
 
   // Bearer & Ephemeral Session Authentication Guard
-  if (authToken) {
+  if (configuredAuthToken) {
     logger.security("Bearer & Ephemeral Session authentication guard is ACTIVE");
     app.use((req: Request, res: Response, next: NextFunction) => {
       // Allow only lightweight public endpoints: health check, auth exchange, logout, and security.txt
@@ -407,8 +419,13 @@ export function createServer(options: ServerOptions): {
       }
 
       // 1. Check standard Authorization header (timing-safe comparison)
+      const headerToken = currentAuthToken();
       const authHeader = req.headers.authorization;
-      if (authHeader && safeCompare(authHeader, `Bearer ${authToken}`)) {
+      if (
+        headerToken &&
+        authHeader &&
+        safeCompare(authHeader, `Bearer ${headerToken}`)
+      ) {
         return next();
       }
 
@@ -451,8 +468,11 @@ export function createServer(options: ServerOptions): {
         const acceptHeader = req.headers["accept"] || "";
 
         // Check if queryToken is a one-time exchange token (single-use) or master authToken
+        const queryActiveToken = currentAuthToken();
         const isOneTimeValid = sessionManager.consumeExchangeToken(queryToken);
-        const isMasterValid = safeCompare(queryToken, authToken);
+        const isMasterValid = queryActiveToken
+          ? safeCompare(queryToken, queryActiveToken)
+          : false;
 
         if (isOneTimeValid || isMasterValid) {
           // For MCP protocol endpoints (/mcp, /sse, /message), permit with query token
@@ -507,7 +527,8 @@ export function createServer(options: ServerOptions): {
         const legacyMatch = cookieHeader.match(/(?:^|;\s*)authToken=([^;]+)/);
         if (legacyMatch) {
           const legacyVal = decodeURIComponent(legacyMatch[1]);
-          if (safeCompare(legacyVal, authToken)) {
+          const legacyActiveToken = currentAuthToken();
+          if (legacyActiveToken && safeCompare(legacyVal, legacyActiveToken)) {
             logger.security("Deprecated authToken cookie used; upgrading to ephemeral session", `IP: ${req.ip}`);
             const sessionId = sessionManager.createSession({ ip: req.ip, userAgent: req.get("user-agent") });
             const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
@@ -689,7 +710,7 @@ export function createServer(options: ServerOptions): {
         configManager.setRuntimeEffectivePort(effectivePort);
         configManager.startWatchingConfig();
 
-        const startupToken = authToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
+        const startupToken = configuredAuthToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
         const monitorUrl = startupToken
           ? `http://localhost:${effectivePort}/?exchange=${startupToken}`
           : `http://localhost:${effectivePort}/`;

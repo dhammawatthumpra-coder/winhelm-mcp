@@ -73,6 +73,11 @@ function tempFilePath(targetPath: string): string {
   );
 }
 
+export interface AtomicWriteOptions {
+  /** POSIX permission bits for the temporary file before it is renamed. */
+  mode?: number;
+}
+
 /**
  * Atomically replace a UTF-8 text file.
  *
@@ -82,7 +87,8 @@ function tempFilePath(targetPath: string): string {
  */
 export async function atomicWriteUtf8(
   targetPath: string,
-  content: string
+  content: string,
+  options: AtomicWriteOptions = {}
 ): Promise<AtomicWriteResult> {
   const resolved = path.resolve(targetPath);
   const dir = path.dirname(resolved);
@@ -92,7 +98,7 @@ export async function atomicWriteUtf8(
   let handle: fs.FileHandle | undefined;
 
   try {
-    handle = await fs.open(temporary, "wx");
+    handle = await fs.open(temporary, "wx", options.mode);
     await handle.writeFile(content, {
       encoding: "utf8",
     });

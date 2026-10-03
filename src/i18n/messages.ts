@@ -45,6 +45,20 @@ export const EN_MESSAGES = {
     "No session has announced clientInfo yet.",
   "dashboard.clients.loading":
     "Loading…",
+  "dashboard.token.title":
+    "MCP Access Token",
+  "dashboard.token.note":
+    "Rotating replaces the bearer token immediately: clients still using the old token fail on their next request. Dashboard session cookies issued earlier stay valid for up to 15 minutes.",
+  "dashboard.token.rotate":
+    "Rotate token",
+  "dashboard.token.confirm":
+    "Rotate the MCP access token now? The previous token stops working immediately.",
+  "dashboard.token.loading":
+    "Rotating…",
+  "dashboard.token.new":
+    "New token (shown once) — copy it into your MCP clients:",
+  "dashboard.token.once":
+    "It will not be shown again. Store it in a password manager, not in this chat.",
 
   "action.folder.readwrite":
     "Choose a readwrite folder or change its permission in WinHelm settings.",
@@ -142,6 +156,20 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "ยังไม่มี session ที่แจ้ง clientInfo",
   "dashboard.clients.loading":
     "กำลังโหลด…",
+  "dashboard.token.title":
+    "โทเคนสำหรับเชื่อมต่อ MCP",
+  "dashboard.token.note":
+    "การหมุนจะเปลี่ยน bearer token ทันที ไคลเอนต์ที่ยังใช้โทเคนเดิมจะล้มเหลวในคำขอถัดไป ส่วนคุกกี้เซสชันของ Dashboard ที่ออกไว้ก่อนหน้าจะยังใช้ได้ไม่เกิน 15 นาที",
+  "dashboard.token.rotate":
+    "หมุนโทเคน",
+  "dashboard.token.confirm":
+    "หมุนโทเคน MCP ตอนนี้หรือไม่? โทเคนเดิมจะใช้ไม่ได้ทันที",
+  "dashboard.token.loading":
+    "กำลังหมุนโทเคน…",
+  "dashboard.token.new":
+    "โทเคนใหม่ (แสดงครั้งเดียว) — คัดลอกไปตั้งค่าในไคลเอนต์ MCP:",
+  "dashboard.token.once":
+    "จะไม่แสดงอีก ควรเก็บในโปรแกรมจัดการรหัสผ่าน ไม่ใช่ในแชตนี้",
 
   "action.folder.readwrite":
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",

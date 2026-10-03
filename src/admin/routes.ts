@@ -23,10 +23,8 @@ import {
   getDesktopDataDisclosure,
   getToolRiskPresentation,
 } from "../permissions/risk.js";
-import {
-  getSessionClientInfo,
-  listSessionClients,
-} from "../gateway/session-context.js";
+import { getSessionClientInfo, listSessionClients } from "../gateway/session-context.js";
+import { rotateAuthToken } from "../config/auth-token-rotation.js";
 import {
   applyClientConnection,
   previewClientConnection,
@@ -460,6 +458,55 @@ export function registerAdminRoutes(app: Express): void {
               job.state === "running"
           ).length,
       });
+    }
+  );
+
+  router.post(
+    "/auth/token/rotate",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      if (!manager.getRuntimeAuthToken()) {
+        structuredError(
+          res,
+          409,
+          "AUTH_TOKEN_NOT_CONFIGURED",
+          "No MCP auth token is configured, so there is nothing to rotate. Set authToken or --auth first."
+        );
+        return;
+      }
+
+      try {
+        const rotated = await rotateAuthToken({ manager });
+        auditLogger.log({
+          event: "MCP_AUTH_TOKEN_ROTATED",
+          severity: "WARN",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/auth/token/rotate",
+          resource: rotated.storePath,
+          outcome: "ALLOWED",
+          details: "Master MCP token replaced; previous token is invalid",
+        });
+
+        res.json({
+          success: true,
+          token: rotated.token,
+          storePath: rotated.storePath,
+        });
+      } catch (err) {
+        structuredError(
+          res,
+          500,
+          "AUTH_TOKEN_ROTATION_FAILED",
+          (err as Error).message || "Token rotation failed."
+        );
+      }
     }
   );
 
