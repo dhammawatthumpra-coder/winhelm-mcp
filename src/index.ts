@@ -14,6 +14,7 @@ import { runConnectCliCommand } from "./cli/connect.js";
 import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
 import { initializeApprovalPersistence } from "./approval/runtime.js";
 import { defaultApprovalJournalPath } from "./approval/journal.js";
+import { readStoredAuthToken, resolveStartupAuthToken } from "./config/auth-token-store.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -230,8 +231,31 @@ async function main() {
   configManager.logSecurityWarnings();
 
   // Startup Security Gate: Non-stdio + Non-loopback interface MUST have an authToken
-  const effectiveAuthToken =
-    CLI_AUTH_TOKEN || configManager.getConfig().authToken;
+  // Precedence: --auth, then env (folded into config), then the rotated secret
+  // store, then the legacy authToken field in the config file.
+  const storedAuthToken = readStoredAuthToken();
+  if (
+    storedAuthToken.state === "unreadable" ||
+    storedAuthToken.state === "invalid"
+  ) {
+    console.error("\n" + "=".repeat(78));
+    console.error("FATAL SECURITY ERROR: The WinHelm auth token store cannot be trusted.");
+    console.error(`   Path: ${storedAuthToken.path}`);
+    console.error(`   State: ${storedAuthToken.state}`);
+    console.error("   Repair or remove this file, then start WinHelm again. Refusing to start with a");
+    console.error("   credential that could silently fall back to a weaker token.");
+    console.error("=".repeat(78) + "\n");
+    process.exit(1);
+  }
+
+  const effectiveAuthToken = resolveStartupAuthToken({
+    cliToken: CLI_AUTH_TOKEN,
+    stored: storedAuthToken,
+    configToken: configManager.getConfig().authToken,
+  });
+  if (effectiveAuthToken) {
+    configManager.setRuntimeAuthToken(effectiveAuthToken);
+  }
   const exposureCheck = validateNetworkExposure({
     host: HOST,
     isStdio: IS_STDIO,

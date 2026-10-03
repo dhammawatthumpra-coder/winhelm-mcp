@@ -59,6 +59,13 @@ export function getDashboardHtml(
     clientsNote: t("dashboard.clients.note"),
     clientsEmpty: t("dashboard.clients.empty"),
     clientsLoading: t("dashboard.clients.loading"),
+    tokenTitle: t("dashboard.token.title"),
+    tokenNote: t("dashboard.token.note"),
+    tokenRotate: t("dashboard.token.rotate"),
+    tokenConfirm: t("dashboard.token.confirm"),
+    tokenLoading: t("dashboard.token.loading"),
+    tokenNew: t("dashboard.token.new"),
+    tokenOnce: t("dashboard.token.once"),
   };
   const dashboardMessagesScript = `const DASHBOARD_MESSAGES = ${JSON.stringify({
     fullWarn: uiMessages.fullWarn,
@@ -71,6 +78,10 @@ export function getDashboardHtml(
     approvalsDeny: uiMessages.approvalsDeny,
     clientsEmpty: uiMessages.clientsEmpty,
     clientsLoading: uiMessages.clientsLoading,
+    tokenConfirm: uiMessages.tokenConfirm,
+    tokenLoading: uiMessages.tokenLoading,
+    tokenNew: uiMessages.tokenNew,
+    tokenOnce: uiMessages.tokenOnce,
   }).replace(/</g, "\\u003c")};`;
   const schemaV2Surface = schemaMode !== "legacy";
   const legacyActiveTools = new Set<string>([
@@ -342,6 +353,11 @@ export function getDashboardHtml(
     .admin-locked { color: var(--text-muted); font-size: 13px; }
     .admin-ok { color: var(--success); font-size: 13px; }
     .admin-error { color: #fca5a5; font-size: 13px; }
+    .token-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #fcd34d;
+      margin: 4px 0;
+    }
     .approval-row {
       border: 1px solid var(--card-border);
       background: #0b1220;
@@ -651,6 +667,17 @@ export function getDashboardHtml(
                 ${escapeHtml(uiMessages.clientsNote)}
               </div>
               <div id="sessionClients" class="permission-summary">${escapeHtml(uiMessages.clientsEmpty)}</div>
+            </div>
+
+            <div style="margin-top:16px;border-top:1px solid var(--card-border);padding-top:12px;">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                <div style="font-weight:600;">${escapeHtml(uiMessages.tokenTitle)}</div>
+                <button onclick="rotateAccessToken()">${escapeHtml(uiMessages.tokenRotate)}</button>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin:4px 0 8px;">
+                ${escapeHtml(uiMessages.tokenNote)}
+              </div>
+              <div id="tokenState" class="permission-summary">—</div>
             </div>
           </div>
         </div>
@@ -1143,6 +1170,27 @@ export function getDashboardHtml(
       try {
         const body = await adminRequest('/admin/sessions');
         renderSessionClients(body.sessions);
+      } catch (err) {
+        target.className = 'admin-error';
+        target.textContent =
+          (err.code ? err.code + ': ' : '') + (err.message || String(err));
+      }
+    }
+
+    async function rotateAccessToken() {
+      const target = document.getElementById('tokenState');
+      if (!window.confirm(DASHBOARD_MESSAGES.tokenConfirm)) return;
+
+      target.className = 'permission-summary';
+      target.textContent = DASHBOARD_MESSAGES.tokenLoading;
+      try {
+        const body = await adminRequest('/admin/auth/token/rotate', {
+          method: 'POST'
+        });
+        target.textContent = '';
+        addTextElement(target, 'div', DASHBOARD_MESSAGES.tokenNew);
+        addTextElement(target, 'div', String(body.token || ''), 'token-value');
+        addTextElement(target, 'div', DASHBOARD_MESSAGES.tokenOnce);
       } catch (err) {
         target.className = 'admin-error';
         target.textContent =

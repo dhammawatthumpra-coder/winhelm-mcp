@@ -49,6 +49,11 @@ export class ConfigManager {
   private configMode: ConfigMode = "legacy";
   private configValidationErrors: string[] = [];
   private runtimeEffectivePort: number | undefined;
+  /**
+   * Live bearer token after an admin rotation. It shadows the token resolved at
+   * startup, and is dropped whenever the manager instance is replaced.
+   */
+  private runtimeAuthToken: string | undefined;
   private configFilePath: string;
   private configWatcher: FSWatcher | null = null;
   private configReloadTimer: NodeJS.Timeout | null = null;
@@ -512,6 +517,17 @@ export class ConfigManager {
 
   public getRuntimeEffectivePort(): number | undefined {
     return this.runtimeEffectivePort;
+  }
+
+  public setRuntimeAuthToken(token: string | undefined): void {
+    this.runtimeAuthToken =
+      typeof token === "string" && token.trim().length > 0
+        ? token.trim()
+        : undefined;
+  }
+
+  public getRuntimeAuthToken(): string | undefined {
+    return this.runtimeAuthToken;
   }
 
   public async updateConfig(updates: Partial<ServerConfig>, persist = false): Promise<void> {
