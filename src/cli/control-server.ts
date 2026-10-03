@@ -26,6 +26,8 @@ interface ControlRequest {
 }
 
 function defaultMetadataPath(): string {
+  const override = process.env.WINHELM_CONTROL_METADATA_PATH;
+  if (override) return path.resolve(override);
   return path.join(os.homedir(), ".winhelm", "control.json");
 }
 
