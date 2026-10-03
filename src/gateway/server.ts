@@ -654,10 +654,17 @@ export function createServer(options: ServerOptions): {
   const start = (): Promise<Server> => {
     return new Promise((resolve) => {
       const server = app.listen(options.port, options.host, () => {
+        const boundAddress = server.address();
+        const effectivePort =
+          boundAddress && typeof boundAddress === "object"
+            ? boundAddress.port
+            : options.port;
+        configManager.setRuntimeEffectivePort(effectivePort);
+
         const startupToken = authToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
         const monitorUrl = startupToken
-          ? `http://localhost:${options.port}/?exchange=${startupToken}`
-          : `http://localhost:${options.port}/`;
+          ? `http://localhost:${effectivePort}/?exchange=${startupToken}`
+          : `http://localhost:${effectivePort}/`;
 
         console.log(`\n======================================================`);
         console.log(`  🚀 WinHelm MCP Server is running!`);
@@ -666,10 +673,10 @@ export function createServer(options: ServerOptions): {
         if (startupToken) {
           console.log(`    (One-time login link valid for 10 minutes)`);
         }
-        console.log(`  - Streamable HTTP: http://${options.host}:${options.port}/mcp`);
-        console.log(`  - SSE Endpoint:    http://${options.host}:${options.port}/sse`);
-        console.log(`  - SSE Message:     http://${options.host}:${options.port}/message`);
-        console.log(`  - Health Check:    http://${options.host}:${options.port}/health`);
+        console.log(`  - Streamable HTTP: http://${options.host}:${effectivePort}/mcp`);
+        console.log(`  - SSE Endpoint:    http://${options.host}:${effectivePort}/sse`);
+        console.log(`  - SSE Message:     http://${options.host}:${effectivePort}/message`);
+        console.log(`  - Health Check:    http://${options.host}:${effectivePort}/health`);
         console.log(`======================================================\n`);
         resolve(server);
       });
@@ -677,6 +684,8 @@ export function createServer(options: ServerOptions): {
   };
 
   const stop = async (server: Server): Promise<void> => {
+    configManager.setRuntimeEffectivePort(undefined);
+
     // 1. Kill any active background tasks
     taskManager.killAll();
 

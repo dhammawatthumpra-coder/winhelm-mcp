@@ -139,6 +139,9 @@ describe("ConfigManager schema-v2 runtime mode", () => {
           jobTtlMs: 180_000,
           maxPending: 5,
         });
+        assert.deepStrictEqual(manager.getConfig().network, {
+          allowLoopback: false,
+        });
       }
     );
   });

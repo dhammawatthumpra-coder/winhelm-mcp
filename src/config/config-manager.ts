@@ -7,6 +7,7 @@ import type { ServerConfig } from "../types/index.js";
 import { DEFAULT_CONFIG, DEFAULT_BLOCKED_PATTERNS } from "./default-config.js";
 import {
   DEFAULT_APPROVAL_CONFIG,
+  DEFAULT_NETWORK_CONFIG,
   detectConfigMode,
   normalizeApprovalConfig,
   validateSchemaV2Config,
@@ -39,6 +40,7 @@ export class ConfigManager {
   private config: ServerConfig;
   private configMode: ConfigMode = "legacy";
   private configValidationErrors: string[] = [];
+  private runtimeEffectivePort: number | undefined;
   private configFilePath: string;
   private executionHistory: CommandLogEntry[] = [];
   private readonly maxHistoryLength = 500;
@@ -104,6 +106,7 @@ export class ConfigManager {
         terminal: { mode: "off" },
         toolPolicy: {},
         approval: normalizeApprovalConfig(DEFAULT_APPROVAL_CONFIG),
+        network: { ...DEFAULT_NETWORK_CONFIG },
       };
       return;
     }
@@ -267,6 +270,17 @@ export class ConfigManager {
 
   public getConfigValidationErrors(): readonly string[] {
     return this.configValidationErrors;
+  }
+
+  public setRuntimeEffectivePort(port: number | undefined): void {
+    this.runtimeEffectivePort =
+      typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535
+        ? port
+        : undefined;
+  }
+
+  public getRuntimeEffectivePort(): number | undefined {
+    return this.runtimeEffectivePort;
   }
 
   public async updateConfig(updates: Partial<ServerConfig>, persist = false): Promise<void> {

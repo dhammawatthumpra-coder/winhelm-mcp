@@ -98,6 +98,7 @@ export interface ServerConfig {
   terminal?: import("../config/schema-v2.js").TerminalPermissionConfig;
   toolPolicy?: Record<string, import("../config/schema-v2.js").ToolPolicy>;
   approval?: Partial<import("../config/schema-v2.js").ApprovalConfig>;
+  network?: Partial<import("../config/schema-v2.js").NetworkPermissionConfig>;
   profileState?: import("../config/schema-v2.js").ProfileState;
 }
 

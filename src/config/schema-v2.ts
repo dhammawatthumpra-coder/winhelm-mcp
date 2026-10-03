@@ -34,6 +34,10 @@ export interface ApprovalConfig {
   maxPending: number;
 }
 
+export interface NetworkPermissionConfig {
+  allowLoopback: boolean;
+}
+
 export interface ProfileState {
   preset: ProfilePreset;
   appliedAt: string;
@@ -52,8 +56,13 @@ export interface SchemaV2PermissionConfig {
   terminal: TerminalPermissionConfig;
   toolPolicy: Record<string, ToolPolicy>;
   approval: ApprovalConfig;
+  network: NetworkPermissionConfig;
   profileState?: ProfileState;
 }
+
+export const DEFAULT_NETWORK_CONFIG: Readonly<NetworkPermissionConfig> = Object.freeze({
+  allowLoopback: false,
+});
 
 export const DEFAULT_APPROVAL_CONFIG: Readonly<ApprovalConfig> = Object.freeze({
   channels: Object.freeze(["dashboard", "toast"]) as unknown as ApprovalChannel[],
@@ -297,6 +306,23 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
   const approvalResult = validateApprovalConfig(rawApproval ?? undefined);
   errors.push(...approvalResult.errors);
 
+  let network: NetworkPermissionConfig = { ...DEFAULT_NETWORK_CONFIG };
+  if (input.network !== undefined) {
+    if (!input.network || typeof input.network !== "object" || Array.isArray(input.network)) {
+      errors.push("network must be an object");
+    } else {
+      const rawNetwork = input.network as Record<string, unknown>;
+      if (
+        rawNetwork.allowLoopback !== undefined &&
+        typeof rawNetwork.allowLoopback !== "boolean"
+      ) {
+        errors.push("network.allowLoopback must be boolean");
+      } else if (typeof rawNetwork.allowLoopback === "boolean") {
+        network = { allowLoopback: rawNetwork.allowLoopback };
+      }
+    }
+  }
+
   const valid = errors.length === 0;
   return {
     valid,
@@ -308,6 +334,7 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
       terminal: valid ? terminal : { mode: "off" },
       toolPolicy: valid ? toolPolicy : {},
       approval: approvalResult.value,
+      network: valid ? network : { ...DEFAULT_NETWORK_CONFIG },
       ...(valid && input.profileState && typeof input.profileState === "object"
         ? { profileState: input.profileState as unknown as ProfileState }
         : {}),
