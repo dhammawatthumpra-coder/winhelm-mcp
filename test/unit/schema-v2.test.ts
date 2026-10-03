@@ -205,14 +205,18 @@ describe("ConfigManager schema-v2 runtime mode", () => {
     );
   });
 
-  it("registers the full current tool surface for schema-v2 but fails execution closed", async () => {
+  it("registers the full current tool surface and enforces auto/ask/off at call time", async () => {
     await withTempConfig(
       "v2-gate.json",
       {
         schemaVersion: 2,
         folders: [{ path: "D:\\Workspace", permission: "readwrite" }],
         terminal: { mode: "ask" },
-        toolPolicy: { system_info: "auto" },
+        toolPolicy: {
+          system_info: "auto",
+          http_request: "ask",
+          process_kill: "off",
+        },
       },
       async () => {
         const server = new McpServer({ name: "schema-v2-gate", version: "1.0.0" });
@@ -220,10 +224,30 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const tools = (server as any)._registeredTools;
         assert.strictEqual(Object.keys(tools).length, 38);
 
-        const result = await tools["system_info"].handler({}, {});
-        assert.strictEqual(result.isError, true);
-        const payload = JSON.parse(result.content[0].text);
-        assert.strictEqual(payload.code, "SCHEMA_V2_ENFORCEMENT_PENDING");
+        const autoResult = await tools["system_info"].handler({}, {});
+        assert.notStrictEqual(autoResult.isError, true);
+
+        const askResult = await tools["http_request"].handler(
+          { url: "http://127.0.0.1:1/" },
+          {}
+        );
+        assert.strictEqual(askResult.isError, true);
+        const askPayload = JSON.parse(askResult.content[0].text);
+        assert.strictEqual(askPayload.error.code, "APPROVAL_REQUIRED");
+        assert.strictEqual(askPayload.error.details.tool, "http_request");
+
+        const offResult = await tools["process_kill"].handler({ pid: 4 }, {});
+        assert.strictEqual(offResult.isError, true);
+        const offPayload = JSON.parse(offResult.content[0].text);
+        assert.strictEqual(offPayload.error.code, "TOOL_POLICY_OFF");
+
+        const terminalAsk = await tools["terminal_run"].handler(
+          { command: "Write-Output should-not-run" },
+          {}
+        );
+        assert.strictEqual(terminalAsk.isError, true);
+        const terminalPayload = JSON.parse(terminalAsk.content[0].text);
+        assert.strictEqual(terminalPayload.error.code, "APPROVAL_REQUIRED");
       }
     );
   });
@@ -245,7 +269,8 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const result = await tools["system_info"].handler({}, {});
         assert.strictEqual(result.isError, true);
         const payload = JSON.parse(result.content[0].text);
-        assert.strictEqual(payload.code, "CONFIG_INVALID");
+        assert.strictEqual(payload.error.code, "CONFIGURATION_UNAVAILABLE");
+        assert.ok(Array.isArray(payload.error.details.validationErrors));
       }
     );
   });
