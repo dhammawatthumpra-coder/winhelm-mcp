@@ -59,6 +59,14 @@ describe("Dashboard locale end to end", () => {
         html.includes(translate("confirm.type", {}, "th").replace(/"/g, "&quot;")),
         "the typed-confirmation hint must use the configured Thai message"
       );
+      assert.ok(
+        html.includes(translate("dashboard.approvals.note", {}, "th")),
+        "the approval safety note must use the configured Thai message"
+      );
+      assert.ok(
+        html.includes(translate("dashboard.admin.instructions", {}, "th")),
+        "the admin-code safety instructions must use the configured Thai message"
+      );
       assert.strictEqual(
         html.includes(translate("mode.full.warn", {}, "en")),
         false

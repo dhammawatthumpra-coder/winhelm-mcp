@@ -43,10 +43,28 @@ export function getDashboardHtml(
     fullWarn: t("mode.full.warn"),
     expiry: t("approve.expiry"),
     confirmType: t("confirm.type"),
+    adminLocked: t("dashboard.admin.locked"),
+    adminUnlocked: t("dashboard.admin.unlocked"),
+    adminInstructions: t("dashboard.admin.instructions"),
+    adminPlaceholder: t("dashboard.admin.placeholder"),
+    adminUnlock: t("dashboard.admin.unlock"),
+    adminCodeHint: t("dashboard.admin.code_hint"),
+    adminLoading: t("dashboard.admin.loading"),
+    approvalsTitle: t("dashboard.approvals.title"),
+    approvalsNote: t("dashboard.approvals.note"),
+    approvalsEmpty: t("dashboard.approvals.empty"),
+    approvalsApprove: t("dashboard.approvals.approve"),
+    approvalsDeny: t("dashboard.approvals.deny"),
   };
   const dashboardMessagesScript = `const DASHBOARD_MESSAGES = ${JSON.stringify({
     fullWarn: uiMessages.fullWarn,
     expiry: uiMessages.expiry,
+    adminLocked: uiMessages.adminLocked,
+    adminUnlocked: uiMessages.adminUnlocked,
+    adminCodeHint: uiMessages.adminCodeHint,
+    approvalsEmpty: uiMessages.approvalsEmpty,
+    approvalsApprove: uiMessages.approvalsApprove,
+    approvalsDeny: uiMessages.approvalsDeny,
   }).replace(/</g, "\\u003c")};`;
   const schemaV2Surface = schemaMode !== "legacy";
   const legacyActiveTools = new Set<string>([
@@ -541,17 +559,16 @@ export function getDashboardHtml(
     <div class="card permissions-shell" id="permissionsPanel">
       <div class="card-title">
         <span>Permissions & Setup</span>
-        <span id="adminState" class="admin-locked">Locked · local admin code required</span>
+        <span id="adminState" class="admin-locked">${escapeHtml(uiMessages.adminLocked)}</span>
       </div>
 
       <div id="adminUnlock">
         <div style="font-size:13px;color:var(--text-muted);line-height:1.55;">
-          Run <code>winhelm admin-code</code> in a local terminal, then enter the one-time code here.
-          The admin credential is separate from MCP authentication. Never paste the code into an AI chat.
+          ${escapeHtml(uiMessages.adminInstructions)}
         </div>
         <div style="display:flex;gap:8px;max-width:520px;margin-top:10px;">
-          <input id="adminCodeInput" type="password" autocomplete="one-time-code" placeholder="One-time admin code">
-          <button class="primary" onclick="unlockAdmin()">Unlock</button>
+          <input id="adminCodeInput" type="password" autocomplete="one-time-code" placeholder="${escapeHtml(uiMessages.adminPlaceholder)}">
+          <button class="primary" onclick="unlockAdmin()">${escapeHtml(uiMessages.adminUnlock)}</button>
         </div>
         <div id="adminUnlockError" class="admin-error" style="margin-top:8px;"></div>
       </div>
@@ -588,7 +605,7 @@ export function getDashboardHtml(
               <button onclick="loadAdminProfile()">Refresh</button>
             </div>
 
-            <div id="profilePreview" class="permission-summary" style="margin-top:12px;">Unlock completed. Loading current permissions…</div>
+            <div id="profilePreview" class="permission-summary" style="margin-top:12px;">${escapeHtml(uiMessages.adminLoading)}</div>
 
             <div style="margin-top:16px;border-top:1px solid var(--card-border);padding-top:12px;">
               <div style="font-weight:600;">MCP Client Connection</div>
@@ -609,11 +626,11 @@ export function getDashboardHtml(
 
           <div>
             <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-              <div style="font-weight:600;">Approval Jobs</div>
+              <div style="font-weight:600;">${escapeHtml(uiMessages.approvalsTitle)}</div>
               <button onclick="loadApprovals()">Refresh</button>
             </div>
             <div style="font-size:12px;color:var(--text-muted);margin:4px 0 10px;">
-              Pending approvals are local-only. Arguments are displayed as text, never rendered as HTML/Markdown.
+              ${escapeHtml(uiMessages.approvalsNote)}
             </div>
             <div id="approvalJobs">
               <div class="admin-locked">No admin data loaded yet.</div>
@@ -784,7 +801,7 @@ export function getDashboardHtml(
       const code = input.value.trim();
       setUnlockError('');
       if (!code) {
-        setUnlockError('Enter the one-time code from "winhelm admin-code".');
+        setUnlockError(DASHBOARD_MESSAGES.adminCodeHint);
         return;
       }
 
@@ -799,10 +816,10 @@ export function getDashboardHtml(
         input.value = '';
         document.getElementById('adminUnlock').style.display = 'none';
         document.getElementById('permissionsUnlocked').style.display = 'block';
-        setAdminState('Unlocked · local admin session', 'admin-ok');
+        setAdminState(DASHBOARD_MESSAGES.adminUnlocked, 'admin-ok');
         await Promise.all([loadAdminProfile(), loadApprovals()]);
       } catch (err) {
-        setAdminState('Locked · local admin code required', 'admin-locked');
+        setAdminState(DASHBOARD_MESSAGES.adminLocked, 'admin-locked');
         setUnlockError(err.message || String(err));
       }
     }
@@ -1130,7 +1147,12 @@ export function getDashboardHtml(
         target.replaceChildren();
 
         if (!jobs.length) {
-          addTextElement(target, 'div', 'No approval jobs.', 'admin-locked');
+          addTextElement(
+          target,
+          'div',
+          DASHBOARD_MESSAGES.approvalsEmpty,
+          'admin-locked'
+        );
           return;
         }
 
@@ -1272,11 +1294,11 @@ export function getDashboardHtml(
 
             const approve = document.createElement('button');
             approve.className = 'primary';
-            approve.textContent = 'Approve';
+            approve.textContent = DASHBOARD_MESSAGES.approvalsApprove;
             approve.addEventListener('click', () => approvalAction(job.id, 'approve'));
 
             const deny = document.createElement('button');
-            deny.textContent = 'Deny';
+            deny.textContent = DASHBOARD_MESSAGES.approvalsDeny;
             deny.addEventListener('click', () => approvalAction(job.id, 'deny'));
 
             actions.appendChild(approve);
