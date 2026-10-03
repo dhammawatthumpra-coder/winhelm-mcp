@@ -4,7 +4,10 @@ import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { summarizeRuntimeRisk } from "../permissions/risk.js";
 import { getPackageVersion } from "../utils/version.js";
-import { translate as t } from "../i18n/messages.js";
+import {
+  getRuntimeLocale,
+  translate as t,
+} from "../i18n/messages.js";
 
 function policySummary(policy: Record<string, unknown> | undefined): {
   auto: number;
@@ -51,6 +54,7 @@ export function buildRuntimeStatusSnapshot(
       permission: folder.permission,
     })),
     terminalMode: config.terminal?.mode ?? null,
+    uiLanguage: getRuntimeLocale(),
     toolPolicySummary: policySummary(config.toolPolicy),
     riskState:
       mode === "v2"

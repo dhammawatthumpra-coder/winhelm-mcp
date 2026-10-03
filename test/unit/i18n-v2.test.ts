@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   EN_MESSAGES,
   TH_MESSAGES,
+  getRuntimeLocale,
   resolveLocale,
+  setConfiguredLocale,
   translate,
   validateI18nCatalogs,
 } from "../../src/i18n/messages.js";
@@ -52,6 +54,38 @@ describe("WinHelm i18n catalogs", () => {
     assert.strictEqual(resolveLocale(undefined), "en");
     assert.strictEqual(resolveLocale("th-TH"), "th");
     assert.strictEqual(resolveLocale("en-US"), "en");
+  });
+
+  it("selects configured locale with environment override and English fallback", () => {
+    const previous = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+
+    try {
+      setConfiguredLocale("th");
+      assert.strictEqual(getRuntimeLocale(), "th");
+      assert.strictEqual(
+        translate("approve.expiry"),
+        "หมดเวลาแล้วจะไม่รันคำสั่งนี้"
+      );
+
+      setConfiguredLocale("fr-FR");
+      assert.strictEqual(getRuntimeLocale(), "en");
+
+      setConfiguredLocale("th");
+      process.env.WINHELM_LOCALE = "en-US";
+      assert.strictEqual(getRuntimeLocale(), "en");
+      assert.strictEqual(
+        translate("approve.expiry"),
+        "The command will not run after this expires"
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.WINHELM_LOCALE;
+      } else {
+        process.env.WINHELM_LOCALE = previous;
+      }
+      setConfiguredLocale(undefined);
+    }
   });
 
   it("provides translated user actions used by permission/approval gates", () => {

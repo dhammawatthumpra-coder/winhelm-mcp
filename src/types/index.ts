@@ -99,6 +99,7 @@ export interface ServerConfig {
   toolPolicy?: Record<string, import("../config/schema-v2.js").ToolPolicy>;
   approval?: Partial<import("../config/schema-v2.js").ApprovalConfig>;
   network?: Partial<import("../config/schema-v2.js").NetworkPermissionConfig>;
+  ui?: Partial<import("../config/schema-v2.js").UiConfig>;
   profileState?: import("../config/schema-v2.js").ProfileState;
 }
 

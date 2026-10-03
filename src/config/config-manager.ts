@@ -15,6 +15,7 @@ import {
 } from "./schema-v2.js";
 import { checkFolderAccess } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
+import { setConfiguredLocale } from "../i18n/messages.js";
 
 export interface CommandLogEntry {
   id: string;
@@ -48,6 +49,7 @@ export class ConfigManager {
   private constructor(customConfigPath?: string) {
     this.rawConfig = { ...DEFAULT_CONFIG };
     this.config = { ...DEFAULT_CONFIG };
+    setConfiguredLocale(undefined);
 
     if (customConfigPath) {
       this.configFilePath = path.resolve(customConfigPath);
@@ -92,6 +94,7 @@ export class ConfigManager {
       this.configMode = "legacy";
       this.configValidationErrors = [];
       this.config = { ...this.rawConfig };
+      setConfiguredLocale(this.config.ui?.language);
       return;
     }
 
@@ -108,6 +111,7 @@ export class ConfigManager {
         approval: normalizeApprovalConfig(DEFAULT_APPROVAL_CONFIG),
         network: { ...DEFAULT_NETWORK_CONFIG },
       };
+      setConfiguredLocale(this.config.ui?.language);
       return;
     }
 
@@ -118,6 +122,7 @@ export class ConfigManager {
       ...this.rawConfig,
       ...validation.value,
     };
+    setConfiguredLocale(this.config.ui?.language);
   }
 
   private applyRawUpdates(updates: Partial<ServerConfig> | Record<string, unknown>): void {
