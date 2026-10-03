@@ -43,6 +43,12 @@ export const EN_MESSAGES = {
     "Folders",
   "dashboard.approvals.noFolder":
     "no matching folder",
+  "dashboard.approvals.provenance":
+    "Recent session activity",
+  "dashboard.approvals.showPreview":
+    "Show text preview",
+  "dashboard.approvals.hidePreview":
+    "Hide text preview",
   "dashboard.clients.title":
     "Connected MCP Clients",
   "dashboard.clients.note":
@@ -184,6 +190,12 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "โฟลเดอร์",
   "dashboard.approvals.noFolder":
     "ไม่ตรงกับโฟลเดอร์ใด",
+  "dashboard.approvals.provenance":
+    "กิจกรรมล่าสุดของเซสชัน",
+  "dashboard.approvals.showPreview":
+    "ดูตัวอย่างข้อความ",
+  "dashboard.approvals.hidePreview":
+    "ซ่อนตัวอย่างข้อความ",
   "dashboard.clients.title":
     "ไคลเอนต์ MCP ที่เชื่อมต่อ",
   "dashboard.clients.note":
