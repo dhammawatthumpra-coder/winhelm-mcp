@@ -5,7 +5,15 @@ import express, {
   type Response,
 } from "express";
 import { ConfigManager } from "../config/config-manager.js";
+import {
+  applyProfilePreset,
+  getProfileStatus,
+  previewProfileApplication,
+  ProfileServiceError,
+  type ProfileApplyInput,
+} from "../config/profile-service.js";
 import { getApprovalEngine } from "../approval/runtime.js";
+import { auditLogger } from "../utils/audit-logger.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
   isLoopbackOrigin,
@@ -62,6 +70,98 @@ function structuredError(
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+const PROFILE_PRESETS = new Set([
+  "safe",
+  "balanced",
+  "power",
+  "minimal",
+  "core",
+  "dev",
+  "sysadmin",
+  "full",
+]);
+
+function parseProfileBody(body: unknown): ProfileApplyInput {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "Profile request body must be an object."
+    );
+  }
+
+  const raw = body as Record<string, unknown>;
+  if (
+    typeof raw.preset !== "string" ||
+    !PROFILE_PRESETS.has(raw.preset)
+  ) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "preset must be one of safe, balanced, power, minimal, core, dev, sysadmin, full."
+    );
+  }
+
+  let folders: ProfileApplyInput["folders"];
+  if (raw.folders !== undefined) {
+    if (!Array.isArray(raw.folders)) {
+      throw new ProfileServiceError(
+        "INVALID_ARGUMENT",
+        "folders must be an array when provided."
+      );
+    }
+
+    folders = raw.folders.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new ProfileServiceError(
+          "INVALID_ARGUMENT",
+          `folders[${index}] must be an object.`
+        );
+      }
+      const folder = item as Record<string, unknown>;
+      if (typeof folder.path !== "string" || !folder.path.trim()) {
+        throw new ProfileServiceError(
+          "INVALID_ARGUMENT",
+          `folders[${index}].path must be a non-empty string.`
+        );
+      }
+      if (
+        folder.alias !== undefined &&
+        (typeof folder.alias !== "string" || !folder.alias.trim())
+      ) {
+        throw new ProfileServiceError(
+          "INVALID_ARGUMENT",
+          `folders[${index}].alias must be a non-empty string when provided.`
+        );
+      }
+
+      return {
+        path: folder.path,
+        ...(typeof folder.alias === "string"
+          ? { alias: folder.alias }
+          : {}),
+      };
+    });
+  }
+
+  return {
+    preset: raw.preset as ProfileApplyInput["preset"],
+    ...(folders ? { folders } : {}),
+    ...(typeof raw.confirmation === "string"
+      ? { confirmation: raw.confirmation }
+      : {}),
+  };
+}
+
+function profileErrorStatus(err: ProfileServiceError): number {
+  if (err.code === "CONFIG_PERSIST_FAILED") return 500;
+  if (
+    err.code === "TYPED_CONFIRMATION_REQUIRED" ||
+    err.code === "FOLDER_SELECTION_REQUIRED"
+  ) {
+    return 409;
+  }
+  return 400;
 }
 
 function requireLocality(
@@ -236,6 +336,156 @@ export function registerAdminRoutes(app: Express): void {
               job.state === "running"
           ).length,
       });
+    }
+  );
+
+  router.get(
+    "/profile",
+    requireAdminSession,
+    (_req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      const config = manager.getConfig();
+      res.json({
+        profile: getProfileStatus(manager),
+        legacy:
+          manager.getConfigMode() === "legacy"
+            ? {
+                profile: config.profile ?? "full",
+                allowedDirectories: [...(config.allowedDirectories ?? [])],
+                readOnly: Boolean(config.readOnly),
+              }
+            : null,
+      });
+    }
+  );
+
+  router.post(
+    "/profiles/preview",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    (req: Request, res: Response) => {
+      try {
+        const input = parseProfileBody(req.body);
+        const preview = previewProfileApplication(
+          input,
+          ConfigManager.getInstance()
+        );
+        res.json({ preview });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Profile preview failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/profiles/apply",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      const before = getProfileStatus(manager);
+
+      try {
+        const input = parseProfileBody(req.body);
+        const previewBefore = previewProfileApplication(input, manager);
+        const result = await applyProfilePreset(input, manager);
+
+        auditLogger.log({
+          event: "PROFILE_PRESET_APPLIED",
+          severity:
+            result.status.terminalMode === "full" ? "WARN" : "INFO",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/profiles/apply",
+          resource: input.preset,
+          outcome: "ALLOWED",
+          details: {
+            from: {
+              schemaMode: before.schemaMode,
+              preset: before.preset,
+              terminalMode: before.terminalMode,
+              modified: before.modified,
+            },
+            to: {
+              schemaMode: result.status.schemaMode,
+              preset: result.status.preset,
+              terminalMode: result.status.terminalMode,
+              modified: result.status.modified,
+            },
+            changedFields: previewBefore.changedFields,
+            backupCreated: Boolean(result.backupPath),
+          },
+        });
+
+        res.json({
+          success: true,
+          backupPath: result.backupPath,
+          profile: result.status,
+        });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          auditLogger.log({
+            event: "PROFILE_PRESET_APPLY_REJECTED",
+            severity: "WARN",
+            actor: {
+              ip: req.ip,
+              authType: "session_cookie",
+              sessionId: res.locals.adminSessionId as string,
+            },
+            action: "POST /admin/profiles/apply",
+            outcome: "DENIED",
+            details: {
+              code: err.code,
+              fromPreset: before.preset,
+            },
+          });
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+
+        auditLogger.log({
+          event: "PROFILE_PRESET_APPLY_ERROR",
+          severity: "CRITICAL",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/profiles/apply",
+          outcome: "ERROR",
+          details: (err as Error).message || String(err),
+        });
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Profile apply failed."
+        );
+      }
     }
   );
 

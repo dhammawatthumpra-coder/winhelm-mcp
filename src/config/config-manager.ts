@@ -284,17 +284,36 @@ export class ConfigManager {
   }
 
   public async updateConfig(updates: Partial<ServerConfig>, persist = false): Promise<void> {
-    this.applyRawUpdates(updates);
-    if (!persist) return;
+    if (!persist) {
+      this.applyRawUpdates(updates);
+      return;
+    }
+
+    const nextRaw = {
+      ...this.rawConfig,
+      ...updates,
+    } as ServerConfig;
+
     try {
       const dir = path.dirname(this.configFilePath);
       if (!existsSync(dir)) {
         await fs.mkdir(dir, { recursive: true });
       }
-      await fs.writeFile(this.configFilePath, JSON.stringify(this.rawConfig, null, 2), "utf-8");
+      await fs.writeFile(
+        this.configFilePath,
+        JSON.stringify(nextRaw, null, 2),
+        "utf-8"
+      );
     } catch (err) {
-      console.error(`[ConfigManager] Failed to persist config to ${this.configFilePath}:`, err);
+      console.error(
+        `[ConfigManager] Failed to persist config to ${this.configFilePath}:`,
+        err
+      );
+      throw err;
     }
+
+    this.rawConfig = nextRaw;
+    this.refreshEffectiveConfig();
   }
 
   /**
