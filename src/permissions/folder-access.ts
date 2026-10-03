@@ -33,7 +33,7 @@ export interface FolderAccessOptions {
 
 export type FolderAccessCode =
   | "FOLDER_ALLOWED"
-  | "FOLDER_OUTSIDE_ALLOWED"
+  | "FOLDER_NOT_APPROVED"
   | "FOLDER_READ_ONLY"
   | "FOLDER_ROOT_MUTATION"
   | "FOLDER_REPARSE_MUTATION"
@@ -202,7 +202,7 @@ export function checkFolderAccess(
   if (!matched) {
     return {
       allowed: false,
-      code: "FOLDER_OUTSIDE_ALLOWED",
+      code: "FOLDER_NOT_APPROVED",
       reason: `Path is outside configured schema-v2 folders: ${rawPath}`,
       canonicalPath,
     };

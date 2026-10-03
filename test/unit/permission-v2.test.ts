@@ -78,7 +78,7 @@ describe("Schema-v2 folder access", () => {
         [{ path: root, permission: "readwrite" }]
       );
       assert.strictEqual(result.allowed, false);
-      assert.strictEqual(result.code, "FOLDER_OUTSIDE_ALLOWED");
+      assert.strictEqual(result.code, "FOLDER_NOT_APPROVED");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
       await fs.rm(outside, { recursive: true, force: true });
@@ -137,7 +137,7 @@ describe("Schema-v2 tool access classification", () => {
     const config = makeConfig([], {});
     const result = evaluateSchemaV2ToolAccess("system_info", {}, config);
     assert.strictEqual(result.decision, "deny");
-    assert.strictEqual(result.code, "TOOL_POLICY_OFF");
+    assert.strictEqual(result.code, "POLICY_OFF");
   });
 
   it("maps generic auto and ask policies", () => {

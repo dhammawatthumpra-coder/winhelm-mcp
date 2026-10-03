@@ -106,7 +106,7 @@ describe("Hybrid approval tool flow", () => {
     const result = await promise;
     assert.strictEqual(result.isError, true);
     const parsed = JSON.parse(result.content[0].text);
-    assert.strictEqual(parsed.error.code, "PERMISSION_DENIED");
+    assert.strictEqual(parsed.error.code, "APPROVAL_DENIED");
     assert.strictEqual(executions, 0);
   });
 
