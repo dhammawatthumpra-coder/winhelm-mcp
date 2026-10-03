@@ -115,13 +115,33 @@ export class ConfigManager {
       return;
     }
 
-    const validation = validateSchemaV2Config(this.rawConfig as unknown as Record<string, unknown>);
+    const validation = validateSchemaV2Config(
+      this.rawConfig as unknown as Record<string, unknown>
+    );
     this.configMode = validation.valid ? "v2" : "invalid";
     this.configValidationErrors = [...validation.errors];
+
+    // schemaVersion=2 is the authoritative permission model. Legacy governed
+    // fields may remain in the raw file for migration diagnostics/backups, but
+    // they must not influence runtime authorization once v2 is selected.
+    const {
+      allowedDirectories: _legacyAllowedDirectories,
+      readOnly: _legacyReadOnly,
+      profile: _legacyProfile,
+      customTools: _legacyCustomTools,
+      ...nonGovernedRaw
+    } = this.rawConfig;
+
     this.config = {
-      ...this.rawConfig,
+      ...nonGovernedRaw,
       ...validation.value,
-    };
+      // Keep legacy-only helpers fail-closed/non-authoritative if an old call
+      // site still inspects them while the v2 wrapper owns authorization.
+      allowedDirectories: [],
+      readOnly: false,
+      profile: undefined,
+      customTools: undefined,
+    } as ServerConfig;
     setConfiguredLocale(this.config.ui?.language);
   }
 
@@ -196,15 +216,34 @@ export class ConfigManager {
     }
 
     // Apply environment variables to the raw config, then re-derive the
-    // effective config. Schema-v2-specific env mapping is added alongside the
-    // permission enforcement layer; until then these retain legacy semantics.
+    // effective config. In schema-v2, permission-related legacy env vars map
+    // into the authoritative folders/terminal model instead of reviving the
+    // legacy governed fields.
+    const rawModeBeforeEnv = detectConfigMode(
+      this.rawConfig as unknown as Record<string, unknown>
+    );
+
     if (process.env.MCP_AUTH_TOKEN) {
       this.rawConfig.authToken = process.env.MCP_AUTH_TOKEN;
     }
     if (process.env.MCP_ALLOWED_DIRECTORIES) {
-      this.rawConfig.allowedDirectories = process.env.MCP_ALLOWED_DIRECTORIES.split(",")
+      const envDirectories = process.env.MCP_ALLOWED_DIRECTORIES.split(",")
         .map((p) => p.trim())
         .filter(Boolean);
+
+      if (rawModeBeforeEnv === "v2") {
+        const readOnlyEnv =
+          process.env.MCP_READ_ONLY === "true" ||
+          process.env.MCP_READ_ONLY === "1";
+        this.rawConfig.folders = envDirectories
+          .filter((entry) => !isWildcardAllowAll([entry]))
+          .map((folderPath) => ({
+            path: folderPath,
+            permission: readOnlyEnv ? "read" : "readwrite",
+          }));
+      } else {
+        this.rawConfig.allowedDirectories = envDirectories;
+      }
     }
     if (process.env.MCP_BLOCKED_COMMANDS) {
       const extraBlocked = process.env.MCP_BLOCKED_COMMANDS.split(",")
@@ -219,8 +258,24 @@ export class ConfigManager {
       const existing = this.rawConfig.allowedHosts || [];
       this.rawConfig.allowedHosts = Array.from(new Set([...existing, ...extraHosts]));
     }
-    if (process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1") {
-      this.rawConfig.readOnly = true;
+    if (
+      process.env.MCP_READ_ONLY === "true" ||
+      process.env.MCP_READ_ONLY === "1"
+    ) {
+      if (rawModeBeforeEnv === "v2") {
+        this.rawConfig.folders = (this.rawConfig.folders ?? []).map(
+          (folder) => ({
+            ...folder,
+            permission: "read",
+          })
+        );
+        this.rawConfig.terminal = {
+          ...(this.rawConfig.terminal ?? { mode: "off" }),
+          mode: "off",
+        };
+      } else {
+        this.rawConfig.readOnly = true;
+      }
     }
     if (
       process.env.WINHELM_ALLOW_SYSTEM_EXEC === "true" ||
