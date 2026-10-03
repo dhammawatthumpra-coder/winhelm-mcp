@@ -50,11 +50,17 @@ export function evaluateTerminalMode(mode: TerminalMode): PermissionDecisionResu
         reason: "Terminal mode requires human approval.",
       };
     case "full":
-    case "dangerous":
       return {
         decision: "allow",
         code: "POLICY_AUTO",
         reason: "Terminal mode permits execution subject to runtime safety gates.",
+      };
+    case "dangerous":
+      return {
+        decision: "deny",
+        code: "POLICY_OFF",
+        reason:
+          "Dangerous terminal mode is reserved for WinHelm v1.4 and is not executable in the v1.3 permission runtime.",
       };
     case "safe":
       return {

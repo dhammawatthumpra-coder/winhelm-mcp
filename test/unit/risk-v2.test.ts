@@ -97,5 +97,14 @@ describe("Approval risk presentation", () => {
     );
     assert.ok(power.policyByRisk.R3.ask > 0);
     assert.ok(power.policyByRisk.R4.ask > 0);
+
+    const dangerous = summarizeRuntimeRisk({
+      ...buildPresetConfig("power", { folders: ["D:\\Workspace"] }),
+      terminal: { mode: "dangerous", dangerousExpiresMinutes: 60 },
+    });
+    assert.strictEqual(
+      dangerous.terminalExecution,
+      "dangerous-blocked"
+    );
   });
 });

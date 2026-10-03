@@ -113,7 +113,7 @@ describe("Schema-v2 permission decision primitives", () => {
   it("maps terminal ask/full/off modes without changing legacy code paths", () => {
     assert.strictEqual(evaluateTerminalMode("ask").decision, "ask");
     assert.strictEqual(evaluateTerminalMode("full").decision, "allow");
-    assert.strictEqual(evaluateTerminalMode("dangerous").decision, "allow");
+    assert.strictEqual(evaluateTerminalMode("dangerous").decision, "deny");
     assert.strictEqual(evaluateTerminalMode("off").decision, "deny");
   });
 });

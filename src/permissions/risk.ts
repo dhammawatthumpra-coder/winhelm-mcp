@@ -99,7 +99,7 @@ export type TerminalExecutionState =
   | "safe-adapter"
   | "approval-required"
   | "unrestricted-auto"
-  | "dangerous-auto";
+  | "dangerous-blocked";
 
 export interface RuntimeRiskState {
   available: true;
@@ -129,7 +129,7 @@ function terminalExecutionState(
     case "full":
       return "unrestricted-auto";
     case "dangerous":
-      return "dangerous-auto";
+      return "dangerous-blocked";
   }
 }
 
