@@ -885,6 +885,9 @@ export function getDashboardHtml(
           body && body.error && body.error.code
             ? body.error.code
             : 'ADMIN_REQUEST_FAILED';
+        if (body && body.error && body.error.details) {
+          err.details = body.error.details;
+        }
         throw err;
       }
       return body;
@@ -1172,9 +1175,17 @@ export function getDashboardHtml(
         );
         setClientPreview(clientPreviewLines(body.preview, false).join('\n'));
       } catch (err) {
-        setClientPreview(
+        const errorLines = [
           (err.code ? err.code + ': ' : '') + (err.message || String(err))
-        );
+        ];
+        const candidates =
+          err.details && Array.isArray(err.details.candidates)
+            ? err.details.candidates
+            : [];
+        candidates.forEach(candidate => {
+          errorLines.push('  candidate: ' + String(candidate));
+        });
+        setClientPreview(errorLines.join('\n'));
       }
     }
 
@@ -1193,9 +1204,17 @@ export function getDashboardHtml(
         );
         setClientPreview(lines.join('\n'));
       } catch (err) {
-        setClientPreview(
+        const errorLines = [
           (err.code ? err.code + ': ' : '') + (err.message || String(err))
-        );
+        ];
+        const candidates =
+          err.details && Array.isArray(err.details.candidates)
+            ? err.details.candidates
+            : [];
+        candidates.forEach(candidate => {
+          errorLines.push('  candidate: ' + String(candidate));
+        });
+        setClientPreview(errorLines.join('\n'));
       }
     }
 

@@ -79,10 +79,11 @@ function structuredError(
   res: Response,
   status: number,
   code: string,
-  message: string
+  message: string,
+  details?: Record<string, unknown>
 ): Response {
   return res.status(status).json({
-    error: { code, message },
+    error: details ? { code, message, details } : { code, message },
   });
 }
 
@@ -261,12 +262,22 @@ function clientConnectionErrorStatus(
     err.code === "CLIENT_CONFIG_INVALID_JSON" ||
     err.code === "CLIENT_CONFIG_INVALID_MCP_SERVERS" ||
     err.code === "NODE_EXECUTABLE_NOT_FOUND" ||
-    err.code === "WINHELM_ENTRYPOINT_NOT_FOUND"
+    err.code === "WINHELM_ENTRYPOINT_NOT_FOUND" ||
+    err.code === "CLAUDE_CONFIG_AMBIGUOUS" ||
+    err.code === "CLAUDE_CONFIG_UNRESOLVED"
   ) {
     return 409;
   }
   if (err.code === "INVALID_CLIENT") return 400;
   return 500;
+}
+
+function clientConnectionErrorDetails(
+  err: ClientConnectionError
+): Record<string, unknown> | undefined {
+  return err.candidates.length > 0
+    ? { candidates: err.candidates }
+    : undefined;
 }
 
 function adminApprovalView(job: any): Record<string, unknown> {
@@ -883,7 +894,8 @@ export function registerAdminRoutes(app: Express): void {
             res,
             clientConnectionErrorStatus(err),
             err.code,
-            err.message
+            err.message,
+            clientConnectionErrorDetails(err)
           );
           return;
         }
