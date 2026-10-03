@@ -4,6 +4,11 @@ import { executeHttpRequest, pingEndpoint } from "../engine/http-client.js";
 import { getNetworkInfo } from "../engine/system.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { registerTracedTool } from "./tool-wrapper.js";
+import {
+  createToolErrorResult,
+  extractPrefixedErrorCode,
+} from "../errors/tool-error.js";
+import { translate as t } from "../i18n/messages.js";
 
 export function registerNetworkTools(server: McpServer): void {
   // 1. HTTP Ping / Health Check
@@ -18,6 +23,19 @@ export function registerNetworkTools(server: McpServer): void {
     async ({ url, timeout_ms, expected_status }) => {
       try {
         const res = await pingEndpoint(url, timeout_ms, expected_status);
+        if (
+          !res.ok &&
+          ConfigManager.getInstance().getConfigMode() === "v2"
+        ) {
+          const policyError = extractPrefixedErrorCode(res.statusText);
+          if (policyError?.code.startsWith("NETWORK_")) {
+            return createToolErrorResult(
+              policyError.code,
+              policyError.message,
+              t("action.network.target")
+            );
+          }
+        }
         return {
           content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
           isError: !res.ok,
@@ -72,6 +90,20 @@ export function registerNetworkTools(server: McpServer): void {
           body,
           timeoutMs: timeout_ms,
         });
+        if (
+          res.status === 0 &&
+          ConfigManager.getInstance().getConfigMode() === "v2"
+        ) {
+          const policyError = extractPrefixedErrorCode(res.statusText);
+          if (policyError?.code.startsWith("NETWORK_")) {
+            return createToolErrorResult(
+              policyError.code,
+              policyError.message,
+              t("action.network.target")
+            );
+          }
+        }
+
         return {
           content: [
             {

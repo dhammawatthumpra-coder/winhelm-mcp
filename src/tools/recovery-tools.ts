@@ -6,6 +6,7 @@ import { formatApprovalJobStatus } from "../approval/tool-flow.js";
 import { getPackageVersion } from "../utils/version.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 import { SCHEMA_V2_TOOL_NAMES } from "./registry.js";
+import { translate as t } from "../i18n/messages.js";
 
 function policySummary(policy: Record<string, unknown> | undefined): {
   auto: number;
@@ -71,7 +72,7 @@ export function registerRecoveryTools(server: McpServer): void {
                   validationErrors: [...manager.getConfigValidationErrors()],
                   userAction:
                     mode === "invalid"
-                      ? "Open WinHelm to repair the configuration."
+                      ? t("action.config.repair")
                       : null,
                 },
               },
@@ -105,8 +106,7 @@ export function registerRecoveryTools(server: McpServer): void {
                 error: {
                   code: "INVALID_ARGUMENT",
                   message: "Provide jobId or idempotencyKey.",
-                  userAction:
-                    "Use the jobId from the approval receipt or the original idempotencyKey.",
+                  userAction: t("action.job.check_id"),
                 },
               }),
             },
