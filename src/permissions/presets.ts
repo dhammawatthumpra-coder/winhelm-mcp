@@ -1,6 +1,7 @@
 import { PROFILES, type ToolProfile } from "../config/profiles.js";
 import {
   DEFAULT_APPROVAL_CONFIG,
+  DEFAULT_NETWORK_CONFIG,
   type FolderPermission,
   type FolderPermissionMode,
   type ProfilePreset,
@@ -177,6 +178,7 @@ export function buildPresetConfig(
       jobTtlMs: DEFAULT_APPROVAL_CONFIG.jobTtlMs,
       maxPending: DEFAULT_APPROVAL_CONFIG.maxPending,
     },
+    network: { ...DEFAULT_NETWORK_CONFIG },
     profileState: {
       preset,
       appliedAt,

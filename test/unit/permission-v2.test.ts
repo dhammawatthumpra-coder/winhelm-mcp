@@ -23,6 +23,7 @@ function makeConfig(
       jobTtlMs: 180_000,
       maxPending: 5,
     },
+    network: { allowLoopback: false },
   };
 }
 
