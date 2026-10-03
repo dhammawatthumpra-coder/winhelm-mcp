@@ -307,6 +307,117 @@ describe("Schema-v2 path resolution through the tool surface", () => {
     }
   });
 
+  it("lists the configured folders for file_list with several folders", async () => {
+    const first = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-list-a-"));
+    const second = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-list-b-"));
+    try {
+      await withConfig(
+        {
+          schemaVersion: 2,
+          folders: [
+            { path: first, alias: "a", permission: "readwrite" },
+            { path: second, alias: "b", permission: "read" },
+          ],
+          terminal: { mode: "off" },
+          toolPolicy: { file_list: "auto" },
+        },
+        async () => {
+          const tools = await registeredTools();
+          const result = await tools.file_list.handler(
+            {},
+            { sessionId: "listing-session" }
+          );
+
+          assert.notStrictEqual(result.isError, true);
+          const folders = JSON.parse(result.content[0].text);
+          assert.deepStrictEqual(folders, [
+            { alias: "a", path: first, permission: "readwrite" },
+            { alias: "b", path: second, permission: "read" },
+          ]);
+        }
+      );
+    } finally {
+      await fs.rm(first, { recursive: true, force: true });
+      await fs.rm(second, { recursive: true, force: true });
+    }
+  });
+
+  it("lists the single configured folder for file_list with no path", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-list-one-"));
+    try {
+      await fs.writeFile(path.join(root, "inside.txt"), "x", "utf8");
+
+      await withConfig(
+        {
+          schemaVersion: 2,
+          folders: [{ path: root, alias: "only", permission: "readwrite" }],
+          terminal: { mode: "off" },
+          toolPolicy: { file_list: "auto" },
+        },
+        async () => {
+          const tools = await registeredTools();
+          const result = await tools.file_list.handler(
+            {},
+            { sessionId: "listing-one-session" }
+          );
+
+          assert.notStrictEqual(result.isError, true);
+          assert.ok(String(result.content[0].text).includes("inside.txt"));
+        }
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("still refuses an explicit relative directory with several folders", async () => {
+    const first = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-rel-a-"));
+    const second = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-rel-b-"));
+    try {
+      await withConfig(
+        {
+          schemaVersion: 2,
+          folders: [
+            { path: first, alias: "a", permission: "readwrite" },
+            { path: second, alias: "b", permission: "read" },
+          ],
+          terminal: { mode: "off" },
+          toolPolicy: { file_list: "auto" },
+        },
+        async () => {
+          const tools = await registeredTools();
+          const result = await tools.file_list.handler(
+            { path: "sub" },
+            { sessionId: "relative-session" }
+          );
+
+          assert.strictEqual(result.isError, true);
+          const payload = JSON.parse(result.content[0].text);
+          assert.strictEqual(payload.error.code, "AMBIGUOUS_PATH");
+        }
+      );
+    } finally {
+      await fs.rm(first, { recursive: true, force: true });
+      await fs.rm(second, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the tool policy in charge of the folder listing", () => {
+    const access = evaluateSchemaV2ToolAccess(
+      "file_list",
+      {},
+      {
+        schemaVersion: 2,
+        folders: TWO_FOLDERS,
+        terminal: { mode: "off" },
+        toolPolicy: { file_list: "off" },
+      } as any
+    );
+
+    assert.strictEqual(access.decision, "deny");
+    assert.strictEqual(access.code, "POLICY_OFF");
+  });
+
   it("keeps aliases out of legacy mode", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-legacy-"));
     try {

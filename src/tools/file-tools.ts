@@ -22,6 +22,7 @@ import {
   writeFileContent,
 } from "../engine/filesystem.js";
 import { registerTracedTool } from "./tool-wrapper.js";
+import { isFolderListingRequest } from "../permissions/request-paths.js";
 
 export function registerFileTools(server: McpServer): void {
   // 1. File Read
@@ -115,6 +116,31 @@ export function registerFileTools(server: McpServer): void {
     },
     async ({ path: dirPath = ".", recursive = false }) => {
       try {
+        const manager = ConfigManager.getInstance();
+        const folders = manager.getConfig().folders ?? [];
+        // §5.1: with several folders, "." (or no path) names no single folder.
+        if (
+          manager.getConfigMode() === "v2" &&
+          isFolderListingRequest(dirPath, folders)
+        ) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  folders.map((folder) => ({
+                    alias: folder.alias ?? null,
+                    path: folder.path,
+                    permission: folder.permission,
+                  })),
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
         const list = await listDirectory(dirPath, recursive);
         return {
           content: [{ type: "text", text: JSON.stringify(list, null, 2) }],

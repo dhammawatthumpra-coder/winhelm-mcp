@@ -6,7 +6,7 @@ import {
   type ProtectedPathRule,
 } from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
-import { resolveRequestPath } from "./request-paths.js";
+import { resolveRequestPath, isFolderListingRequest } from "./request-paths.js";
 import { translate as t } from "../i18n/messages.js";
 
 export type ToolAccessDecision = "allow" | "ask" | "deny";
@@ -283,11 +283,17 @@ export function evaluateSchemaV2ToolAccess(
   }
 
   const requirements = pathRequirements(toolName, args);
+  // §5.1: `file_list "."` with several folders lists the folders themselves,
+  // so it has no single path to resolve or authorize. Tool policy still
+  // decides allow/ask/deny below.
+  const folderListing =
+    toolName === "file_list" &&
+    isFolderListingRequest(args.path, config.folders);
   // §5.1: resolve before authorization and write the result back into the
   // request, so the authorized path and the path the tool executes with are
   // the same one.
   const resolvedRequirements: PathRequirement[] = [];
-  for (const requirement of requirements) {
+  for (const requirement of folderListing ? [] : requirements) {
     if (
       typeof requirement.value !== "string" ||
       requirement.value.trim() === ""
