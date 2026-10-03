@@ -6,6 +6,7 @@ import {
   type ProtectedPathRule,
 } from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
+import { resolveRequestPath } from "./request-paths.js";
 import { translate as t } from "../i18n/messages.js";
 
 export type ToolAccessDecision = "allow" | "ask" | "deny";
@@ -16,6 +17,8 @@ export interface ToolAccessResult {
   reason: string;
   userAction?: string;
   pathChecks?: FolderAccessResult[];
+  /** Extra structured context for the caller, e.g. the configured folders. */
+  details?: Record<string, unknown>;
 }
 
 export interface ToolAccessOptions {
@@ -32,6 +35,8 @@ const TERMINAL_EXECUTION_TOOLS = new Set([
 const COMMAND_RUN_TOOL = "command_run";
 
 interface PathRequirement {
+  /** Argument name to write the resolved path back into, when it is a field. */
+  field?: string;
   value: unknown;
   access: "read" | "write";
   denyRootMutation?: boolean;
@@ -43,48 +48,85 @@ function pathRequirements(toolName: string, args: Record<string, any>): PathRequ
     case "file_preview":
     case "file_tail":
     case "file_hash":
-      return [{ value: args.path, access: "read" }];
+      return [{ field: "path", value: args.path, access: "read" }];
 
     case "file_list":
     case "file_search":
     case "file_search_ripgrep":
-      return [{ value: args.path ?? ".", access: "read" }];
+      return [{ field: "path", value: args.path ?? ".", access: "read" }];
 
     case "file_write":
     case "file_edit":
     case "file_delete_safe":
-      return [{ value: args.path, access: "write", denyRootMutation: true }];
+      return [
+        {
+          field: "path",
+          value: args.path,
+          access: "write",
+          denyRootMutation: true,
+        },
+      ];
 
     case "file_copy":
       return [
-        { value: args.source, access: "read" },
-        { value: args.destination, access: "write", denyRootMutation: true },
+        { field: "source", value: args.source, access: "read" },
+        {
+          field: "destination",
+          value: args.destination,
+          access: "write",
+          denyRootMutation: true,
+        },
       ];
 
     case "file_move":
       return [
-        { value: args.source, access: "write", denyRootMutation: true },
-        { value: args.destination, access: "write", denyRootMutation: true },
+        {
+          field: "source",
+          value: args.source,
+          access: "write",
+          denyRootMutation: true,
+        },
+        {
+          field: "destination",
+          value: args.destination,
+          access: "write",
+          denyRootMutation: true,
+        },
       ];
 
     case "archive_zip":
       return [
-        { value: args.source_dir, access: "read" },
-        { value: args.zip_path, access: "write", denyRootMutation: true },
+        { field: "source_dir", value: args.source_dir, access: "read" },
+        {
+          field: "zip_path",
+          value: args.zip_path,
+          access: "write",
+          denyRootMutation: true,
+        },
       ];
 
     case "archive_unzip":
       return [
-        { value: args.zip_path, access: "read" },
+        { field: "zip_path", value: args.zip_path, access: "read" },
         // Extracting children into the configured root is allowed; replacing
         // the root node itself is not what this argument represents.
-        { value: args.target_dir, access: "write", denyRootMutation: false },
+        {
+          field: "target_dir",
+          value: args.target_dir,
+          access: "write",
+          denyRootMutation: false,
+        },
       ];
 
     case "pdf_generate":
       return [
-        { value: args.source_path, access: "read" },
-        { value: args.pdf_path, access: "write", denyRootMutation: true },
+        { field: "source_path", value: args.source_path, access: "read" },
+        {
+          field: "pdf_path",
+          value: args.pdf_path,
+          access: "write",
+          denyRootMutation: true,
+        },
       ];
 
     case "system_open": {
@@ -241,8 +283,44 @@ export function evaluateSchemaV2ToolAccess(
   }
 
   const requirements = pathRequirements(toolName, args);
-  const pathChecks: FolderAccessResult[] = [];
+  // §5.1: resolve before authorization and write the result back into the
+  // request, so the authorized path and the path the tool executes with are
+  // the same one.
+  const resolvedRequirements: PathRequirement[] = [];
   for (const requirement of requirements) {
+    if (
+      typeof requirement.value !== "string" ||
+      requirement.value.trim() === ""
+    ) {
+      resolvedRequirements.push(requirement);
+      continue;
+    }
+
+    const resolution = resolveRequestPath(requirement.value, config.folders);
+    if (!resolution.ok) {
+      return {
+        decision: "deny",
+        code: resolution.code,
+        reason: resolution.reason,
+        userAction:
+          resolution.code === "AMBIGUOUS_PATH"
+            ? t("action.path.alias")
+            : t("action.folder.allowed"),
+        details: { folders: resolution.folders },
+      };
+    }
+
+    if (requirement.field) {
+      args[requirement.field] = resolution.path;
+    }
+    resolvedRequirements.push({
+      ...requirement,
+      value: resolution.path,
+    });
+  }
+
+  const pathChecks: FolderAccessResult[] = [];
+  for (const requirement of resolvedRequirements) {
     const check = checkFolderAccess(
       requirement.value,
       requirement.access,
