@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { StreamableGateway } from "../../src/gateway/streamable-gateway.js";
 import { SseGateway } from "../../src/gateway/sse-gateway.js";
 import { getApprovalEngine, resetApprovalEngine } from "../../src/approval/runtime.js";
+import {
+  getProvenanceTracker,
+  resetProvenanceTracker,
+} from "../../src/approval/provenance.js";
 
 describe("Session Lifecycle & Eviction Engine", () => {
   it("should evict idle sessions in StreamableGateway when exceeding idle timeout", async () => {
@@ -152,6 +156,7 @@ describe("Session Lifecycle & Eviction Engine", () => {
 
   it("should cancel pending approval jobs when StreamableGateway evicts an idle session", async () => {
     resetApprovalEngine();
+    resetProvenanceTracker();
     const gateway = new StreamableGateway(50, 10);
 
     try {
@@ -163,6 +168,13 @@ describe("Session Lifecycle & Eviction Engine", () => {
         maxPending: 5,
         execute: async () => "should-not-run",
       });
+
+      getProvenanceTracker().recordResult(
+        "sess-approval-idle",
+        "file_read",
+        { path: "D:\\note.txt" },
+        { content: [{ type: "text", text: "preview" }] }
+      );
 
       gateway.registerSessionForTest("sess-approval-idle", {
         lastActivityAt: Date.now() - 100,
@@ -179,14 +191,20 @@ describe("Session Lifecycle & Eviction Engine", () => {
         getApprovalEngine().get(created.job.id)?.state,
         "cancelled"
       );
+      assert.deepStrictEqual(
+        getProvenanceTracker().getRecent("sess-approval-idle"),
+        []
+      );
     } finally {
       await gateway.closeAll();
       resetApprovalEngine();
+      resetProvenanceTracker();
     }
   });
 
   it("should cancel pending approval jobs on SseGateway closeAll", async () => {
     resetApprovalEngine();
+    resetProvenanceTracker();
     const sse = new SseGateway(60_000, 10);
 
     try {
@@ -199,6 +217,13 @@ describe("Session Lifecycle & Eviction Engine", () => {
         execute: async () => "should-not-run",
       });
 
+      getProvenanceTracker().recordResult(
+        "sse-approval-close",
+        "system_info",
+        {},
+        { content: [{ type: "text", text: "status" }] }
+      );
+
       sse.registerSessionForTest("sse-approval-close");
       await sse.closeAll();
 
@@ -206,9 +231,14 @@ describe("Session Lifecycle & Eviction Engine", () => {
         getApprovalEngine().get(created.job.id)?.state,
         "cancelled"
       );
+      assert.deepStrictEqual(
+        getProvenanceTracker().getRecent("sse-approval-close"),
+        []
+      );
     } finally {
       await sse.closeAll();
       resetApprovalEngine();
+      resetProvenanceTracker();
     }
   });
 

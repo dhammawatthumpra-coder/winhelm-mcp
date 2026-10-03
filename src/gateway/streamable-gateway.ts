@@ -5,11 +5,17 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { registerAllTools } from "../tools/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
 import { getApprovalEngine } from "../approval/runtime.js";
+import { getProvenanceTracker } from "../approval/provenance.js";
 
 interface StreamableSession {
   transport: StreamableHTTPServerTransport;
   mcpServer: McpServer;
   lastActivityAt: number;
+}
+
+function clearStreamableSessionState(sessionId: string): void {
+  getApprovalEngine().cancelSession(sessionId);
+  getProvenanceTracker().clearSession(sessionId);
 }
 
 export class StreamableGateway {
@@ -58,7 +64,7 @@ export class StreamableGateway {
 
       if (oldestKey) {
         const session = this.sessions.get(oldestKey);
-        getApprovalEngine().cancelSession(oldestKey);
+        clearStreamableSessionState(oldestKey);
         this.sessions.delete(oldestKey);
         if (session) {
           session.mcpServer.close().catch(() => {});
@@ -77,7 +83,7 @@ export class StreamableGateway {
     let count = 0;
     for (const [key, session] of this.sessions.entries()) {
       if (now - session.lastActivityAt > this.idleTimeoutMs) {
-        getApprovalEngine().cancelSession(key);
+        clearStreamableSessionState(key);
         this.sessions.delete(key);
         session.mcpServer.close().catch(() => {});
         count++;
@@ -125,7 +131,7 @@ export class StreamableGateway {
           });
         },
         onsessionclosed: (closedSessionId: string) => {
-          getApprovalEngine().cancelSession(closedSessionId);
+          clearStreamableSessionState(closedSessionId);
           const session = this.sessions.get(closedSessionId);
           if (session) {
             this.sessions.delete(closedSessionId);
@@ -139,7 +145,7 @@ export class StreamableGateway {
       transport.onclose = () => {
         const sid = transport.sessionId;
         if (sid) {
-          getApprovalEngine().cancelSession(sid);
+          clearStreamableSessionState(sid);
           this.sessions.delete(sid);
         }
         mcpServer.close().catch(() => {});
@@ -198,7 +204,7 @@ export class StreamableGateway {
       this.cleanupTimer = null;
     }
     for (const [sessionId, session] of this.sessions.entries()) {
-      getApprovalEngine().cancelSession(sessionId);
+      clearStreamableSessionState(sessionId);
       try {
         await session.mcpServer.close();
       } catch {

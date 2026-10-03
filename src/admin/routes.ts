@@ -13,6 +13,7 @@ import {
   type ProfileApplyInput,
 } from "../config/profile-service.js";
 import { getApprovalEngine } from "../approval/runtime.js";
+import { getProvenanceTracker } from "../approval/provenance.js";
 import { auditLogger, hashSessionId } from "../utils/audit-logger.js";
 import { sanitizeObject } from "../utils/sanitizer.js";
 import { getAdminAuthManager } from "./runtime.js";
@@ -176,6 +177,7 @@ function adminApprovalView(job: any): Record<string, unknown> {
     expiresAt: job.expiresAt,
     updatedAt: job.updatedAt,
     executionCount: job.executionCount,
+    provenance: getProvenanceTracker().getRecent(job.sessionId, 3),
   };
 }
 

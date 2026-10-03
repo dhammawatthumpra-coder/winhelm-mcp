@@ -11,6 +11,10 @@ import {
   getApprovalEngine,
   resetApprovalEngine,
 } from "../../src/approval/runtime.js";
+import {
+  getProvenanceTracker,
+  resetProvenanceTracker,
+} from "../../src/approval/provenance.js";
 
 function cookiePair(setCookie: string | null): string {
   assert.ok(setCookie, "Expected Set-Cookie header");
@@ -22,6 +26,7 @@ describe("Isolated admin HTTP plane", () => {
     ConfigManager.resetInstance();
     resetAdminAuthManager();
     resetApprovalEngine();
+    resetProvenanceTracker();
 
     const instance = createServer({
       port: 0,
@@ -103,6 +108,23 @@ describe("Isolated admin HTTP plane", () => {
       });
       assert.strictEqual(adminAsMcp.status, 401);
 
+      getProvenanceTracker().recordResult(
+        "fixture-session",
+        "file_read",
+        { path: "D:\\inbox\\note.txt" },
+        {
+          content: [
+            {
+              type: "text",
+              text:
+                "Authorization: Bearer provenance-secret-token " +
+                "<a href=\"https://evil.example\">click</a> " +
+                "x".repeat(260),
+            },
+          ],
+        }
+      );
+
       let executions = 0;
       const approval = getApprovalEngine().request({
         tool: "fixture_action",
@@ -145,6 +167,23 @@ describe("Isolated admin HTTP plane", () => {
         approvalView.sessionId,
         "fixture-session",
         "Admin approval API must not expose raw MCP session IDs"
+      );
+      assert.strictEqual(approvalView.provenance.length, 1);
+      assert.strictEqual(
+        approvalView.provenance[0].tool,
+        "file_read"
+      );
+      assert.ok(
+        !approvalView.provenance[0].preview.includes(
+          "provenance-secret-token"
+        )
+      );
+      assert.ok(
+        approvalView.provenance[0].preview.length <= 201
+      );
+      assert.match(
+        approvalView.provenance[0].preview,
+        /<a href=/
       );
 
       // CSRF is mandatory for mutations.
@@ -265,6 +304,7 @@ describe("Isolated admin HTTP plane", () => {
       ConfigManager.resetInstance();
       resetAdminAuthManager();
       resetApprovalEngine();
+      resetProvenanceTracker();
     }
   });
 });

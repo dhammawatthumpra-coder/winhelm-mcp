@@ -975,6 +975,67 @@ export function getDashboardHtml(
           );
           args.setAttribute('aria-label', 'Approval arguments');
 
+          const provenance = Array.isArray(job.provenance)
+            ? job.provenance
+            : [];
+          if (provenance.length > 0) {
+            addTextElement(
+              row,
+              'div',
+              'Recent session activity',
+              'approval-meta'
+            );
+
+            provenance.forEach(entry => {
+              const item = document.createElement('div');
+              item.className = 'approval-row';
+              item.style.marginTop = '6px';
+              item.style.padding = '8px';
+
+              const bytes =
+                entry.metadata &&
+                typeof entry.metadata.bytes === 'number'
+                  ? ' · ' + entry.metadata.bytes + ' bytes'
+                  : '';
+              addTextElement(
+                item,
+                'div',
+                String(entry.tool || 'unknown') +
+                  ' · ' +
+                  String(entry.status || 'unknown') +
+                  bytes
+              );
+              addTextElement(
+                item,
+                'div',
+                String(entry.target || ''),
+                'approval-meta'
+              );
+
+              if (typeof entry.preview === 'string' && entry.preview) {
+                const preview = document.createElement('div');
+                preview.className = 'approval-args';
+                preview.style.display = 'none';
+                preview.textContent = entry.preview;
+
+                const toggle = document.createElement('button');
+                toggle.textContent = 'Show text preview';
+                toggle.addEventListener('click', () => {
+                  const opening = preview.style.display === 'none';
+                  preview.style.display = opening ? 'block' : 'none';
+                  toggle.textContent = opening
+                    ? 'Hide text preview'
+                    : 'Show text preview';
+                });
+
+                item.appendChild(toggle);
+                item.appendChild(preview);
+              }
+
+              row.appendChild(item);
+            });
+          }
+
           if (job.state === 'awaiting_approval') {
             const actions = document.createElement('div');
             actions.className = 'permissions-actions';
