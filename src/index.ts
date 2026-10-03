@@ -10,6 +10,7 @@ import { SERVER_VERSION } from "./utils/version.js";
 import { LocalControlServer } from "./cli/control-server.js";
 import { runControlCliCommand } from "./cli/commands.js";
 import { runSetupCliCommand } from "./cli/setup.js";
+import { runConnectCliCommand } from "./cli/connect.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -32,6 +33,7 @@ Usage:
   winhelm approve <jobId>
   winhelm deny <jobId>
   winhelm admin-code [--refresh]
+  winhelm connect <claude|cursor|all> [--config <path>] [--yes|--dry-run]
   winhelm setup [--preset <name>] [--folder <path>] [--answers <file.json>] [--yes] [--dry-run]
   winhelm setup --migrate-legacy [--folder <path>] [--yes|--dry-run]
 
@@ -63,6 +65,14 @@ Options:
 }
 
 async function main() {
+  const connectCli = await runConnectCliCommand(args);
+  if (connectCli.handled) {
+    if (connectCli.output) console.log(connectCli.output);
+    if (connectCli.error) console.error(connectCli.error);
+    process.exitCode = connectCli.exitCode;
+    return;
+  }
+
   const setupCli = await runSetupCliCommand(args);
   if (setupCli.handled) {
     if (setupCli.output) console.log(setupCli.output);
