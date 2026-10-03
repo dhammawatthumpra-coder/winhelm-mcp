@@ -7,6 +7,8 @@ import { isValidProfile, resolveCustomTools } from "./config/profiles.js";
 import { registerAllTools } from "./tools/index.js";
 import { validateNetworkExposure, isLoopbackHost } from "./utils/network-gate.js";
 import { SERVER_VERSION } from "./utils/version.js";
+import { LocalControlServer } from "./cli/control-server.js";
+import { runControlCliCommand } from "./cli/commands.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -25,6 +27,10 @@ if (args.includes("--help") || args.includes("-h")) {
 WinHelm - Windows Native MCP Server
 Usage:
   winhelm [options]
+  winhelm jobs
+  winhelm approve <jobId>
+  winhelm deny <jobId>
+  winhelm admin-code [--refresh]
 
 Options:
   --config <path>       Load configuration from a specific JSON file (e.g. project-specific config)
@@ -45,6 +51,14 @@ Options:
 }
 
 async function main() {
+  const controlCli = await runControlCliCommand(args);
+  if (controlCli.handled) {
+    if (controlCli.output) console.log(controlCli.output);
+    if (controlCli.error) console.error(controlCli.error);
+    process.exitCode = controlCli.exitCode;
+    return;
+  }
+
   const IS_STDIO = args.includes("--stdio") || getArg("--transport") === "stdio";
   if (IS_STDIO) {
     // In stdio mode, process.stdout is the JSON-RPC wire. All logs must go to stderr.
@@ -114,6 +128,10 @@ async function main() {
     process.exit(1);
   }
 
+  const controlServer = new LocalControlServer();
+  await controlServer.start();
+  console.error("[WinHelm] Local approval control ready. Run 'winhelm jobs' or 'winhelm admin-code' from a local terminal.");
+
   if (IS_STDIO) {
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
@@ -127,6 +145,7 @@ async function main() {
     console.error(`[WinHelm] Connected via stdio transport (Profile: ${configManager.getConfig().profile || "full"}).`);
 
     const shutdown = async () => {
+      await controlServer.close().catch(() => {});
       await mcpServer.close().catch(() => {});
       process.exit(0);
     };
@@ -158,6 +177,12 @@ async function main() {
       process.exit(0);
     }, 1200);
     forceExitTimer.unref();
+
+    try {
+      await controlServer.close();
+    } catch {
+      // ignore
+    }
 
     try {
       await stop(server);
