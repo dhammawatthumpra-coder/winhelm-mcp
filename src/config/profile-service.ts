@@ -481,6 +481,50 @@ export async function applyLegacyMigrationApplication(
   };
 }
 
+function profilePersistenceUpdates(
+  manager: ConfigManager,
+  candidate: SchemaV2PermissionConfig
+): Partial<ServerConfig> {
+  const current = manager.getConfig();
+  const terminal =
+    manager.getConfigMode() === "v2" && current.terminal
+      ? {
+          ...current.terminal,
+          mode: candidate.terminal.mode,
+        }
+      : { ...candidate.terminal };
+
+  const profileState = candidate.profileState
+    ? {
+        ...candidate.profileState,
+        appliedSnapshot: {
+          folders:
+            candidate.profileState.appliedSnapshot.folders.map(
+              (folder) => ({ ...folder })
+            ),
+          terminal: { mode: candidate.terminal.mode },
+          toolPolicy: {
+            ...candidate.profileState.appliedSnapshot.toolPolicy,
+          },
+        },
+      }
+    : undefined;
+
+  if (profileState) {
+    profileState.appliedFingerprint =
+      fingerprintGovernedState(profileState.appliedSnapshot);
+  }
+
+  return {
+    schemaVersion: 2,
+    profilePreset: candidate.profilePreset,
+    folders: candidate.folders.map((folder) => ({ ...folder })),
+    terminal,
+    toolPolicy: { ...candidate.toolPolicy },
+    ...(profileState ? { profileState } : {}),
+  };
+}
+
 export async function applyProfilePreset(
   input: ProfileApplyInput,
   manager = ConfigManager.getInstance()
@@ -509,7 +553,7 @@ export async function applyProfilePreset(
 
   try {
     await manager.updateConfig(
-      candidate as unknown as Partial<ServerConfig>,
+      profilePersistenceUpdates(manager, candidate),
       true
     );
   } catch (err) {
