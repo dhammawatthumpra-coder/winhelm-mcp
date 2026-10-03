@@ -80,7 +80,7 @@ function terminalResult(job: ApprovalJob): any {
       );
     case "denied":
       return structuredError(
-        "PERMISSION_DENIED",
+        "APPROVAL_DENIED",
         "The user denied this WinHelm action.",
         t("action.approval.denied"),
         { jobId: job.id }

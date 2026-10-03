@@ -276,7 +276,7 @@ export function evaluateSchemaV2ToolAccess(
   if (policy.decision === "deny") {
     return {
       decision: "deny",
-      code: "TOOL_POLICY_OFF",
+      code: policy.code,
       reason: policy.reason,
       userAction: t("action.tool.enable"),
     };

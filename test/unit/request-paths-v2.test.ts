@@ -36,7 +36,7 @@ describe("Schema-v2 request path resolution", () => {
     const unknown = resolveRequestPath("@nope/a.ts", TWO_FOLDERS);
     assert.strictEqual(unknown.ok, false);
     if (!unknown.ok) {
-      assert.strictEqual(unknown.code, "FOLDER_OUTSIDE_ALLOWED");
+      assert.strictEqual(unknown.code, "FOLDER_NOT_APPROVED");
       assert.deepStrictEqual(unknown.folders, [
         {
           alias: "ws",
@@ -91,7 +91,7 @@ describe("Schema-v2 request path resolution", () => {
     const none = resolveRequestPath("note.txt", []);
     assert.strictEqual(none.ok, false);
     if (!none.ok) {
-      assert.strictEqual(none.code, "FOLDER_OUTSIDE_ALLOWED");
+      assert.strictEqual(none.code, "FOLDER_NOT_APPROVED");
     }
   });
 

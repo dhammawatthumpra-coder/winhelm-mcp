@@ -418,12 +418,12 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const askResult = await askPromise;
         assert.strictEqual(askResult.isError, true);
         const askPayload = JSON.parse(askResult.content[0].text);
-        assert.strictEqual(askPayload.error.code, "PERMISSION_DENIED");
+        assert.strictEqual(askPayload.error.code, "APPROVAL_DENIED");
 
         const offResult = await tools["process_kill"].handler({ pid: 4 }, {});
         assert.strictEqual(offResult.isError, true);
         const offPayload = JSON.parse(offResult.content[0].text);
-        assert.strictEqual(offPayload.error.code, "TOOL_POLICY_OFF");
+        assert.strictEqual(offPayload.error.code, "POLICY_OFF");
 
         const terminalPromise = tools["terminal_run"].handler(
           { command: "Write-Output should-not-run" },
@@ -444,7 +444,7 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const terminalAsk = await terminalPromise;
         assert.strictEqual(terminalAsk.isError, true);
         const terminalPayload = JSON.parse(terminalAsk.content[0].text);
-        assert.strictEqual(terminalPayload.error.code, "PERMISSION_DENIED");
+        assert.strictEqual(terminalPayload.error.code, "APPROVAL_DENIED");
       }
     );
   });

@@ -11,7 +11,7 @@ export type RequestPathResolution =
   | { ok: true; path: string; alias: string | null }
   | {
       ok: false;
-      code: "AMBIGUOUS_PATH" | "FOLDER_OUTSIDE_ALLOWED";
+      code: "AMBIGUOUS_PATH" | "FOLDER_NOT_APPROVED";
       reason: string;
       folders: FolderDescriptor[];
     };
@@ -77,7 +77,7 @@ export function resolveRequestPath(
     if (!match) {
       return {
         ok: false,
-        code: "FOLDER_OUTSIDE_ALLOWED",
+        code: "FOLDER_NOT_APPROVED",
         reason: `Unknown WinHelm folder alias: ${raw}`,
         folders: describeFolders(configured),
       };
@@ -99,7 +99,7 @@ export function resolveRequestPath(
   if (configured.length === 0) {
     return {
       ok: false,
-      code: "FOLDER_OUTSIDE_ALLOWED",
+      code: "FOLDER_NOT_APPROVED",
       reason:
         "No WinHelm folder is configured, so a relative path cannot be resolved.",
       folders: [],
