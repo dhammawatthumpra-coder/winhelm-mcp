@@ -922,7 +922,9 @@ export function registerAdminRoutes(app: Express): void {
           outcome.code,
           outcome.code === "NOT_FOUND"
             ? "Approval job not found."
-            : "Approval job is no longer awaiting approval."
+            : outcome.code === "JOURNAL_UNAVAILABLE"
+              ? "The approval journal could not record this decision, so the action was not run."
+              : "Approval job is no longer awaiting approval."
         );
         return;
       }
