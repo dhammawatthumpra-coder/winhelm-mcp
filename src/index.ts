@@ -9,6 +9,7 @@ import { validateNetworkExposure, isLoopbackHost } from "./utils/network-gate.js
 import { SERVER_VERSION } from "./utils/version.js";
 import { LocalControlServer } from "./cli/control-server.js";
 import { runControlCliCommand } from "./cli/commands.js";
+import { runSetupCliCommand } from "./cli/setup.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -31,6 +32,15 @@ Usage:
   winhelm approve <jobId>
   winhelm deny <jobId>
   winhelm admin-code [--refresh]
+  winhelm setup [--preset <name>] [--folder <path>] [--answers <file.json>] [--yes] [--dry-run]
+
+Setup:
+  --preset <name>       safe, balanced, power, minimal, core, dev, sysadmin, or full
+  --folder <path>       Allowed folder; repeat for multiple folders. Optional "path::alias"
+  --answers <file>      Non-interactive JSON answer file
+  --confirm <text>      Typed confirmation for Power/full ("confirm" or "ยืนยัน")
+  --yes, -y             Apply non-interactive answers without another prompt
+  --dry-run             Preview permission changes without writing config
 
 Options:
   --config <path>       Load configuration from a specific JSON file (e.g. project-specific config)
@@ -51,6 +61,14 @@ Options:
 }
 
 async function main() {
+  const setupCli = await runSetupCliCommand(args);
+  if (setupCli.handled) {
+    if (setupCli.output) console.log(setupCli.output);
+    if (setupCli.error) console.error(setupCli.error);
+    process.exitCode = setupCli.exitCode;
+    return;
+  }
+
   const controlCli = await runControlCliCommand(args);
   if (controlCli.handled) {
     if (controlCli.output) console.log(controlCli.output);
