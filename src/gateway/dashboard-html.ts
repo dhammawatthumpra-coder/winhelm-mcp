@@ -571,6 +571,22 @@ export function getDashboardHtml(
             </div>
 
             <div id="profilePreview" class="permission-summary" style="margin-top:12px;">Unlock completed. Loading current permissions…</div>
+
+            <div style="margin-top:16px;border-top:1px solid var(--card-border);padding-top:12px;">
+              <div style="font-weight:600;">MCP Client Connection</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+                Writes only <code>mcpServers.winhelm</code> in the local client config. Unrelated settings are preserved, an existing file is backed up first, and no auth or admin secret is embedded.
+              </div>
+              <div class="permissions-actions">
+                <button onclick="previewMcpClient('claude')">Preview Claude Desktop</button>
+                <button class="primary" onclick="connectMcpClient('claude')">Connect Claude Desktop</button>
+              </div>
+              <div class="permissions-actions" style="margin-top:8px;">
+                <button onclick="previewMcpClient('cursor')">Preview Cursor</button>
+                <button class="primary" onclick="connectMcpClient('cursor')">Connect Cursor</button>
+              </div>
+              <div id="clientConnectionPreview" class="permission-summary" style="margin-top:12px;">No client preview yet.</div>
+            </div>
           </div>
 
           <div>
@@ -968,6 +984,71 @@ export function getDashboardHtml(
       } catch (err) {
         document.getElementById('profilePreview').textContent =
           (err.code ? err.code + ': ' : '') + (err.message || String(err));
+      }
+    }
+
+    function clientPreviewLines(preview, applied) {
+      const target = preview.target || {};
+      const entry = preview.proposedEntry || {};
+      const lines = [
+        (applied ? 'Applied: ' : 'Preview: ') + String(target.displayName || ''),
+        'Config: ' + String(target.configPath || ''),
+        'Config file exists: ' + (target.configFileExists ? 'yes' : 'no'),
+        'Changed: ' + (preview.changed ? 'yes' : 'no'),
+        'Command: ' + String(entry.command || ''),
+        'Replaces: ' +
+          (preview.existingEntry
+            ? JSON.stringify(preview.existingEntry)
+            : 'nothing (new entry)')
+      ];
+
+      (entry.args || []).forEach(arg => {
+        lines.push('  ' + String(arg));
+      });
+      (preview.warnings || []).forEach(warning => {
+        lines.push('WARNING: ' + String(warning));
+      });
+
+      return lines;
+    }
+
+    function setClientPreview(text) {
+      document.getElementById('clientConnectionPreview').textContent = text;
+    }
+
+    async function previewMcpClient(client) {
+      setClientPreview('Loading preview…');
+      try {
+        const body = await adminRequest(
+          '/admin/clients/' + client + '/preview',
+          { method: 'POST' }
+        );
+        setClientPreview(clientPreviewLines(body.preview, false).join('\n'));
+      } catch (err) {
+        setClientPreview(
+          (err.code ? err.code + ': ' : '') + (err.message || String(err))
+        );
+      }
+    }
+
+    async function connectMcpClient(client) {
+      setClientPreview('Writing client config…');
+      try {
+        const body = await adminRequest(
+          '/admin/clients/' + client + '/apply',
+          { method: 'POST' }
+        );
+        const lines = clientPreviewLines(body.preview, true);
+        lines.push(
+          body.backupPath
+            ? 'Backup: ' + String(body.backupPath)
+            : 'No previous client config to back up.'
+        );
+        setClientPreview(lines.join('\n'));
+      } catch (err) {
+        setClientPreview(
+          (err.code ? err.code + ': ' : '') + (err.message || String(err))
+        );
       }
     }
 
