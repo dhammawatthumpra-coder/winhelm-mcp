@@ -55,6 +55,9 @@ export function getDashboardHtml(
     approvalsEmpty: t("dashboard.approvals.empty"),
     approvalsApprove: t("dashboard.approvals.approve"),
     approvalsDeny: t("dashboard.approvals.deny"),
+    approvalsArguments: t("dashboard.approvals.arguments"),
+    approvalsFolders: t("dashboard.approvals.folders"),
+    approvalsNoFolder: t("dashboard.approvals.noFolder"),
     clientsTitle: t("dashboard.clients.title"),
     clientsNote: t("dashboard.clients.note"),
     clientsEmpty: t("dashboard.clients.empty"),
@@ -86,6 +89,9 @@ export function getDashboardHtml(
     approvalsEmpty: uiMessages.approvalsEmpty,
     approvalsApprove: uiMessages.approvalsApprove,
     approvalsDeny: uiMessages.approvalsDeny,
+    approvalsArguments: uiMessages.approvalsArguments,
+    approvalsFolders: uiMessages.approvalsFolders,
+    approvalsNoFolder: uiMessages.approvalsNoFolder,
     clientsEmpty: uiMessages.clientsEmpty,
     clientsLoading: uiMessages.clientsLoading,
     tokenConfirm: uiMessages.tokenConfirm,
@@ -1390,13 +1396,52 @@ export function getDashboardHtml(
             );
           }
 
+          // 4.4: full arguments, shown expanded but collapsible.
+          const argsDetails = document.createElement('details');
+          argsDetails.open = true;
+          addTextElement(
+            argsDetails,
+            'summary',
+            DASHBOARD_MESSAGES.approvalsArguments
+          );
           const args = addTextElement(
-            row,
+            argsDetails,
             'div',
             JSON.stringify(job.args || {}, null, 2),
             'approval-args'
           );
           args.setAttribute('aria-label', 'Approval arguments');
+          row.appendChild(argsDetails);
+
+          const folderAccess = Array.isArray(job.folderAccess)
+            ? job.folderAccess
+            : [];
+          if (folderAccess.length > 0) {
+            const lines = folderAccess.map(check => {
+              const folder = check && check.folder ? check.folder : null;
+              const label = folder
+                ? (folder.alias
+                    ? '@' + String(folder.alias)
+                    : String(folder.path)) +
+                  ' (' +
+                  String(folder.permission) +
+                  ')'
+                : DASHBOARD_MESSAGES.approvalsNoFolder;
+              return (
+                String((check && check.argument) || 'path') +
+                ': ' +
+                String((check && check.resolved) || '') +
+                ' → ' +
+                label
+              );
+            });
+            addTextElement(
+              row,
+              'div',
+              DASHBOARD_MESSAGES.approvalsFolders + '\n' + lines.join('\n'),
+              'approval-args'
+            );
+          }
 
           const provenance = Array.isArray(job.provenance)
             ? job.provenance

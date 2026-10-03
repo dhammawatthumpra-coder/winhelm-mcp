@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { createServer } from "../../src/gateway/server.js";
@@ -201,6 +202,37 @@ describe("Isolated admin HTTP plane", () => {
         "the connection list must not expose raw MCP session IDs"
       );
       assert.strictEqual(sessionView.pendingApprovals, 1);
+
+      // 4.4: a path-bearing job must expose the folder resolution in the view.
+      const pathJob = getApprovalEngine().request({
+        tool: "file_write",
+        args: { path: "D:\\inbox\\note.txt", content: "x" },
+        sessionId: "fixture-session",
+        requestId: 2,
+        ttlMs: 30_000,
+        maxPending: 5,
+        execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+      });
+      const pathView = (
+        await (
+          await fetch(`${base}/admin/approvals`, {
+            headers: { Cookie: adminCookie },
+          })
+        ).json() as any
+      ).jobs.find((job: any) => job.id === pathJob.job.id);
+      assert.ok(pathView, "the path job must be visible to the admin plane");
+      assert.ok(Array.isArray(pathView.folderAccess));
+      assert.strictEqual(pathView.folderAccess.length, 1);
+      assert.strictEqual(pathView.folderAccess[0].argument, "path");
+      assert.strictEqual(
+        pathView.folderAccess[0].resolved,
+        path.resolve("D:\\inbox\\note.txt")
+      );
+      assert.strictEqual(pathView.folderAccess[0].folder, null);
+      assert.strictEqual(
+        pathView.folderAccess[0].code,
+        "FOLDER_NOT_APPROVED"
+      );
       assert.strictEqual(approvalView.risk.class, "R3");
       assert.strictEqual(approvalView.risk.level, "elevated");
       assert.match(
