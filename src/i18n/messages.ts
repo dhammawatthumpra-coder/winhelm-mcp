@@ -7,6 +7,12 @@ export const EN_MESSAGES = {
     "The command will not run after this expires",
   "confirm.type":
     'Type "confirm" to continue',
+  "notify.approval.title":
+    "WinHelm approval required",
+  "notify.approval.body":
+    "An AI action is waiting for your approval in WinHelm.",
+  "notify.approval.action":
+    "Open WinHelm",
 
   "action.folder.readwrite":
     "Choose a readwrite folder or change its permission in WinHelm settings.",
@@ -66,6 +72,12 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "หมดเวลาแล้วจะไม่รันคำสั่งนี้",
   "confirm.type":
     'พิมพ์ "ยืนยัน" เพื่อดำเนินการต่อ',
+  "notify.approval.title":
+    "WinHelm ต้องการการอนุมัติ",
+  "notify.approval.body":
+    "มีคำสั่งจาก AI รอการอนุมัติของคุณใน WinHelm",
+  "notify.approval.action":
+    "เปิด WinHelm",
 
   "action.folder.readwrite":
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",

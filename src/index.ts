@@ -13,6 +13,7 @@ import { runSetupCliCommand } from "./cli/setup.js";
 import { runConnectCliCommand } from "./cli/connect.js";
 import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
 import { initializeApprovalPersistence } from "./approval/runtime.js";
+import { defaultApprovalJournalPath } from "./approval/journal.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -102,7 +103,10 @@ async function main() {
   const configManager = ConfigManager.getInstance(CONFIG_ARG);
   await configManager.init(CONFIG_ARG);
 
-  const approvalPersistence = initializeApprovalPersistence();
+  const approvalPersistence = initializeApprovalPersistence(
+    defaultApprovalJournalPath(),
+    { notifyApprovals: true }
+  );
   if (approvalPersistence.integrityFailure) {
     console.error(
       `[WinHelm] Approval journal could not be trusted (${approvalPersistence.integrityFailure}). ` +

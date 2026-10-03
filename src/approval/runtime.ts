@@ -1,8 +1,10 @@
 import {
   ApprovalEngine,
   type ApprovalEngineOptions,
+  type ApprovalJob,
   type RecoverableApprovalJob,
 } from "./approval-engine.js";
+import { notifyApprovalPending } from "./notify.js";
 import {
   ApprovalJournal,
   defaultApprovalJournalPath,
@@ -37,6 +39,16 @@ export function resetApprovalEngine(
   return engine;
 }
 
+export interface ApprovalPersistenceOptions {
+  /**
+   * Send a desktop notification when a job is queued. Off by default so tests
+   * and library callers never touch the desktop.
+   */
+  notifyApprovals?: boolean;
+  /** Notification adapter; defaults to WinHelm's own desktop toast. */
+  notifier?: (job: ApprovalJob) => void;
+}
+
 /**
  * Wire the durable approval journal. This is an explicit production bootstrap:
  * the default engine stays in-memory so tests never write to the user's WinHelm
@@ -47,7 +59,8 @@ export function resetApprovalEngine(
  * and are never re-run. A journal that cannot be trusted fails closed.
  */
 export function initializeApprovalPersistence(
-  journalPath: string = defaultApprovalJournalPath()
+  journalPath: string = defaultApprovalJournalPath(),
+  options: ApprovalPersistenceOptions = {}
 ): ApprovalPersistenceStatus {
   const journal = new ApprovalJournal(journalPath);
   const loaded = journal.load();
@@ -55,6 +68,13 @@ export function initializeApprovalPersistence(
   engine = new ApprovalEngine({
     persist: (job: RecoverableApprovalJob) => journal.persist(job),
     journalIntegrityFailed: loaded.integrityFailure !== null,
+    ...(options.notifyApprovals
+      ? {
+          onCreated: (job: ApprovalJob) => {
+            (options.notifier ?? notifyApprovalPending)(job);
+          },
+        }
+      : {}),
   });
 
   if (loaded.jobs.length > 0) {
