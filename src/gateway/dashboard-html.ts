@@ -58,6 +58,9 @@ export function getDashboardHtml(
     approvalsArguments: t("dashboard.approvals.arguments"),
     approvalsFolders: t("dashboard.approvals.folders"),
     approvalsNoFolder: t("dashboard.approvals.noFolder"),
+    approvalsProvenance: t("dashboard.approvals.provenance"),
+    approvalsShowPreview: t("dashboard.approvals.showPreview"),
+    approvalsHidePreview: t("dashboard.approvals.hidePreview"),
     clientsTitle: t("dashboard.clients.title"),
     clientsNote: t("dashboard.clients.note"),
     clientsEmpty: t("dashboard.clients.empty"),
@@ -92,6 +95,9 @@ export function getDashboardHtml(
     approvalsArguments: uiMessages.approvalsArguments,
     approvalsFolders: uiMessages.approvalsFolders,
     approvalsNoFolder: uiMessages.approvalsNoFolder,
+    approvalsProvenance: uiMessages.approvalsProvenance,
+    approvalsShowPreview: uiMessages.approvalsShowPreview,
+    approvalsHidePreview: uiMessages.approvalsHidePreview,
     clientsEmpty: uiMessages.clientsEmpty,
     clientsLoading: uiMessages.clientsLoading,
     tokenConfirm: uiMessages.tokenConfirm,
@@ -1450,7 +1456,7 @@ export function getDashboardHtml(
             addTextElement(
               row,
               'div',
-              'Recent session activity',
+              DASHBOARD_MESSAGES.approvalsProvenance,
               'approval-meta'
             );
 
@@ -1487,13 +1493,13 @@ export function getDashboardHtml(
                 preview.textContent = entry.preview;
 
                 const toggle = document.createElement('button');
-                toggle.textContent = 'Show text preview';
+                toggle.textContent = DASHBOARD_MESSAGES.approvalsShowPreview;
                 toggle.addEventListener('click', () => {
                   const opening = preview.style.display === 'none';
                   preview.style.display = opening ? 'block' : 'none';
                   toggle.textContent = opening
-                    ? 'Hide text preview'
-                    : 'Show text preview';
+                    ? DASHBOARD_MESSAGES.approvalsHidePreview
+                    : DASHBOARD_MESSAGES.approvalsShowPreview;
                 });
 
                 item.appendChild(toggle);

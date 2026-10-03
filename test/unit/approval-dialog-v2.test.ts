@@ -127,6 +127,9 @@ describe("Dashboard approval dialog rendering", () => {
       "dashboard.approvals.arguments",
       "dashboard.approvals.folders",
       "dashboard.approvals.noFolder",
+      "dashboard.approvals.provenance",
+      "dashboard.approvals.showPreview",
+      "dashboard.approvals.hidePreview",
     ] as const) {
       assert.ok(translate(key, {}, "en").trim().length > 0);
       assert.ok(translate(key, {}, "th").trim().length > 0);
@@ -136,5 +139,43 @@ describe("Dashboard approval dialog rendering", () => {
       );
       assert.ok(html.includes(escapeHtml(translate(key, {}, "en"))));
     }
+  });
+
+  it("keeps the provenance preview text-only, closed and unclickable (AC-UI1)", () => {
+    // Rendered through textContent, never parsed as HTML or Markdown.
+    assert.match(html, /preview\.textContent = entry\.preview;/);
+    // Closed by default, opened only by the explicit toggle.
+    assert.match(
+      html,
+      /preview\.style\.display = 'none';[\s\S]{0,200}preview\.textContent = entry\.preview;/
+    );
+    assert.match(
+      html,
+      /const opening = preview\.style\.display === 'none';/
+    );
+    // Toggle labels come from the catalog.
+    assert.match(
+      html,
+      /toggle\.textContent = DASHBOARD_MESSAGES\.approvalsShowPreview;/
+    );
+    assert.match(
+      html,
+      /DASHBOARD_MESSAGES\.approvalsHidePreview/
+    );
+    // No anchor is created for provenance, so URLs stay plain text.
+    const provenanceRegion = html.slice(
+      html.indexOf("const provenance = Array.isArray(job.provenance)"),
+      html.indexOf("if (job.state === 'awaiting_approval')")
+    );
+    assert.ok(provenanceRegion.length > 0);
+    assert.strictEqual(
+      provenanceRegion.includes("createElement('a')"),
+      false
+    );
+    assert.strictEqual(provenanceRegion.includes("innerHTML"), false);
+    assert.strictEqual(
+      provenanceRegion.includes("textContent = entry.preview"),
+      true
+    );
   });
 });
