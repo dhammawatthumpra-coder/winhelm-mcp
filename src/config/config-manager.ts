@@ -19,7 +19,11 @@ import {
   validateSchemaV2Config,
   type ConfigMode,
 } from "./schema-v2.js";
-import { checkFolderAccess } from "../permissions/folder-access.js";
+import {
+  canonicalizeExistingAwarePath,
+  checkFolderAccess,
+  protectedRuleBlocksPath,
+} from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
 import { setConfiguredLocale } from "../i18n/messages.js";
 import { atomicWriteUtf8 } from "./atomic-write.js";
@@ -629,10 +633,71 @@ export class ConfigManager {
     return { allowed: true };
   }
 
+  private getProtectedPathRules(
+    options: { includeInstallRoot?: boolean } = {}
+  ): ReturnType<typeof buildProtectedPathRules> {
+    const installRoot =
+      options.includeInstallRoot === false
+        ? undefined
+        : this.getSchemaV2InstallRoot();
+    return buildProtectedPathRules({
+      configFilePath: this.configFilePath,
+      dataDir: path.join(os.homedir(), ".winhelm"),
+      logDir: path.resolve(process.cwd(), "logs"),
+      ...(installRoot ? { installRoot } : {}),
+    });
+  }
+
+  private protectedPathDenial(
+    targetPath: string
+  ): { allowed: false; code: string; reason: string } | undefined {
+    // Legacy mode protects the config, data and log paths (where the auth token
+    // and audit trail live) but keeps the install-root rule to schema-v2, so
+    // v1.2.1 workflows that edit files next to the executable still work.
+    const rules = this.getProtectedPathRules({ includeInstallRoot: false });
+    if (rules.length === 0) return undefined;
+
+    let canonicalTarget: string;
+    try {
+      canonicalTarget = canonicalizeExistingAwarePath(targetPath);
+    } catch {
+      // A path that cannot be canonicalized is not treated as protected here;
+      // the ordinary allowedDirectories check still has to approve it.
+      try {
+        canonicalTarget = path.resolve(String(targetPath).normalize("NFKC"));
+      } catch {
+        return undefined;
+      }
+    }
+
+    for (const rule of rules) {
+      try {
+        if (protectedRuleBlocksPath(rule, canonicalTarget)) {
+          return {
+            allowed: false,
+            code: "FOLDER_PROTECTED_PATH",
+            reason: `Path is protected by WinHelm security policy: ${rule.label || rule.path}`,
+          };
+        }
+      } catch {
+        // A malformed protected rule never grants access.
+      }
+    }
+
+    return undefined;
+  }
+
   /**
    * Validate if a filesystem path is permitted under allowedDirectories
    */
-  private isLegacyPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
+  private isLegacyPathAllowed(targetPath: string): { allowed: boolean; reason?: string; code?: string } {
+    // WinHelm's own config/data/log/install paths stay denied in legacy mode
+    // too: they hold the auth token, admin material and the active
+    // configuration. v1.2.1 relied on allowedDirectories alone, so a wildcard
+    // legacy config used to expose them to tools.
+    const protectedDenial = this.protectedPathDenial(targetPath);
+    if (protectedDenial) return protectedDenial;
+
     if (isWildcardAllowAll(this.config.allowedDirectories)) {
       return { allowed: true };
     }
@@ -737,12 +802,7 @@ export class ConfigManager {
     }
 
     if (this.configMode === "v2") {
-      const protectedPaths = buildProtectedPathRules({
-        configFilePath: this.configFilePath,
-        dataDir: path.join(os.homedir(), ".winhelm"),
-        logDir: path.resolve(process.cwd(), "logs"),
-        installRoot: this.getSchemaV2InstallRoot(),
-      });
+      const protectedPaths = this.getProtectedPathRules();
 
       const result = checkFolderAccess(
         targetPath,
