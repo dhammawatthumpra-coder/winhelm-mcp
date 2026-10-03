@@ -16,6 +16,8 @@ export interface ApprovalFlowInput<T = any> {
   engine: ApprovalEngine;
   tool: string;
   args: Record<string, unknown>;
+  /** Original caller args when `args` carries added display metadata. */
+  fingerprintArgs?: Record<string, unknown>;
   approval: ApprovalConfig;
   context: ApprovalFlowContext;
   execute: () => Promise<T>;
@@ -118,6 +120,7 @@ export async function runToolWithHybridApproval<T = any>(
     requested = input.engine.request<T>({
       tool: input.tool,
       args: input.args,
+      fingerprintArgs: input.fingerprintArgs,
       sessionId,
       requestId: input.context.requestId,
       ttlMs: input.approval.jobTtlMs,

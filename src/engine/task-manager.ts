@@ -165,6 +165,21 @@ export class TaskManager {
   }
 
   /**
+   * Return true only for a currently-running PID that belongs to a task
+   * started by this TaskManager. Completed/killed task PIDs are deliberately
+   * excluded to avoid PID-reuse confusion.
+   */
+  public ownsRunningPid(pid: number): boolean {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    for (const task of this.tasks.values()) {
+      if (task.status === "running" && task.pid === pid) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * List all background tasks
    */
   public listTasks(): TaskSummary[] {

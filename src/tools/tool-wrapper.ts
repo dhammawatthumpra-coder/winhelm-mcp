@@ -13,6 +13,9 @@ import {
 import { isRecoveryToolName } from "./registry.js";
 import { getToolMetadata } from "./metadata.js";
 import { getServerRuntimeContext } from "../gateway/session-context.js";
+import { taskManager } from "../engine/task-manager.js";
+import { inspectProcessTargets } from "../engine/system.js";
+import { processKillNeedsExternalApproval } from "../permissions/process-kill.js";
 import { normalizeSchemaV2ToolErrorResult } from "../errors/tool-error.js";
 import { translate as t } from "../i18n/messages.js";
 
@@ -131,7 +134,28 @@ export function registerTracedTool(
     if (liveMode === "v2" && !recoveryTool) {
       const liveConfig =
         liveConfigManager.getConfig() as unknown as SchemaV2PermissionConfig;
-      const access = evaluateSchemaV2ToolAccess(name, args ?? {}, liveConfig);
+      let access = evaluateSchemaV2ToolAccess(
+        name,
+        args ?? {},
+        liveConfig
+      );
+
+      if (
+        name === "process_kill" &&
+        access.decision === "allow" &&
+        processKillNeedsExternalApproval(
+          args ?? {},
+          taskManager
+        )
+      ) {
+        access = {
+          decision: "ask",
+          code: "APPROVAL_REQUIRED",
+          reason:
+            "Terminating a process not started by WinHelm requires explicit approval.",
+          userAction: t("action.approve.generic"),
+        };
+      }
 
       if (access.decision === "deny") {
         return logAndReturnPolicyError(
@@ -155,6 +179,42 @@ export function registerTracedTool(
       }
 
       if (access.decision === "ask") {
+        const originalArgs = args ?? {};
+        let approvalArgs = originalArgs;
+        if (name === "process_kill") {
+          const unresolvedIdentity = [
+            {
+              ...(typeof originalArgs.pid === "number"
+                ? { pid: originalArgs.pid }
+                : {}),
+              ...(typeof originalArgs.name === "string"
+                ? { name: originalArgs.name }
+                : {}),
+              publisher: null,
+            },
+          ];
+
+          let identities: Awaited<
+            ReturnType<typeof inspectProcessTargets>
+          > = [];
+          try {
+            identities = await inspectProcessTargets(
+              originalArgs.pid,
+              originalArgs.name
+            );
+          } catch {
+            identities = [];
+          }
+
+          approvalArgs = {
+            ...originalArgs,
+            processIdentity:
+              identities.length > 0
+                ? identities
+                : unresolvedIdentity,
+          };
+        }
+
         const executionController = new AbortController();
         const executionExtra = {
           ...baseExecutionExtra,
@@ -170,7 +230,10 @@ export function registerTracedTool(
           runToolWithHybridApproval({
             engine: getApprovalEngine(),
             tool: name,
-            args: args ?? {},
+            args: approvalArgs,
+            // Retry dedupe must key on what the caller actually asked for;
+            // probed identity is display metadata and may differ per attempt.
+            fingerprintArgs: originalArgs,
             approval: liveConfig.approval,
             context: {
               sessionId: effectiveSessionId,

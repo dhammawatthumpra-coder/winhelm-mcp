@@ -17,6 +17,11 @@ describe("TaskManager (Background Terminal Engine)", () => {
     const summary = taskManager.startTask('Write-Output "Task running"; Start-Sleep -Seconds 5; Write-Output "Task finished"');
     assert.ok(summary.id);
     assert.strictEqual(summary.status, "running");
+    assert.ok(summary.pid);
+    assert.strictEqual(
+      taskManager.ownsRunningPid(summary.pid!),
+      true
+    );
 
     const tasks = taskManager.listTasks();
     const found = tasks.find((t) => t.id === summary.id);
@@ -37,6 +42,10 @@ describe("TaskManager (Background Terminal Engine)", () => {
     // Kill task
     const killRes = taskManager.killTask(summary.id);
     assert.strictEqual(killRes.success, true);
+    assert.strictEqual(
+      taskManager.ownsRunningPid(summary.pid!),
+      false
+    );
   });
 
   it("should reject blocked commands in background tasks", () => {
