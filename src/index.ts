@@ -11,6 +11,7 @@ import { LocalControlServer } from "./cli/control-server.js";
 import { runControlCliCommand } from "./cli/commands.js";
 import { runSetupCliCommand } from "./cli/setup.js";
 import { runConnectCliCommand } from "./cli/connect.js";
+import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -102,34 +103,99 @@ async function main() {
 
   const PORT = parseInt(getArg("--port", process.env.PORT || "8788")!, 10);
   const HOST = getArg("--host", process.env.HOST || "127.0.0.1")!;
-  const AUTH_TOKEN = getArg("--auth", process.env.MCP_AUTH_TOKEN || undefined);
-  const ALLOWED_DIRS = getArg("--allowed-dirs", process.env.MCP_ALLOWED_DIRECTORIES || undefined);
-  const READ_ONLY = args.includes("--read-only") || process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1";
-  const ALLOW_SYSTEM_EXEC = args.includes("--system-exec") || args.includes("--allow-system-exec");
-  const PROFILE_ARG = getArg("--profile", getArg("-p", process.env.WINHELM_PROFILE || undefined));
+  const CLI_AUTH_TOKEN = getArg("--auth");
+  const CLI_ALLOWED_DIRS = getArg("--allowed-dirs");
+  const CLI_READ_ONLY = args.includes("--read-only");
+  const ALLOW_SYSTEM_EXEC =
+    args.includes("--system-exec") ||
+    args.includes("--allow-system-exec");
+  const PROFILE_ARG = getArg(
+    "--profile",
+    getArg(
+      "-p",
+      configManager.getConfigMode() === "legacy"
+        ? process.env.WINHELM_PROFILE || undefined
+        : undefined
+    )
+  );
   const TOOLS_ARG = getArg("--tools");
 
   const updates: Record<string, any> = {};
-  if (AUTH_TOKEN) updates.authToken = AUTH_TOKEN;
-  if (READ_ONLY) updates.readOnly = true;
+  if (CLI_AUTH_TOKEN) updates.authToken = CLI_AUTH_TOKEN;
   if (ALLOW_SYSTEM_EXEC) updates.allowSystemExecution = true;
-  if (PROFILE_ARG) {
-    if (isValidProfile(PROFILE_ARG)) {
-      updates.profile = PROFILE_ARG;
-    } else {
-      console.error(`[WinHelm] Unknown profile: "${PROFILE_ARG}". Valid profiles: minimal, core, dev, sysadmin, full, custom`);
+
+  if (configManager.getConfigMode() === "v2") {
+    if (PROFILE_ARG || TOOLS_ARG) {
+      console.error(
+        "[WinHelm] --profile/--tools are legacy exposure flags and are not applied to schema-v2. " +
+          "Use 'winhelm setup --preset <name>' or the Permissions UI instead."
+      );
       process.exit(1);
     }
-  }
-  if (TOOLS_ARG) {
-    const baseProfile = (updates.profile || configManager.getConfig().profile || "full") as any;
-    updates.customTools = resolveCustomTools(baseProfile, TOOLS_ARG);
-    if (!updates.profile) updates.profile = "custom";
-  }
-  if (ALLOWED_DIRS) {
-    updates.allowedDirectories = ALLOWED_DIRS.split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
+
+    Object.assign(
+      updates,
+      buildSchemaV2CliPermissionUpdates(
+        configManager.getConfig(),
+        {
+          ...(CLI_ALLOWED_DIRS !== undefined
+            ? {
+                allowedDirectories: CLI_ALLOWED_DIRS
+                  .split(",")
+                  .map((d) => d.trim())
+                  .filter(Boolean),
+              }
+            : {}),
+          ...(CLI_READ_ONLY
+            ? { readOnly: true }
+            : {}),
+        }
+      )
+    );
+  } else if (configManager.getConfigMode() === "legacy") {
+    if (CLI_READ_ONLY) updates.readOnly = true;
+
+    if (PROFILE_ARG) {
+      if (isValidProfile(PROFILE_ARG)) {
+        updates.profile = PROFILE_ARG;
+      } else {
+        console.error(
+          `[WinHelm] Unknown profile: "${PROFILE_ARG}". Valid profiles: minimal, core, dev, sysadmin, full, custom`
+        );
+        process.exit(1);
+      }
+    }
+
+    if (TOOLS_ARG) {
+      const baseProfile = (
+        updates.profile ||
+        configManager.getConfig().profile ||
+        "full"
+      ) as any;
+      updates.customTools = resolveCustomTools(
+        baseProfile,
+        TOOLS_ARG
+      );
+      if (!updates.profile) updates.profile = "custom";
+    }
+
+    if (CLI_ALLOWED_DIRS) {
+      updates.allowedDirectories = CLI_ALLOWED_DIRS
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean);
+    }
+  } else if (
+    CLI_ALLOWED_DIRS !== undefined ||
+    CLI_READ_ONLY ||
+    PROFILE_ARG ||
+    TOOLS_ARG
+  ) {
+    console.error(
+      "[WinHelm] Permission CLI overrides are unavailable while schema-v2 configuration is invalid. " +
+        "Repair the configuration with WinHelm setup/admin controls first."
+    );
+    process.exit(1);
   }
   if (Object.keys(updates).length > 0) {
     // By default, CLI overrides are in-memory session-only unless --persist is explicitly passed
@@ -141,7 +207,8 @@ async function main() {
   configManager.logSecurityWarnings();
 
   // Startup Security Gate: Non-stdio + Non-loopback interface MUST have an authToken
-  const effectiveAuthToken = AUTH_TOKEN || configManager.getConfig().authToken;
+  const effectiveAuthToken =
+    CLI_AUTH_TOKEN || configManager.getConfig().authToken;
   const exposureCheck = validateNetworkExposure({
     host: HOST,
     isStdio: IS_STDIO,
@@ -187,7 +254,7 @@ async function main() {
   const { start, stop } = createServer({
     port: PORT,
     host: HOST,
-    authToken: AUTH_TOKEN,
+    authToken: effectiveAuthToken,
   });
 
   const server = await start();
