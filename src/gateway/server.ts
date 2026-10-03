@@ -676,6 +676,7 @@ export function createServer(options: ServerOptions): {
             ? boundAddress.port
             : options.port;
         configManager.setRuntimeEffectivePort(effectivePort);
+        configManager.startWatchingConfig();
 
         const startupToken = authToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
         const monitorUrl = startupToken
@@ -700,6 +701,7 @@ export function createServer(options: ServerOptions): {
   };
 
   const stop = async (server: Server): Promise<void> => {
+    configManager.stopWatchingConfig();
     configManager.setRuntimeEffectivePort(undefined);
     getAdminAuthManager().revokeAll();
 
