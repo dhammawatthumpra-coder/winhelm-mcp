@@ -4,6 +4,13 @@ import path from "node:path";
 import os from "node:os";
 import type { ServerConfig } from "../types/index.js";
 import { DEFAULT_CONFIG, DEFAULT_BLOCKED_PATTERNS } from "./default-config.js";
+import {
+  DEFAULT_APPROVAL_CONFIG,
+  detectConfigMode,
+  normalizeApprovalConfig,
+  validateSchemaV2Config,
+  type ConfigMode,
+} from "./schema-v2.js";
 
 export interface CommandLogEntry {
   id: string;
@@ -25,12 +32,16 @@ export function isWildcardAllowAll(dirs: string[] | undefined): boolean {
 
 export class ConfigManager {
   private static instance: ConfigManager | null = null;
+  private rawConfig: ServerConfig;
   private config: ServerConfig;
+  private configMode: ConfigMode = "legacy";
+  private configValidationErrors: string[] = [];
   private configFilePath: string;
   private executionHistory: CommandLogEntry[] = [];
   private readonly maxHistoryLength = 500;
 
   private constructor(customConfigPath?: string) {
+    this.rawConfig = { ...DEFAULT_CONFIG };
     this.config = { ...DEFAULT_CONFIG };
 
     if (customConfigPath) {
@@ -69,6 +80,48 @@ export class ConfigManager {
     this.loadConfigSync();
   }
 
+  private refreshEffectiveConfig(): void {
+    const detectedMode = detectConfigMode(this.rawConfig as unknown as Record<string, unknown>);
+
+    if (detectedMode === "legacy") {
+      this.configMode = "legacy";
+      this.configValidationErrors = [];
+      this.config = { ...this.rawConfig };
+      return;
+    }
+
+    if (detectedMode === "invalid") {
+      this.configMode = "invalid";
+      this.configValidationErrors = [
+        `Unsupported schemaVersion "${String(this.rawConfig.schemaVersion)}"; expected 2 or omit schemaVersion for legacy mode`,
+      ];
+      this.config = {
+        ...this.rawConfig,
+        folders: [],
+        terminal: { mode: "off" },
+        toolPolicy: {},
+        approval: normalizeApprovalConfig(DEFAULT_APPROVAL_CONFIG),
+      };
+      return;
+    }
+
+    const validation = validateSchemaV2Config(this.rawConfig as unknown as Record<string, unknown>);
+    this.configMode = validation.valid ? "v2" : "invalid";
+    this.configValidationErrors = [...validation.errors];
+    this.config = {
+      ...this.rawConfig,
+      ...validation.value,
+    };
+  }
+
+  private applyRawUpdates(updates: Partial<ServerConfig> | Record<string, unknown>): void {
+    this.rawConfig = {
+      ...this.rawConfig,
+      ...updates,
+    } as ServerConfig;
+    this.refreshEffectiveConfig();
+  }
+
   private loadConfigSync(): void {
     if (this.configFilePath && existsSync(this.configFilePath)) {
       try {
@@ -76,10 +129,7 @@ export class ConfigManager {
         const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
         if (!cleanRaw.trim()) return;
         const parsed = JSON.parse(cleanRaw);
-        this.config = {
-          ...this.config,
-          ...parsed,
-        };
+        this.applyRawUpdates(parsed);
       } catch (err) {
         console.error(`[ConfigManager] FATAL: Syntax error in configuration file (${this.configFilePath}):`, (err as Error).message);
         throw new Error(`Failed to parse configuration file (${this.configFilePath}): ${(err as Error).message}`);
@@ -110,10 +160,7 @@ export class ConfigManager {
    */
   public async init(configOrPath?: string | Partial<ServerConfig>): Promise<void> {
     if (configOrPath && typeof configOrPath === "object") {
-      this.config = {
-        ...this.config,
-        ...configOrPath,
-      };
+      this.applyRawUpdates(configOrPath);
       return;
     }
 
@@ -126,10 +173,7 @@ export class ConfigManager {
         const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
         if (cleanRaw.trim()) {
           const parsed = JSON.parse(cleanRaw);
-          this.config = {
-            ...this.config,
-            ...parsed,
-          };
+          this.applyRawUpdates(parsed);
           console.log(`[ConfigManager] Loaded configuration from ${this.configFilePath}`);
         }
       } else if (typeof configOrPath === "string") {
@@ -140,12 +184,14 @@ export class ConfigManager {
       throw new Error(`Failed to load configuration file (${this.configFilePath}): ${(err as Error).message}`);
     }
 
-    // Apply environment variables overrides
+    // Apply environment variables to the raw config, then re-derive the
+    // effective config. Schema-v2-specific env mapping is added alongside the
+    // permission enforcement layer; until then these retain legacy semantics.
     if (process.env.MCP_AUTH_TOKEN) {
-      this.config.authToken = process.env.MCP_AUTH_TOKEN;
+      this.rawConfig.authToken = process.env.MCP_AUTH_TOKEN;
     }
     if (process.env.MCP_ALLOWED_DIRECTORIES) {
-      this.config.allowedDirectories = process.env.MCP_ALLOWED_DIRECTORIES.split(",")
+      this.rawConfig.allowedDirectories = process.env.MCP_ALLOWED_DIRECTORIES.split(",")
         .map((p) => p.trim())
         .filter(Boolean);
     }
@@ -153,17 +199,17 @@ export class ConfigManager {
       const extraBlocked = process.env.MCP_BLOCKED_COMMANDS.split(",")
         .map((c) => c.trim().toLowerCase())
         .filter(Boolean);
-      this.config.blockedCommands = Array.from(new Set([...this.config.blockedCommands, ...extraBlocked]));
+      this.rawConfig.blockedCommands = Array.from(new Set([...this.rawConfig.blockedCommands, ...extraBlocked]));
     }
     if (process.env.MCP_ALLOWED_HOSTS) {
       const extraHosts = process.env.MCP_ALLOWED_HOSTS.split(",")
         .map((h) => h.trim().toLowerCase())
         .filter(Boolean);
-      const existing = this.config.allowedHosts || [];
-      this.config.allowedHosts = Array.from(new Set([...existing, ...extraHosts]));
+      const existing = this.rawConfig.allowedHosts || [];
+      this.rawConfig.allowedHosts = Array.from(new Set([...existing, ...extraHosts]));
     }
     if (process.env.MCP_READ_ONLY === "true" || process.env.MCP_READ_ONLY === "1") {
-      this.config.readOnly = true;
+      this.rawConfig.readOnly = true;
     }
     if (
       process.env.WINHELM_ALLOW_SYSTEM_EXEC === "true" ||
@@ -171,16 +217,17 @@ export class ConfigManager {
       process.env.MCP_ALLOW_SYSTEM_EXEC === "true" ||
       process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
     ) {
-      this.config.allowSystemExecution = true;
+      this.rawConfig.allowSystemExecution = true;
     } else if (
       process.env.WINHELM_ALLOW_SYSTEM_EXEC === "false" ||
       process.env.WINHELM_ALLOW_SYSTEM_EXEC === "0" ||
       process.env.MCP_ALLOW_SYSTEM_EXEC === "false" ||
       process.env.MCP_ALLOW_SYSTEM_EXEC === "0"
     ) {
-      this.config.allowSystemExecution = false;
+      this.rawConfig.allowSystemExecution = false;
     }
 
+    this.refreshEffectiveConfig();
     this.logSecurityWarnings();
   }
 
@@ -193,11 +240,11 @@ export class ConfigManager {
   }
 
   public logSecurityWarnings(): void {
-    if (this.config.allowSystemExecution === true && !ConfigManager.hasLoggedSystemExecWarning) {
+    if (this.configMode === "legacy" && this.config.allowSystemExecution === true && !ConfigManager.hasLoggedSystemExecWarning) {
       ConfigManager.hasLoggedSystemExecWarning = true;
       console.warn("[SECURITY] ⚠️  System execution enabled - Runtime binaries on C: are now accessible");
     }
-    if (isWildcardAllowAll(this.config.allowedDirectories) && !ConfigManager.hasWarnedWildcardDirectories) {
+    if (this.configMode === "legacy" && isWildcardAllowAll(this.config.allowedDirectories) && !ConfigManager.hasWarnedWildcardDirectories) {
       ConfigManager.hasWarnedWildcardDirectories = true;
       console.warn("[SECURITY] ⚠️  allowedDirectories set to wildcard '*' - Filesystem boundary is open to all paths");
     }
@@ -211,15 +258,23 @@ export class ConfigManager {
     return this.config;
   }
 
+  public getConfigMode(): ConfigMode {
+    return this.configMode;
+  }
+
+  public getConfigValidationErrors(): readonly string[] {
+    return this.configValidationErrors;
+  }
+
   public async updateConfig(updates: Partial<ServerConfig>, persist = false): Promise<void> {
-    this.config = { ...this.config, ...updates };
+    this.applyRawUpdates(updates);
     if (!persist) return;
     try {
       const dir = path.dirname(this.configFilePath);
       if (!existsSync(dir)) {
         await fs.mkdir(dir, { recursive: true });
       }
-      await fs.writeFile(this.configFilePath, JSON.stringify(this.config, null, 2), "utf-8");
+      await fs.writeFile(this.configFilePath, JSON.stringify(this.rawConfig, null, 2), "utf-8");
     } catch (err) {
       console.error(`[ConfigManager] Failed to persist config to ${this.configFilePath}:`, err);
     }

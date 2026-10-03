@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_CONFIG } from "../../src/config/default-config.js";
+import { ConfigManager } from "../../src/config/config-manager.js";
 import {
   DEFAULT_APPROVAL_CONFIG,
   isSchemaV2Config,
@@ -8,6 +9,8 @@ import {
   validateApprovalConfig,
 } from "../../src/config/schema-v2.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "../../src/permissions/policy.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerAllTools } from "../../src/tools/index.js";
 
 describe("Schema-v2 configuration primitives", () => {
   it("keeps the v1.2.1 default config on the legacy path", () => {
@@ -27,12 +30,14 @@ describe("Schema-v2 configuration primitives", () => {
     const normalized = normalizeApprovalConfig(input);
 
     assert.deepStrictEqual(normalized, {
+      channels: ["dashboard", "toast"],
       blockHoldMs: 60_000,
       jobTtlMs: 180_000,
       maxPending: 7,
     });
     assert.deepStrictEqual(input, { maxPending: 7 });
     assert.deepStrictEqual(DEFAULT_APPROVAL_CONFIG, {
+      channels: ["dashboard", "toast"],
       blockHoldMs: 60_000,
       jobTtlMs: 180_000,
       maxPending: 5,
@@ -84,10 +89,161 @@ describe("Schema-v2 permission decision primitives", () => {
     assert.strictEqual(safe.code, "TERMINAL_SAFE");
   });
 
+
   it("maps terminal ask/full/off modes without changing legacy code paths", () => {
     assert.strictEqual(evaluateTerminalMode("ask").decision, "ask");
     assert.strictEqual(evaluateTerminalMode("full").decision, "allow");
     assert.strictEqual(evaluateTerminalMode("dangerous").decision, "allow");
     assert.strictEqual(evaluateTerminalMode("off").decision, "deny");
+  });
+});
+
+describe("ConfigManager schema-v2 runtime mode", () => {
+  async function withTempConfig(
+    name: string,
+    value: Record<string, unknown>,
+    fn: (manager: ConfigManager) => Promise<void>
+  ): Promise<void> {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const os = await import("node:os");
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-schema-v2-"));
+    const file = path.join(dir, name);
+    await fs.writeFile(file, JSON.stringify(value, null, 2), "utf-8");
+    try {
+      const manager = ConfigManager.resetInstance(file);
+      await manager.init(file);
+      await fn(manager);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+      ConfigManager.resetInstance();
+    }
+  }
+
+  it("loads a valid schema-v2 config and normalizes approval defaults", async () => {
+    await withTempConfig(
+      "valid.json",
+      {
+        schemaVersion: 2,
+        profilePreset: "balanced",
+        folders: [{ path: "D:\\Workspace", permission: "readwrite" }],
+        terminal: { mode: "ask" },
+        toolPolicy: { system_info: "auto", http_request: "ask" },
+      },
+      async (manager) => {
+        assert.strictEqual(manager.getConfigMode(), "v2");
+        assert.deepStrictEqual(manager.getConfigValidationErrors(), []);
+        assert.deepStrictEqual(manager.getConfig().approval, {
+          channels: ["dashboard", "toast"],
+          blockHoldMs: 60_000,
+          jobTtlMs: 180_000,
+          maxPending: 5,
+        });
+      }
+    );
+  });
+
+  it("fails closed for semantic-invalid schema-v2 without losing diagnostics", async () => {
+    await withTempConfig(
+      "invalid.json",
+      {
+        schemaVersion: 2,
+        profilePreset: "balanced",
+        folders: "D:\\Workspace",
+        terminal: { mode: "full" },
+        toolPolicy: { system_info: "auto" },
+      },
+      async (manager) => {
+        assert.strictEqual(manager.getConfigMode(), "invalid");
+        assert.ok(manager.getConfigValidationErrors().some((e) => e.includes("folders")));
+        assert.deepStrictEqual(manager.getConfig().folders, []);
+        assert.deepStrictEqual(manager.getConfig().terminal, { mode: "off" });
+        assert.deepStrictEqual(manager.getConfig().toolPolicy, {});
+      }
+    );
+  });
+
+  it("fails closed for unsupported explicit schemaVersion instead of falling back to legacy", async () => {
+    await withTempConfig(
+      "unsupported.json",
+      {
+        schemaVersion: 3,
+        allowedDirectories: ["*"],
+        profile: "full",
+      },
+      async (manager) => {
+        assert.strictEqual(manager.getConfigMode(), "invalid");
+        assert.ok(manager.getConfigValidationErrors()[0]?.includes("Unsupported schemaVersion"));
+        assert.deepStrictEqual(manager.getConfig().folders, []);
+        assert.deepStrictEqual(manager.getConfig().terminal, { mode: "off" });
+        assert.deepStrictEqual(manager.getConfig().toolPolicy, {});
+      }
+    );
+  });
+
+  it("can repair an invalid schema-v2 config because raw values are preserved", async () => {
+    await withTempConfig(
+      "repair.json",
+      {
+        schemaVersion: 2,
+        folders: [{ path: "D:\\Workspace", permission: "readwrite" }],
+        terminal: { mode: "not-a-mode" },
+        toolPolicy: { system_info: "auto" },
+      },
+      async (manager) => {
+        assert.strictEqual(manager.getConfigMode(), "invalid");
+        await manager.updateConfig({ terminal: { mode: "ask" } }, false);
+        assert.strictEqual(manager.getConfigMode(), "v2");
+        assert.deepStrictEqual(manager.getConfig().folders, [
+          { path: "D:\\Workspace", permission: "readwrite" },
+        ]);
+        assert.deepStrictEqual(manager.getConfig().toolPolicy, { system_info: "auto" });
+      }
+    );
+  });
+
+  it("registers the full current tool surface for schema-v2 but fails execution closed", async () => {
+    await withTempConfig(
+      "v2-gate.json",
+      {
+        schemaVersion: 2,
+        folders: [{ path: "D:\\Workspace", permission: "readwrite" }],
+        terminal: { mode: "ask" },
+        toolPolicy: { system_info: "auto" },
+      },
+      async () => {
+        const server = new McpServer({ name: "schema-v2-gate", version: "1.0.0" });
+        registerAllTools(server);
+        const tools = (server as any)._registeredTools;
+        assert.strictEqual(Object.keys(tools).length, 38);
+
+        const result = await tools["system_info"].handler({}, {});
+        assert.strictEqual(result.isError, true);
+        const payload = JSON.parse(result.content[0].text);
+        assert.strictEqual(payload.code, "SCHEMA_V2_ENFORCEMENT_PENDING");
+      }
+    );
+  });
+
+  it("fails all tool execution closed when an explicit schemaVersion is unsupported", async () => {
+    await withTempConfig(
+      "invalid-gate.json",
+      {
+        schemaVersion: 3,
+        allowedDirectories: ["*"],
+        profile: "full",
+      },
+      async () => {
+        const server = new McpServer({ name: "invalid-v2-gate", version: "1.0.0" });
+        registerAllTools(server);
+        const tools = (server as any)._registeredTools;
+        assert.strictEqual(Object.keys(tools).length, 38);
+
+        const result = await tools["system_info"].handler({}, {});
+        assert.strictEqual(result.isError, true);
+        const payload = JSON.parse(result.content[0].text);
+        assert.strictEqual(payload.code, "CONFIG_INVALID");
+      }
+    );
   });
 });
