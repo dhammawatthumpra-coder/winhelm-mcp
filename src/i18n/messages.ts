@@ -45,6 +45,14 @@ export const EN_MESSAGES = {
     "Check the jobId and do not use a jobId from another session.",
   "action.job.review":
     "Review the WinHelm job before retrying.",
+  "action.config.repair":
+    "Open WinHelm to repair the configuration before retrying.",
+  "action.command.allowed":
+    "Use an allowed direct executable, change Terminal mode locally, or use terminal_run when shell semantics are required.",
+  "action.network.target":
+    "Use a permitted network target or change WinHelm network settings where appropriate.",
+  "action.error.review":
+    "Review the error details and adjust the request or WinHelm settings before retrying.",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -94,6 +102,14 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "ตรวจ jobId และอย่าใช้ jobId ที่มาจาก session อื่น",
   "action.job.review":
     "ตรวจงานใน WinHelm ก่อนลองใหม่",
+  "action.config.repair":
+    "เปิด WinHelm เพื่อแก้การตั้งค่าให้ถูกต้องก่อนลองใหม่",
+  "action.command.allowed":
+    "ใช้ executable แบบ direct ที่อนุญาต เปลี่ยนโหมด Terminal ในเครื่อง หรือใช้ terminal_run เมื่อต้องใช้ shell semantics",
+  "action.network.target":
+    "ใช้ปลายทางเครือข่ายที่อนุญาต หรือปรับการตั้งค่าเครือข่ายของ WinHelm เมื่อเหมาะสม",
+  "action.error.review":
+    "ตรวจรายละเอียดข้อผิดพลาด แล้วปรับคำขอหรือการตั้งค่า WinHelm ก่อนลองใหม่",
 };
 
 export const MESSAGE_CATALOGS: Record<

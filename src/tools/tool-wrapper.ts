@@ -13,6 +13,8 @@ import {
 import { isRecoveryToolName } from "./registry.js";
 import { getToolMetadata } from "./metadata.js";
 import { getServerRuntimeContext } from "../gateway/session-context.js";
+import { normalizeSchemaV2ToolErrorResult } from "../errors/tool-error.js";
+import { translate as t } from "../i18n/messages.js";
 
 function createPolicyError(
   code: string,
@@ -121,7 +123,7 @@ export function registerTracedTool(
         startTime,
         "CONFIGURATION_UNAVAILABLE",
         "WinHelm configuration is invalid; tool execution is fail-closed.",
-        "Open WinHelm to repair the configuration before retrying.",
+        t("action.config.repair"),
         { validationErrors: [...liveConfigManager.getConfigValidationErrors()] }
       );
     }
@@ -181,7 +183,15 @@ export function registerTracedTool(
     }
 
     try {
-      const res = await executeTool();
+      const rawRes = await executeTool();
+      const res =
+        liveMode === "v2"
+          ? normalizeSchemaV2ToolErrorResult(
+              rawRes,
+              "TOOL_EXECUTION_FAILED",
+              t("action.error.review")
+            )
+          : rawRes;
       const durationMs = Date.now() - startTime;
 
       if (res && res.isError) {

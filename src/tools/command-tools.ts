@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { runCommandNoShell } from "../engine/command-runner.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 import { SCHEMA_V2_TOOL_NAMES } from "./registry.js";
+import { translate as t } from "../i18n/messages.js";
 
 export function registerCommandTools(server: McpServer): void {
   registerTracedTool(
@@ -82,8 +83,7 @@ export function registerCommandTools(server: McpServer): void {
                 error: {
                   code: "COMMAND_RUN_REJECTED",
                   message: (err as Error).message || String(err),
-                  userAction:
-                    "Use an allowed direct executable, change Terminal mode locally, or use terminal_run when shell semantics are required.",
+                  userAction: t("action.command.allowed"),
                 },
               }),
             },
