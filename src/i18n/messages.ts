@@ -37,6 +37,12 @@ export const EN_MESSAGES = {
     "Approve",
   "dashboard.approvals.deny":
     "Deny",
+  "dashboard.approvals.arguments":
+    "Arguments",
+  "dashboard.approvals.folders":
+    "Folders",
+  "dashboard.approvals.noFolder":
+    "no matching folder",
   "dashboard.clients.title":
     "Connected MCP Clients",
   "dashboard.clients.note":
@@ -172,6 +178,12 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "อนุมัติ",
   "dashboard.approvals.deny":
     "ปฏิเสธ",
+  "dashboard.approvals.arguments":
+    "อาร์กิวเมนต์",
+  "dashboard.approvals.folders":
+    "โฟลเดอร์",
+  "dashboard.approvals.noFolder":
+    "ไม่ตรงกับโฟลเดอร์ใด",
   "dashboard.clients.title":
     "ไคลเอนต์ MCP ที่เชื่อมต่อ",
   "dashboard.clients.note":

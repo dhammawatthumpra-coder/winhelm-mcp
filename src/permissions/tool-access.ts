@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
-import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
+import type { FolderPermission, SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import {
   checkFolderAccess,
   type FolderAccessResult,
   type ProtectedPathRule,
 } from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
-import { resolveRequestPath, isFolderListingRequest } from "./request-paths.js";
+import { resolveRequestPath, isFolderListingRequest, type FolderDescriptor } from "./request-paths.js";
 import { translate as t } from "../i18n/messages.js";
 
 export type ToolAccessDecision = "allow" | "ask" | "deny";
@@ -163,6 +163,75 @@ function deniedFromPath(check: FolderAccessResult): ToolAccessResult {
         : t("action.folder.allowed"),
     pathChecks: [check],
   };
+}
+
+export interface RequestFolderAccessView {
+  /** Argument name the path came from, when it is a named field. */
+  argument: string | null;
+  /** Path exactly as the caller supplied it. */
+  requested: string;
+  /** Resolved path, or null when resolution was refused. */
+  resolved: string | null;
+  allowed: boolean;
+  code: string;
+  reason: string;
+  /** Folder that authorizes the path, with its permission. */
+  folder: FolderDescriptor | null;
+}
+
+/**
+ * Read-only folder resolution for the approval dialog (4.4 asks the user to see
+ * the folder and its permission). It reuses the same resolver and folder check
+ * as the policy gate so the dialog cannot disagree with enforcement.
+ */
+export function describeRequestFolderAccess(
+  toolName: string,
+  args: Record<string, any>,
+  folders: FolderPermission[] | undefined
+): RequestFolderAccessView[] {
+  const views: RequestFolderAccessView[] = [];
+
+  for (const requirement of pathRequirements(toolName, args)) {
+    if (
+      typeof requirement.value !== "string" ||
+      requirement.value.trim() === ""
+    ) {
+      continue;
+    }
+
+    const resolution = resolveRequestPath(requirement.value, folders);
+    const resolved = resolution.ok ? resolution.path : null;
+
+    let check: FolderAccessResult | null = null;
+    if (resolved) {
+      check = checkFolderAccess(resolved, requirement.access, folders ?? [], {
+        denyRootMutation: requirement.denyRootMutation,
+        rejectReparseMutation: requirement.access === "write",
+      });
+    }
+
+    views.push({
+      argument: requirement.field ?? null,
+      requested: requirement.value,
+      resolved,
+      allowed: check ? check.allowed : false,
+      code: check
+        ? check.code
+        : resolution.ok
+          ? "PATH_INVALID"
+          : resolution.code,
+      reason: check ? check.reason : resolution.ok ? "" : resolution.reason,
+      folder: check?.matchedFolder
+        ? {
+            alias: check.matchedFolder.alias ?? null,
+            path: check.matchedFolder.path,
+            permission: check.matchedFolder.permission,
+          }
+        : null,
+    });
+  }
+
+  return views;
 }
 
 export function evaluateSchemaV2ToolAccess(

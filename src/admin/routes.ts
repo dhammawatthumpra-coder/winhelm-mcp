@@ -25,6 +25,7 @@ import {
 } from "../permissions/risk.js";
 import { getSessionClientInfo, listSessionClients } from "../gateway/session-context.js";
 import { rotateAuthToken } from "../config/auth-token-rotation.js";
+import { describeRequestFolderAccess } from "../permissions/tool-access.js";
 import {
   applyClientConnection,
   previewClientConnection,
@@ -274,6 +275,13 @@ function adminApprovalView(job: any): Record<string, unknown> {
     state: job.state,
     tool: job.tool,
     args: sanitizeObject(job.args ?? {}),
+    // 4.4: the approval dialog shows the folder and its permission for every
+    // path argument, resolved by the same logic the policy gate enforces.
+    folderAccess: describeRequestFolderAccess(
+      job.tool,
+      job.args ?? {},
+      ConfigManager.getInstance().getConfig().folders
+    ),
     sessionId: hashSessionId(job.sessionId),
     clientInfo: getSessionClientInfo(job.sessionId) ?? null,
     createdAt: job.createdAt,
