@@ -16,6 +16,7 @@ import {
 import { checkFolderAccess } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
 import { setConfiguredLocale } from "../i18n/messages.js";
+import { atomicWriteUtf8 } from "./atomic-write.js";
 
 export interface CommandLogEntry {
   id: string;
@@ -355,14 +356,9 @@ export class ConfigManager {
     } as ServerConfig;
 
     try {
-      const dir = path.dirname(this.configFilePath);
-      if (!existsSync(dir)) {
-        await fs.mkdir(dir, { recursive: true });
-      }
-      await fs.writeFile(
+      await atomicWriteUtf8(
         this.configFilePath,
-        JSON.stringify(nextRaw, null, 2),
-        "utf-8"
+        JSON.stringify(nextRaw, null, 2)
       );
     } catch (err) {
       console.error(
