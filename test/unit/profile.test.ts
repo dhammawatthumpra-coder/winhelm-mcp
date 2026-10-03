@@ -55,7 +55,7 @@ describe("Tool Profiles System", () => {
     assert.strictEqual(isToolInProfile("pdf_generate", "full"), true);
   });
 
-  it("should register exactly 6 tools when profile is 'minimal'", async () => {
+  it("should register 6 legacy-profile tools plus 2 recovery tools for 'minimal'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "minimal" });
 
@@ -64,10 +64,13 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 6, `Minimal profile must register exactly 6 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 8, `Minimal must expose 6 legacy tools + 2 recovery tools (got ${toolCount})`);
+    assert.ok(registeredTools.winhelm_status);
+    assert.ok(registeredTools.winhelm_job_status);
+    assert.strictEqual(registeredTools.command_run, undefined);
   });
 
-  it("should register exactly 15 tools when profile is 'core'", async () => {
+  it("should register 15 legacy-profile tools plus 2 recovery tools for 'core'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "core" });
 
@@ -77,10 +80,10 @@ describe("Tool Profiles System", () => {
     // Count registered tools on internal server._registeredTools
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 15, `Core profile must register exactly 15 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 17, `Core must expose 15 legacy tools + 2 recovery tools (got ${toolCount})`);
   });
 
-  it("should register exactly 28 tools when profile is 'dev'", async () => {
+  it("should register 28 legacy-profile tools plus 2 recovery tools for 'dev'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "dev" });
 
@@ -89,10 +92,10 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 28, `Dev profile must register exactly 28 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 30, `Dev must expose 28 legacy tools + 2 recovery tools (got ${toolCount})`);
   });
 
-  it("should register exactly 37 tools when profile is 'sysadmin'", async () => {
+  it("should register 37 legacy-profile tools plus 2 recovery tools for 'sysadmin'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "sysadmin" });
 
@@ -101,10 +104,10 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 37, `Sysadmin profile must register exactly 37 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 39, `Sysadmin must expose 37 legacy tools + 2 recovery tools (got ${toolCount})`);
   });
 
-  it("should register all 38 tools when profile is 'full'", async () => {
+  it("should register all 38 legacy tools plus 2 recovery tools for 'full'", async () => {
     const configManager = ConfigManager.getInstance();
     await configManager.updateConfig({ profile: "full" });
 
@@ -113,7 +116,8 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 38, `Full profile must register all 38 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 40, `Full must expose 38 legacy tools + 2 recovery tools (got ${toolCount})`);
+    assert.strictEqual(registeredTools.command_run, undefined);
   });
 
   it("should resolve custom tools whitelist correctly", () => {
@@ -143,7 +147,10 @@ describe("Tool Profiles System", () => {
 
     const registeredTools = (server as any)._registeredTools;
     const toolCount = Object.keys(registeredTools).length;
-    assert.strictEqual(toolCount, 3, `Custom profile must register exactly 3 tools (got ${toolCount})`);
+    assert.strictEqual(toolCount, 5, `Custom must expose 3 selected legacy tools + 2 recovery tools (got ${toolCount})`);
+    assert.ok(registeredTools.winhelm_status);
+    assert.ok(registeredTools.winhelm_job_status);
+    assert.strictEqual(registeredTools.command_run, undefined);
 
     // Reset config back to full
     await configManager.updateConfig({ profile: "full", customTools: undefined });

@@ -55,6 +55,7 @@ export const R5_TOOLS = new Set([
   "terminal_task_start",
   "terminal_task_send",
   "terminal_task_kill",
+  "command_run",
 ]);
 
 const POLICY_CONTROLLED_CURRENT_TOOLS = ALL_TOOL_NAMES.filter(
