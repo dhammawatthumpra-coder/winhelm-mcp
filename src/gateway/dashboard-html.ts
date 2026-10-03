@@ -240,6 +240,22 @@ export function getDashboardHtml(
       font-size: 11px;
       margin-top: 4px;
     }
+    .risk-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      margin-top: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid var(--card-border);
+    }
+    .risk-low { color: #86efac; border-color: rgba(34,197,94,.4); background: rgba(34,197,94,.1); }
+    .risk-medium { color: #fde68a; border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.1); }
+    .risk-elevated { color: #fdba74; border-color: rgba(249,115,22,.45); background: rgba(249,115,22,.1); }
+    .risk-high { color: #fca5a5; border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.12); }
+    .approval-countdown { font-variant-numeric: tabular-nums; }
     .approval-args {
       white-space: pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -642,6 +658,7 @@ export function getDashboardHtml(
     let currentFilter = 'all';
     let logsCache = [];
     let adminCsrfToken = null;
+    let pendingApprovalShortcuts = [];
 
     function setAdminState(text, className) {
       const el = document.getElementById('adminState');
@@ -933,11 +950,34 @@ export function getDashboardHtml(
       }
     }
 
+    function formatCountdown(expiresAt) {
+      const remaining = Math.max(0, Number(expiresAt || 0) - Date.now());
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return (
+        String(minutes).padStart(2, '0') +
+        ':' +
+        String(seconds).padStart(2, '0')
+      );
+    }
+
+    function refreshApprovalCountdowns() {
+      document.querySelectorAll('[data-approval-expires]').forEach(el => {
+        const expiresAt = Number(el.getAttribute('data-approval-expires'));
+        el.textContent = 'expires in ' + formatCountdown(expiresAt);
+      });
+    }
+
     async function loadApprovals() {
       const target = document.getElementById('approvalJobs');
       try {
         const body = await adminRequest('/admin/approvals');
         const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+        pendingApprovalShortcuts = jobs
+          .filter(job => job.state === 'awaiting_approval')
+          .map(job => String(job.id || ''))
+          .filter(Boolean);
         target.className = '';
         target.replaceChildren();
 
@@ -955,17 +995,51 @@ export function getDashboardHtml(
             'div',
             String(job.tool || 'unknown') + ' · ' + String(job.state || 'unknown')
           );
-          addTextElement(
+
+          const risk = job.risk || {};
+          const riskTag = addTextElement(
             row,
             'div',
+            String(risk.class || 'R?') +
+              ' · ' +
+              String(risk.label || 'Risk not classified') +
+              ' — ' +
+              String(risk.description || ''),
+            'risk-tag risk-' + String(risk.level || 'high')
+          );
+          riskTag.setAttribute('aria-label', 'Approval risk');
+
+          const meta = document.createElement('div');
+          meta.className = 'approval-meta';
+          addTextElement(
+            meta,
+            'span',
             'Job ' +
               String(job.id || '') +
               ' · session ' +
               String(job.sessionId || 'n/a') +
-              ' · expires ' +
-              (job.expiresAt ? new Date(job.expiresAt).toLocaleTimeString() : 'n/a'),
-            'approval-meta'
+              ' · '
           );
+          const countdown = addTextElement(
+            meta,
+            'span',
+            'expires in ' + formatCountdown(job.expiresAt),
+            'approval-countdown'
+          );
+          countdown.setAttribute(
+            'data-approval-expires',
+            String(job.expiresAt || 0)
+          );
+          row.appendChild(meta);
+
+          if (typeof job.dataDisclosure === 'string' && job.dataDisclosure) {
+            addTextElement(
+              row,
+              'div',
+              'Data disclosure: ' + job.dataDisclosure,
+              'approval-meta'
+            );
+          }
 
           const args = addTextElement(
             row,
@@ -1056,6 +1130,7 @@ export function getDashboardHtml(
 
           target.appendChild(row);
         });
+        refreshApprovalCountdowns();
       } catch (err) {
         target.replaceChildren();
         target.className = 'admin-error';
@@ -1260,12 +1335,38 @@ export function getDashboardHtml(
       renderLogs();
     }
 
+    document.addEventListener('keydown', event => {
+      const active = document.activeElement;
+      const tag = active && active.tagName
+        ? active.tagName.toUpperCase()
+        : '';
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        (active && active.isContentEditable)
+      ) {
+        return;
+      }
+      if (pendingApprovalShortcuts.length !== 1) return;
+
+      const jobId = pendingApprovalShortcuts[0];
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void approvalAction(jobId, 'approve');
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        void approvalAction(jobId, 'deny');
+      }
+    });
+
     // Auto-refresh interval
     setInterval(() => {
       if (document.getElementById('autoRefresh').checked) {
         fetchData();
       }
     }, 2500);
+    setInterval(refreshApprovalCountdowns, 1000);
 
     // Initial fetch (exchange token first if provided in URL)
     exchangeTokenIfNeeded().then(() => fetchData());

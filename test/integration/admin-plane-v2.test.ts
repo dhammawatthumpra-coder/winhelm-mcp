@@ -127,7 +127,7 @@ describe("Isolated admin HTTP plane", () => {
 
       let executions = 0;
       const approval = getApprovalEngine().request({
-        tool: "fixture_action",
+        tool: "screen_capture",
         args: {
           value: 1,
           headers: { authorization: "Bearer dashboard-secret-token" },
@@ -167,6 +167,12 @@ describe("Isolated admin HTTP plane", () => {
         approvalView.sessionId,
         "fixture-session",
         "Admin approval API must not expose raw MCP session IDs"
+      );
+      assert.strictEqual(approvalView.risk.class, "R3");
+      assert.strictEqual(approvalView.risk.level, "elevated");
+      assert.match(
+        approvalView.dataDisclosure,
+        /screenshot.*returned to the AI/i
       );
       assert.strictEqual(approvalView.provenance.length, 1);
       assert.strictEqual(

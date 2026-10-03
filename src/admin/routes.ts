@@ -16,6 +16,10 @@ import { getApprovalEngine } from "../approval/runtime.js";
 import { getProvenanceTracker } from "../approval/provenance.js";
 import { auditLogger, hashSessionId } from "../utils/audit-logger.js";
 import { sanitizeObject } from "../utils/sanitizer.js";
+import {
+  getDesktopDataDisclosure,
+  getToolRiskPresentation,
+} from "../permissions/risk.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
   isLoopbackOrigin,
@@ -177,6 +181,8 @@ function adminApprovalView(job: any): Record<string, unknown> {
     expiresAt: job.expiresAt,
     updatedAt: job.updatedAt,
     executionCount: job.executionCount,
+    risk: getToolRiskPresentation(job.tool),
+    dataDisclosure: getDesktopDataDisclosure(job.tool),
     provenance: getProvenanceTracker().getRecent(job.sessionId, 3),
   };
 }
