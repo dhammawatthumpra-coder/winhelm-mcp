@@ -53,6 +53,23 @@ export const TOOL_NAMES = {
   NETWORK_INFO: "network_info",
 } as const;
 
+export const SCHEMA_V2_TOOL_NAMES = {
+  WINHELM_STATUS: "winhelm_status",
+  WINHELM_JOB_STATUS: "winhelm_job_status",
+  COMMAND_RUN: "command_run",
+} as const;
+
+export const RECOVERY_TOOL_NAMES = [
+  SCHEMA_V2_TOOL_NAMES.WINHELM_STATUS,
+  SCHEMA_V2_TOOL_NAMES.WINHELM_JOB_STATUS,
+] as const;
+
+const RECOVERY_TOOL_SET = new Set<string>(RECOVERY_TOOL_NAMES);
+
+export function isRecoveryToolName(name: string): boolean {
+  return RECOVERY_TOOL_SET.has(name);
+}
+
 export const RESOURCE_NAMES = {
   PREVIEW_FILE: "preview://file",
 } as const;

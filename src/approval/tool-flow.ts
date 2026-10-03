@@ -1,0 +1,224 @@
+import type { ApprovalConfig } from "../config/schema-v2.js";
+import {
+  ApprovalEngine,
+  ApprovalEngineError,
+  type ApprovalJob,
+} from "./approval-engine.js";
+
+export interface ApprovalFlowContext {
+  sessionId?: string;
+  requestId?: string | number;
+  signal?: AbortSignal;
+}
+
+export interface ApprovalFlowInput<T = any> {
+  engine: ApprovalEngine;
+  tool: string;
+  args: Record<string, unknown>;
+  approval: ApprovalConfig;
+  context: ApprovalFlowContext;
+  execute: () => Promise<T>;
+}
+
+function structuredError(
+  code: string,
+  message: string,
+  userAction?: string,
+  details?: Record<string, unknown>
+): any {
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          error: {
+            code,
+            message,
+            ...(userAction ? { userAction } : {}),
+            ...(details ? { details } : {}),
+          },
+        }),
+      },
+    ],
+  };
+}
+
+function receipt(job: ApprovalJob, now = Date.now()): any {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          status: "awaiting_approval",
+          jobId: job.id,
+          expiresInSeconds: Math.max(
+            0,
+            Math.ceil((job.expiresAt - now) / 1000)
+          ),
+          message:
+            "Waiting for the user to approve in WinHelm. After approval, call winhelm_job_status with this jobId. Do not re-run the original tool.",
+        }),
+      },
+    ],
+  };
+}
+
+function terminalResult(job: ApprovalJob): any {
+  switch (job.state) {
+    case "completed":
+      return job.result;
+    case "failed":
+      return structuredError(
+        "INTERNAL_ERROR",
+        job.error || "Approved action failed.",
+        "Review the WinHelm job details before retrying.",
+        { jobId: job.id }
+      );
+    case "denied":
+      return structuredError(
+        "PERMISSION_DENIED",
+        "The user denied this WinHelm action.",
+        "Do not retry unless the user explicitly asks you to try again.",
+        { jobId: job.id }
+      );
+    case "expired":
+      return structuredError(
+        "APPROVAL_EXPIRED",
+        "The WinHelm approval request expired before it was approved.",
+        "Ask the user whether they want to submit the action again.",
+        { jobId: job.id }
+      );
+    case "cancelled":
+      return structuredError(
+        "CANCELLED",
+        "The WinHelm approval request was cancelled.",
+        "Do not retry automatically.",
+        { jobId: job.id }
+      );
+    default:
+      return structuredError(
+        "CONFLICT",
+        `Approval job is not terminal (state: ${job.state}).`,
+        "Use winhelm_job_status instead of re-running the original tool.",
+        { jobId: job.id, state: job.state }
+      );
+  }
+}
+
+export async function runToolWithHybridApproval<T = any>(
+  input: ApprovalFlowInput<T>
+): Promise<any> {
+  const sessionId =
+    input.context.sessionId ?? `local-process-${process.pid}`;
+
+  let requested;
+  try {
+    requested = input.engine.request<T>({
+      tool: input.tool,
+      args: input.args,
+      sessionId,
+      requestId: input.context.requestId,
+      ttlMs: input.approval.jobTtlMs,
+      maxPending: input.approval.maxPending,
+      execute: input.execute,
+    });
+  } catch (err) {
+    if (err instanceof ApprovalEngineError) {
+      return structuredError(
+        err.code,
+        err.message,
+        "Resolve or deny an existing pending WinHelm approval before retrying."
+      );
+    }
+    throw err;
+  }
+
+  if (requested.kind === "recent_equivalent") {
+    const job = requested.job;
+
+    // Session-bound recovery may return the already-completed result without
+    // executing again. A retry from another/new session is fail-closed.
+    if (job.sessionId === sessionId) {
+      if (job.state === "completed") return job.result;
+      if (
+        job.state === "denied" ||
+        job.state === "expired" ||
+        job.state === "cancelled" ||
+        job.state === "failed"
+      ) {
+        return terminalResult(job);
+      }
+      return structuredError(
+        "CONFLICT",
+        "An equivalent WinHelm action is already in progress.",
+        "Use winhelm_job_status for the existing job; do not re-run the original tool.",
+        { jobId: job.id, state: job.state }
+      );
+    }
+
+    return structuredError(
+      "CONFLICT",
+      "A recent equivalent WinHelm action exists in another session. The retry was blocked to prevent duplicate side effects.",
+      "Review recent WinHelm jobs before attempting this action again.",
+      { state: job.state }
+    );
+  }
+
+  const outcome = await input.engine.waitForTerminalOrReceipt<T>(
+    requested.job.id,
+    input.approval.blockHoldMs,
+    input.context.signal
+  );
+
+  if (outcome.kind === "receipt") {
+    return receipt(outcome.job);
+  }
+
+  return terminalResult(outcome.job);
+}
+
+export function formatApprovalJobStatus(
+  job: ApprovalJob | undefined
+): any {
+  if (!job) {
+    return structuredError(
+      "NOT_FOUND",
+      "Approval job was not found for this MCP session.",
+      "Check the jobId and do not use a jobId from another session."
+    );
+  }
+
+  const base = {
+    status: job.state,
+    jobId: job.id,
+    tool: job.tool,
+    createdAt: job.createdAt,
+    expiresAt: job.expiresAt,
+    executionCount: job.executionCount,
+  };
+
+  if (job.state === "completed") {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ ...base, result: job.result }),
+        },
+      ],
+    };
+  }
+
+  if (job.state === "failed") {
+    return structuredError(
+      "INTERNAL_ERROR",
+      job.error || "Approved action failed.",
+      "Review the WinHelm job before retrying.",
+      base
+    );
+  }
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(base) }],
+  };
+}

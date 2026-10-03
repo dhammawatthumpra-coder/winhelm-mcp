@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { registerAllTools } from "../tools/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
+import { getApprovalEngine } from "../approval/runtime.js";
 
 interface SseSession {
   transport: SSEServerTransport;
@@ -55,6 +56,7 @@ export class SseGateway {
 
       if (oldestKey) {
         const session = this.sessions.get(oldestKey);
+        getApprovalEngine().cancelSession(oldestKey);
         this.sessions.delete(oldestKey);
         if (session) {
           session.mcpServer.close().catch(() => {});
@@ -73,6 +75,7 @@ export class SseGateway {
     let count = 0;
     for (const [key, session] of this.sessions.entries()) {
       if (now - session.lastActivityAt > this.idleTimeoutMs) {
+        getApprovalEngine().cancelSession(key);
         this.sessions.delete(key);
         session.mcpServer.close().catch(() => {});
         count++;
@@ -103,6 +106,7 @@ export class SseGateway {
 
       req.on("close", () => {
         console.log(`[SSE] Client disconnected (session: ${sessionId})`);
+        getApprovalEngine().cancelSession(sessionId);
         this.sessions.delete(sessionId);
         mcpServer.close().catch(() => {});
       });
@@ -176,7 +180,8 @@ export class SseGateway {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
-    for (const session of this.sessions.values()) {
+    for (const [sessionId, session] of this.sessions.entries()) {
+      getApprovalEngine().cancelSession(sessionId);
       try {
         await session.mcpServer.close();
       } catch {
