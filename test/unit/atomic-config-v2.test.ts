@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { atomicWriteUtf8 } from "../../src/config/atomic-write.js";
+import {
+  atomicWriteUtf8,
+  renameWithTransientRetry,
+} from "../../src/config/atomic-write.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
 
 async function tempFiles(dir: string): Promise<string[]> {
@@ -13,6 +16,56 @@ async function tempFiles(dir: string): Promise<string[]> {
 }
 
 describe("Atomic config persistence", () => {
+  it("retries transient Windows rename locks and then succeeds", async () => {
+    let attempts = 0;
+    const delays: number[] = [];
+
+    await renameWithTransientRetry("source.tmp", "target.json", {
+      platform: "win32",
+      attempts: 5,
+      baseDelayMs: 2,
+      rename: async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          const err = new Error("locked") as NodeJS.ErrnoException;
+          err.code = "EPERM";
+          throw err;
+        }
+      },
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+    });
+
+    assert.strictEqual(attempts, 3);
+    assert.deepStrictEqual(delays, [2, 4]);
+  });
+
+  it("does not retry non-transient rename errors", async () => {
+    let attempts = 0;
+
+    await assert.rejects(
+      () =>
+        renameWithTransientRetry("source.tmp", "target.json", {
+          platform: "win32",
+          attempts: 5,
+          rename: async () => {
+            attempts += 1;
+            const err = new Error("bad path") as NodeJS.ErrnoException;
+            err.code = "ENOENT";
+            throw err;
+          },
+          sleep: async () => {
+            throw new Error("sleep should not be called");
+          },
+        }),
+      /bad path/
+    );
+
+    assert.strictEqual(attempts, 1);
+  });
+
+
   it("creates a new file and leaves no temporary artifact", async () => {
     const dir = await fs.mkdtemp(
       path.join(os.tmpdir(), "winhelm-atomic-create-")
