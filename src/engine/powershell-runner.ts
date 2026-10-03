@@ -71,9 +71,13 @@ export function runPowerShell(
     return Promise.reject(new Error(reason));
   }
 
-  // 2. Validate CWD against allowedDirectories
+  // 2. Legacy mode keeps the v1.2.1 allowedDirectories CWD gate.
+  // Schema-v2 ask/full terminal modes intentionally have user-level filesystem
+  // reach; folder boundaries apply to file tools and future safe command_run.
   let cwd: string;
-  if (options.cwd) {
+  if (configManager.getConfigMode() !== "legacy") {
+    cwd = options.cwd ?? process.cwd();
+  } else if (options.cwd) {
     const cwdCheck = configManager.isPathAllowed(options.cwd);
     if (!cwdCheck.allowed && config.allowSystemExecution === false) {
       const reason = cwdCheck.reason || `Working directory "${options.cwd}" is not permitted`;

@@ -407,7 +407,7 @@ export function registerFileTools(server: McpServer): void {
       try {
         const configManager = ConfigManager.getInstance();
         const resolved = path.resolve(targetPath);
-        const pathCheck = configManager.isPathAllowed(resolved);
+        const pathCheck = configManager.checkPathAccess(resolved, "read");
         if (!pathCheck.allowed) {
           throw new Error(pathCheck.reason);
         }

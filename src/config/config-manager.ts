@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { existsSync, realpathSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import type { ServerConfig } from "../types/index.js";
 import { DEFAULT_CONFIG, DEFAULT_BLOCKED_PATTERNS } from "./default-config.js";
 import {
@@ -11,6 +12,8 @@ import {
   validateSchemaV2Config,
   type ConfigMode,
 } from "./schema-v2.js";
+import { checkFolderAccess } from "../permissions/folder-access.js";
+import { buildProtectedPathRules } from "../permissions/protected-paths.js";
 
 export interface CommandLogEntry {
   id: string;
@@ -311,7 +314,7 @@ export class ConfigManager {
     }
 
     // If allowSystemExecution is explicitly false, strictly block referencing unallowed paths in commands
-    if (this.config.allowSystemExecution === false) {
+    if (this.configMode === "legacy" && this.config.allowSystemExecution === false) {
       if (
         this.config.allowedDirectories &&
         this.config.allowedDirectories.length > 0 &&
@@ -354,7 +357,7 @@ export class ConfigManager {
   /**
    * Validate if a filesystem path is permitted under allowedDirectories
    */
-  public isPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
+  private isLegacyPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
     if (isWildcardAllowAll(this.config.allowedDirectories)) {
       return { allowed: true };
     }
@@ -427,6 +430,73 @@ export class ConfigManager {
     }
 
     return { allowed: true };
+  }
+
+  private getSchemaV2InstallRoot(): string | undefined {
+    try {
+      const moduleFile = fileURLToPath(import.meta.url);
+      return path.resolve(path.dirname(moduleFile), "../..");
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Unified filesystem authorization bridge.
+   *
+   * Legacy mode preserves v1.2.1 allowedDirectories behavior.
+   * Schema-v2 uses folders/read-readwrite semantics plus protected paths.
+   * Invalid config is always fail-closed.
+   */
+  public checkPathAccess(
+    targetPath: string,
+    access: "read" | "write" = "read",
+    options: { denyRootMutation?: boolean; rejectReparseMutation?: boolean } = {}
+  ): { allowed: boolean; reason?: string; code?: string } {
+    if (this.configMode === "invalid") {
+      return {
+        allowed: false,
+        code: "CONFIG_INVALID",
+        reason: "WinHelm configuration is invalid; filesystem access is fail-closed.",
+      };
+    }
+
+    if (this.configMode === "v2") {
+      const protectedPaths = buildProtectedPathRules({
+        configFilePath: this.configFilePath,
+        dataDir: path.join(os.homedir(), ".winhelm"),
+        logDir: path.resolve(process.cwd(), "logs"),
+        installRoot: this.getSchemaV2InstallRoot(),
+      });
+
+      const result = checkFolderAccess(
+        targetPath,
+        access,
+        this.config.folders ?? [],
+        {
+          denyRootMutation: options.denyRootMutation,
+          rejectReparseMutation:
+            options.rejectReparseMutation ?? access === "write",
+          protectedPaths,
+        }
+      );
+
+      return {
+        allowed: result.allowed,
+        reason: result.reason,
+        code: result.code,
+      };
+    }
+
+    return this.isLegacyPathAllowed(targetPath);
+  }
+
+  /**
+   * Backward-compatible read-oriented path check. New mutation call sites
+   * should use checkPathAccess(path, "write", ...).
+   */
+  public isPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
+    return this.checkPathAccess(targetPath, "read");
   }
 
   /**
