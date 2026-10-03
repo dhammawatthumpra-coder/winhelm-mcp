@@ -6,6 +6,10 @@ import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import { evaluateSchemaV2ToolAccess } from "../permissions/tool-access.js";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { runToolWithHybridApproval } from "../approval/tool-flow.js";
+import {
+  approvalSessionKey,
+  getProvenanceTracker,
+} from "../approval/provenance.js";
 import { isRecoveryToolName } from "./registry.js";
 import { getToolMetadata } from "./metadata.js";
 
@@ -77,7 +81,31 @@ export function registerTracedTool(
 
     const liveConfigManager = ConfigManager.getInstance();
     const liveMode = liveConfigManager.getConfigMode();
-    let executeTool = () => handler(args, extra);
+    const provenance = getProvenanceTracker();
+    const sessionKey = approvalSessionKey(extra?.sessionId);
+
+    const executeAndRecord = async (executionExtra: any) => {
+      try {
+        const result = await handler(args, executionExtra);
+        provenance.recordResult(
+          sessionKey,
+          name,
+          args ?? {},
+          result
+        );
+        return result;
+      } catch (err) {
+        provenance.recordThrownError(
+          sessionKey,
+          name,
+          args ?? {},
+          err
+        );
+        throw err;
+      }
+    };
+
+    let executeTool = () => executeAndRecord(extra);
 
     if (liveMode === "invalid" && !recoveryTool) {
       return logAndReturnPolicyError(
@@ -139,7 +167,7 @@ export function registerTracedTool(
               requestId,
               signal: extra?.signal,
             },
-            execute: () => handler(args, executionExtra),
+            execute: () => executeAndRecord(executionExtra),
           });
       }
     }
