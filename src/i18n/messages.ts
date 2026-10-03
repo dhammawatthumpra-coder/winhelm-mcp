@@ -59,6 +59,30 @@ export const EN_MESSAGES = {
     "New token (shown once) — copy it into your MCP clients:",
   "dashboard.token.once":
     "It will not be shown again. Store it in a password manager, not in this chat.",
+  "dashboard.teach.title":
+    "Test and teach your AI",
+  "dashboard.teach.intro":
+    "Run one of these prompts in your AI app, then watch the Activity & Execution Stream further down this page until the first successful call appears.",
+  "dashboard.teach.examples":
+    "Example prompts",
+  "dashboard.teach.example1":
+    "Use WinHelm to list the files in my workspace folder.",
+  "dashboard.teach.example2":
+    "Use WinHelm to read the first 20 lines of a log file on my PC.",
+  "dashboard.teach.instructions":
+    "Instructions for the AI",
+  "dashboard.teach.instructionText":
+    "When I mention files, apps or processes on my computer, use the WinHelm tools. They run on my real Windows PC, not a sandbox. If a tool result contains userAction, tell me what it says instead of working around it.",
+  "dashboard.teach.claudeTip":
+    "Claude Desktop can answer from its own sandbox instead of WinHelm. In one measured run, 0 of 6 natural prompts reached WinHelm, while an explicit prompt containing \"ใช้ mcp\" reached it 1 of 1 with the full schema. Adding \"ใช้ mcp\" or \"ผ่าน WinHelm\" is worth trying; it is not a guarantee.",
+  "dashboard.teach.sandboxHint":
+    "If the AI still answers from a sandbox, try turning off \"Code execution and file creation\" in that app's settings. This is an observation from testing, not a guarantee.",
+  "dashboard.teach.copy":
+    "Copy",
+  "dashboard.teach.copied":
+    "Copied.",
+  "dashboard.teach.copyFailed":
+    "Copy failed — select the text and copy it manually.",
 
   "action.folder.readwrite":
     "Choose a readwrite folder or change its permission in WinHelm settings.",
@@ -170,6 +194,30 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "โทเคนใหม่ (แสดงครั้งเดียว) — คัดลอกไปตั้งค่าในไคลเอนต์ MCP:",
   "dashboard.token.once":
     "จะไม่แสดงอีก ควรเก็บในโปรแกรมจัดการรหัสผ่าน ไม่ใช่ในแชตนี้",
+  "dashboard.teach.title":
+    "ทดลองและสอน AI ของคุณ",
+  "dashboard.teach.intro":
+    "ลองพิมพ์ประโยคตัวอย่างเหล่านี้ในแอป AI แล้วดู Activity & Execution Stream ด้านล่างของหน้านี้จนเห็นการเรียกที่สำเร็จครั้งแรก",
+  "dashboard.teach.examples":
+    "ประโยคตัวอย่าง",
+  "dashboard.teach.example1":
+    "ใช้ WinHelm ลิสต์ไฟล์ในโฟลเดอร์ workspace ของฉัน",
+  "dashboard.teach.example2":
+    "ใช้ WinHelm อ่าน 20 บรรทัดแรกของไฟล์ log ในเครื่องของฉัน",
+  "dashboard.teach.instructions":
+    "คำแนะนำสำหรับ AI",
+  "dashboard.teach.instructionText":
+    "เมื่อฉันพูดถึงไฟล์ โปรแกรม หรือโพรเซสในคอมพิวเตอร์ของฉัน ให้ใช้เครื่องมือ WinHelm ซึ่งทำงานบน Windows เครื่องจริงของฉัน ไม่ใช่ sandbox และถ้าผลลัพธ์มี userAction ให้บอกฉันตามนั้น ห้ามหาทางเลี่ยง",
+  "dashboard.teach.claudeTip":
+    "Claude Desktop อาจตอบจาก sandbox ของตัวเองแทน WinHelm จากการวัดหนึ่งครั้ง มี 0 จาก 6 prompt ปกติที่ไปถึง WinHelm ส่วน prompt ที่ระบุ \"ใช้ mcp\" ชัดเจนไปถึง 1 จาก 1 เมื่อใช้ full schema การเติม \"ใช้ mcp\" หรือ \"ผ่าน WinHelm\" จึงควรลอง แต่ไม่ใช่การรับประกัน",
+  "dashboard.teach.sandboxHint":
+    "ถ้า AI ยังตอบจาก sandbox ลองปิดตัวเลือก \"Code execution and file creation\" ในการตั้งค่าแอปนั้น นี่เป็นข้อสังเกตจากการทดสอบ ไม่ใช่การรับประกัน",
+  "dashboard.teach.copy":
+    "คัดลอก",
+  "dashboard.teach.copied":
+    "คัดลอกแล้ว",
+  "dashboard.teach.copyFailed":
+    "คัดลอกไม่สำเร็จ — เลือกข้อความแล้วคัดลอกเอง",
 
   "action.folder.readwrite":
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",
