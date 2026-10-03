@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,8 @@ export interface ClientConnectionTarget {
   configPath: string;
   configDirectoryExists: boolean;
   configFileExists: boolean;
+  /** How the config path was chosen (override / classic / MSIX evidence). */
+  resolutionBasis?: string;
 }
 
 export interface WinHelmLocalMcpEntry {
@@ -38,23 +40,209 @@ export interface ClientConnectionApplyResult {
 export class ClientConnectionError extends Error {
   constructor(
     public readonly code: string,
-    message: string
+    message: string,
+    public readonly candidates: string[] = []
   ) {
     super(message);
     this.name = "ClientConnectionError";
   }
 }
 
-function claudeConfigPath(
+export type ClaudeConfigResolutionBasis =
+  | "override"
+  | "classic-config"
+  | "msix-config"
+  | "classic-install"
+  | "msix-install";
+
+export interface ClaudeConfigResolution {
+  configPath: string;
+  basis: ClaudeConfigResolutionBasis;
+  candidates: string[];
+}
+
+export interface ClaudeConfigCandidatePaths {
+  classicConfigPath: string;
+  msixConfigPaths: string[];
+}
+
+/**
+ * Locates every Claude Desktop MSIX package root under
+ * %LOCALAPPDATA%\Packages by name + data-directory evidence. The publisher
+ * suffix of the package family name is installation-specific, so it is never
+ * hard-coded; a directory only qualifies when it also holds the package's
+ * virtualized Claude Roaming data directory.
+ */
+function claudeMsixPackageRoots(
   env: NodeJS.ProcessEnv = process.env
-): string {
+): string[] {
+  const localAppData =
+    env.LOCALAPPDATA ||
+    path.join(os.homedir(), "AppData", "Local");
+  const packagesDir = path.join(localAppData, "Packages");
+  let entries: string[];
+  try {
+    entries = readdirSync(packagesDir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((name) => /^claude/i.test(name))
+    .map((name) => path.join(packagesDir, name))
+    .filter((packageDir) =>
+      existsSync(
+        path.join(packageDir, "LocalCache", "Roaming", "Claude")
+      )
+    );
+}
+
+export function claudeConfigCandidatePaths(
+  env: NodeJS.ProcessEnv = process.env
+): ClaudeConfigCandidatePaths {
   const appData =
-    env.APPDATA ||
-    path.join(os.homedir(), "AppData", "Roaming");
-  return path.resolve(
+    env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  const classicConfigPath = path.resolve(
     appData,
     "Claude",
     "claude_desktop_config.json"
+  );
+  const msixConfigPaths = claudeMsixPackageRoots(env)
+    .map((packageDir) =>
+      path.join(
+        packageDir,
+        "LocalCache",
+        "Roaming",
+        "Claude",
+        "claude_desktop_config.json"
+      )
+    )
+    .filter((configPath) => existsSync(configPath));
+  return { classicConfigPath, msixConfigPaths };
+}
+
+/**
+ * Resolves the Claude Desktop MCP config target.
+ *
+ * Order: explicit override (parameter beats environment), an existing classic
+ * config, an existing MSIX virtualized config, then installation evidence for
+ * a first-time connection. Ambiguous evidence fails closed instead of
+ * guessing, because writing a config the client never reads silently breaks
+ * the connection.
+ */
+export function resolveClaudeConfigPath(
+  env: NodeJS.ProcessEnv = process.env,
+  overrides: { claudeConfigPath?: string } = {}
+): ClaudeConfigResolution {
+  const explicit =
+    overrides.claudeConfigPath ?? env.WINHELM_CLAUDE_CONFIG_PATH;
+  if (explicit) {
+    const configPath = path.resolve(explicit);
+    return {
+      configPath,
+      basis: "override",
+      candidates: [configPath],
+    };
+  }
+
+  const { classicConfigPath, msixConfigPaths } =
+    claudeConfigCandidatePaths(env);
+  const classicExists = existsSync(classicConfigPath);
+
+  const existingCandidates: string[] = [
+    ...(classicExists ? [classicConfigPath] : []),
+    ...msixConfigPaths,
+  ];
+  if (existingCandidates.length > 1) {
+    throw new ClientConnectionError(
+      "CLAUDE_CONFIG_AMBIGUOUS",
+      "Multiple existing Claude Desktop MCP configs were found; pick one explicitly via WINHELM_CLAUDE_CONFIG_PATH (candidates are listed without reading their contents).",
+      existingCandidates
+    );
+  }
+  if (classicExists) {
+    return {
+      configPath: classicConfigPath,
+      basis: "classic-config",
+      candidates: [classicConfigPath],
+    };
+  }
+  if (msixConfigPaths.length === 1) {
+    return {
+      configPath: msixConfigPaths[0],
+      basis: "msix-config",
+      candidates: msixConfigPaths,
+    };
+  }
+
+  // No existing config anywhere: fall back to installation evidence.
+  const appData =
+    env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  const localAppData =
+    env.LOCALAPPDATA ||
+    path.join(os.homedir(), "AppData", "Local");
+  const classicInstall =
+    existsSync(path.join(appData, "Claude")) ||
+    existsSync(path.join(localAppData, "AnthropicClaude"));
+  const msixInstalls = claudeMsixPackageRoots(env);
+
+  if (classicInstall && msixInstalls.length > 0) {
+    throw new ClientConnectionError(
+      "CLAUDE_CONFIG_AMBIGUOUS",
+      "Both a classic and an MSIX Claude Desktop installation were detected but neither has an MCP config yet; pick the target explicitly via WINHELM_CLAUDE_CONFIG_PATH.",
+      [
+        classicConfigPath,
+        ...msixInstalls.map((packageDir) =>
+          path.join(
+            packageDir,
+            "LocalCache",
+            "Roaming",
+            "Claude",
+            "claude_desktop_config.json"
+          )
+        ),
+      ],
+    );
+  }
+  if (msixInstalls.length === 1) {
+    const msixConfigPath = path.join(
+      msixInstalls[0],
+      "LocalCache",
+      "Roaming",
+      "Claude",
+      "claude_desktop_config.json"
+    );
+    return {
+      configPath: msixConfigPath,
+      basis: "msix-install",
+      candidates: [msixConfigPath],
+    };
+  }
+  if (msixInstalls.length > 1) {
+    throw new ClientConnectionError(
+      "CLAUDE_CONFIG_AMBIGUOUS",
+      "Multiple Claude Desktop MSIX packages were detected; pick the target explicitly via WINHELM_CLAUDE_CONFIG_PATH.",
+      msixInstalls.map((packageDir) =>
+        path.join(
+          packageDir,
+          "LocalCache",
+          "Roaming",
+          "Claude",
+          "claude_desktop_config.json"
+        )
+      ),
+    );
+  }
+  if (classicInstall) {
+    return {
+      configPath: classicConfigPath,
+      basis: "classic-install",
+      candidates: [classicConfigPath],
+    };
+  }
+
+  throw new ClientConnectionError(
+    "CLAUDE_CONFIG_UNRESOLVED",
+    "No Claude Desktop installation was detected; set WINHELM_CLAUDE_CONFIG_PATH to the config path the client actually reads."
   );
 }
 
@@ -69,20 +257,23 @@ export function resolveClientConnectionTarget(
   overrides: {
     claudeConfigPath?: string;
     cursorConfigPath?: string;
+    env?: NodeJS.ProcessEnv;
   } = {}
 ): ClientConnectionTarget {
-  const configPath =
-    client === "claude"
-      ? path.resolve(
-          overrides.claudeConfigPath ??
-            process.env.WINHELM_CLAUDE_CONFIG_PATH ??
-            claudeConfigPath()
-        )
-      : path.resolve(
-          overrides.cursorConfigPath ??
-            process.env.WINHELM_CURSOR_CONFIG_PATH ??
-            cursorConfigPath()
-        );
+  const env = overrides.env ?? process.env;
+  let configPath: string;
+  let resolutionBasis: string | undefined;
+  if (client === "claude") {
+    const resolution = resolveClaudeConfigPath(env, overrides);
+    configPath = resolution.configPath;
+    resolutionBasis = resolution.basis;
+  } else {
+    configPath = path.resolve(
+      overrides.cursorConfigPath ??
+        env.WINHELM_CURSOR_CONFIG_PATH ??
+        cursorConfigPath()
+    );
+  }
 
   return {
     client,
@@ -91,6 +282,7 @@ export function resolveClientConnectionTarget(
     configPath,
     configDirectoryExists: existsSync(path.dirname(configPath)),
     configFileExists: existsSync(configPath),
+    ...(resolutionBasis ? { resolutionBasis } : {}),
   };
 }
 

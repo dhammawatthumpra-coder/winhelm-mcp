@@ -46,6 +46,9 @@ function formatPreview(preview: ClientConnectionPreview): string {
   const lines = [
     `${preview.target.displayName} MCP connection`,
     `Config: ${preview.target.configPath}`,
+    ...(preview.target.resolutionBasis
+      ? [`Resolution: ${preview.target.resolutionBasis}`]
+      : []),
     `Existing config: ${preview.target.configFileExists ? "yes" : "no"}`,
     `Changed: ${preview.changed ? "yes" : "no"}`,
     "Proposed mcpServers.winhelm:",
