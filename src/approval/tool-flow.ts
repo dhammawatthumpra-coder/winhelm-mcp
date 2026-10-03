@@ -99,6 +99,14 @@ function terminalResult(job: ApprovalJob): any {
         t("action.approval.cancelled"),
         { jobId: job.id }
       );
+    case "unknown":
+      return structuredError(
+        "APPROVAL_UNKNOWN",
+        job.error ||
+          "The outcome of this WinHelm action is indeterminate; it was not re-run.",
+        t("action.approval.review_before_retry"),
+        { jobId: job.id }
+      );
     default:
       return structuredError(
         "CONFLICT",
@@ -149,7 +157,8 @@ export async function runToolWithHybridApproval<T = any>(
         job.state === "denied" ||
         job.state === "expired" ||
         job.state === "cancelled" ||
-        job.state === "failed"
+        job.state === "failed" ||
+        job.state === "unknown"
       ) {
         return terminalResult(job);
       }
@@ -218,6 +227,18 @@ export function formatApprovalJobStatus(
       "INTERNAL_ERROR",
       job.error || "Approved action failed.",
       t("action.job.review"),
+      base
+    );
+  }
+
+  // A restarted WinHelm cannot know whether an interrupted action ran. Report
+  // it as indeterminate so the caller does not silently re-run a side effect.
+  if (job.state === "unknown") {
+    return structuredError(
+      "APPROVAL_UNKNOWN",
+      job.error ||
+        "The outcome of this WinHelm action is indeterminate; it was not re-run.",
+      t("action.approval.review_before_retry"),
       base
     );
   }

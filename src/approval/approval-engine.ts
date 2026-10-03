@@ -8,7 +8,8 @@ export type ApprovalJobState =
   | "failed"
   | "denied"
   | "expired"
-  | "cancelled";
+  | "cancelled"
+  | "unknown";
 
 export interface ApprovalJob<T = unknown> {
   id: string;
@@ -51,19 +52,31 @@ export type ApprovalRequestOutcome<T = unknown> =
 
 export type ApprovalTransitionOutcome<T = unknown> =
   | { ok: true; job: ApprovalJob<T> }
-  | { ok: false; status: 404 | 409; code: string; job?: ApprovalJob<T> };
+  | { ok: false; status: 404 | 409 | 503; code: string; job?: ApprovalJob<T> };
 
 export type ApprovalWaitOutcome<T = unknown> =
   | { kind: "terminal"; job: ApprovalJob<T> }
   | { kind: "receipt"; job: ApprovalJob<T> };
 
+export interface RecoverableApprovalJob<T = unknown> extends ApprovalJob<T> {
+  idempotencyKeyDigest?: string;
+}
+
 interface InternalJob<T = unknown> extends ApprovalJob<T> {
   executeFn: () => Promise<T>;
+  idempotencyKeyDigest?: string;
 }
 
 export interface ApprovalEngineOptions {
   now?: () => number;
   retryRetentionMs?: number;
+  persist?: (job: RecoverableApprovalJob) => void;
+  /**
+   * Set when the durable journal could not be trusted at startup. Creating new
+   * approval jobs is then refused, because retry protection cannot be
+   * guaranteed while earlier transitions are unreadable.
+   */
+  journalIntegrityFailed?: boolean;
 }
 
 const TERMINAL_STATES = new Set<ApprovalJobState>([
@@ -72,6 +85,7 @@ const TERMINAL_STATES = new Set<ApprovalJobState>([
   "denied",
   "expired",
   "cancelled",
+  "unknown",
 ]);
 
 function isTerminal(state: ApprovalJobState): boolean {
@@ -113,11 +127,37 @@ export function approvalRequestFingerprint(
 }
 
 function publicJob<T>(job: InternalJob<T>): ApprovalJob<T> {
-  const { executeFn: _executeFn, ...visible } = job;
+  const {
+    executeFn: _executeFn,
+    idempotencyKeyDigest: _idempotencyKeyDigest,
+    ...visible
+  } = job;
+  const args = structuredClone(visible.args);
+  // The client idempotency key is used internally for lookup only. Keeping the
+  // digest is enough for recovery, so the raw value never reaches an API
+  // payload, a dashboard response or the on-disk journal.
+  for (const key of Object.keys(args)) {
+    if (key.toLowerCase() === "idempotencykey") delete args[key];
+  }
   return {
     ...visible,
-    args: structuredClone(visible.args),
+    args,
   };
+}
+
+function recoverableJob<T>(job: InternalJob<T>): RecoverableApprovalJob<T> {
+  return {
+    ...publicJob(job),
+    idempotencyKeyDigest: job.idempotencyKeyDigest,
+  };
+}
+
+function optionalIdempotencyDigest(
+  args: Record<string, unknown>
+): string | undefined {
+  const value = args.idempotencyKey;
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 /**
@@ -132,13 +172,24 @@ export class ApprovalEngine {
   private readonly jobs = new Map<string, InternalJob<any>>();
   private readonly now: () => number;
   private readonly retryRetentionMs: number;
+  private readonly persist?: (job: RecoverableApprovalJob) => void;
+  private readonly journalIntegrityFailed: boolean;
 
   constructor(options: ApprovalEngineOptions = {}) {
     this.now = options.now ?? (() => Date.now());
     this.retryRetentionMs = options.retryRetentionMs ?? 60_000;
+    this.persist = options.persist;
+    this.journalIntegrityFailed = options.journalIntegrityFailed ?? false;
   }
 
   request<T>(request: ApprovalRequest<T>): ApprovalRequestOutcome<T> {
+    if (this.journalIntegrityFailed) {
+      throw new ApprovalEngineError(
+        "JOURNAL_INTEGRITY_FAILED",
+        "The approval journal could not be trusted after restart; new approval-gated actions are refused until it is repaired."
+      );
+    }
+
     this.expireDueJobs();
     this.pruneRecentHistory();
 
@@ -208,10 +259,54 @@ export class ApprovalEngine {
       state: "awaiting_approval",
       executionCount: 0,
       executeFn: request.execute,
+      idempotencyKeyDigest: optionalIdempotencyDigest(request.args),
     };
 
     this.jobs.set(job.id, job);
+    try {
+      this.persistJob(job);
+    } catch (err) {
+      this.jobs.delete(job.id);
+      throw new ApprovalEngineError(
+        "JOURNAL_UNAVAILABLE",
+        "Approval journal write failed; the action was not queued."
+      );
+    }
     return { kind: "created", job: publicJob(job) };
+  }
+
+  restoreRecoveredJobs(jobs: RecoverableApprovalJob[]): void {
+    const now = this.now();
+
+    for (const recovered of jobs) {
+      const interrupted =
+        recovered.state === "awaiting_approval" ||
+        recovered.state === "approved" ||
+        recovered.state === "running";
+      const recoveredState = interrupted
+        ? "unknown"
+        : recovered.state;
+
+      const job: InternalJob = {
+        ...structuredClone(recovered),
+        state: recoveredState,
+        updatedAt: interrupted
+          ? Math.max(recovered.updatedAt, now)
+          : recovered.updatedAt,
+        ...(interrupted
+          ? {
+              error:
+                "WinHelm restarted before this approval job reached a recorded outcome; the result is unknown and the action was not re-run.",
+            }
+          : {}),
+        executeFn: async () => {
+          throw new Error("Recovered approval jobs cannot be auto-executed.");
+        },
+        idempotencyKeyDigest: recovered.idempotencyKeyDigest,
+      };
+
+      this.jobs.set(job.id, job);
+    }
   }
 
   get(jobId: string): ApprovalJob | undefined {
@@ -235,7 +330,9 @@ export class ApprovalEngine {
       .filter(
         (job) =>
           job.sessionId === sessionId &&
-          job.args.idempotencyKey === idempotencyKey
+          (job.args.idempotencyKey === idempotencyKey ||
+            job.idempotencyKeyDigest ===
+              crypto.createHash("sha256").update(idempotencyKey, "utf8").digest("hex"))
       )
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     return match ? publicJob(match) : undefined;
@@ -265,7 +362,21 @@ export class ApprovalEngine {
 
     job.state = "approved";
     job.updatedAt = this.now();
+    try {
+      this.persistJob(job);
+    } catch {
+      return this.journalUnavailable(job);
+    }
+
     void this.executeApproved(job);
+
+    // The executor claims the job (approved -> running) and writes the
+    // pre-execution record synchronously before this line. A journal failure
+    // there must be reported as a failed approval, never as success.
+    if (this.claimWasRefused(job)) {
+      return this.journalUnavailable(job);
+    }
+
     return { ok: true, job: publicJob(job) };
   }
 
@@ -290,6 +401,7 @@ export class ApprovalEngine {
 
     job.state = "cancelled";
     job.updatedAt = this.now();
+    this.persistBestEffort(job);
     return { ok: true, job: publicJob(job) };
   }
 
@@ -302,6 +414,7 @@ export class ApprovalEngine {
       ) {
         job.state = "cancelled";
         job.updatedAt = this.now();
+        this.persistBestEffort(job);
         cancelled.push(publicJob(job));
       }
     }
@@ -331,6 +444,7 @@ export class ApprovalEngine {
         if (job.state === "awaiting_approval" || job.state === "approved") {
           job.state = "cancelled";
           job.updatedAt = this.now();
+          this.persistBestEffort(job);
         }
         return { kind: "terminal", job: publicJob(job) };
       }
@@ -363,6 +477,7 @@ export class ApprovalEngine {
 
     job.state = state;
     job.updatedAt = this.now();
+    this.persistBestEffort(job);
     return { ok: true, job: publicJob(job) };
   }
 
@@ -376,14 +491,23 @@ export class ApprovalEngine {
     job.executionCount += 1;
 
     try {
+      this.persistJob(job);
+    } catch {
+      this.journalUnavailable(job);
+      return;
+    }
+
+    try {
       const result = await job.executeFn();
       job.result = result;
       job.state = "completed";
       job.updatedAt = this.now();
+      this.persistBestEffort(job);
     } catch (err) {
       job.error = (err as Error).message || String(err);
       job.state = "failed";
       job.updatedAt = this.now();
+      this.persistBestEffort(job);
     }
   }
 
@@ -400,6 +524,48 @@ export class ApprovalEngine {
     ) {
       job.state = "expired";
       job.updatedAt = this.now();
+      this.persistBestEffort(job);
+    }
+  }
+
+  /**
+   * Read through a method because the executor mutates the job inside the
+   * `void` call above; local control-flow narrowing cannot see that.
+   */
+  private claimWasRefused(job: InternalJob): boolean {
+    return job.state === "unknown";
+  }
+
+  private journalUnavailable<T>(
+    job: InternalJob<T>
+  ): {
+    ok: false;
+    status: 503;
+    code: string;
+    job: ApprovalJob<T>;
+  } {
+    job.state = "unknown";
+    job.error =
+      "Approval journal became unavailable before execution; action was not run.";
+    job.updatedAt = this.now();
+    return {
+      ok: false,
+      status: 503,
+      code: "JOURNAL_UNAVAILABLE",
+      job: publicJob(job),
+    };
+  }
+
+  private persistJob(job: InternalJob): void {
+    this.persist?.(recoverableJob(job));
+  }
+
+  private persistBestEffort(job: InternalJob): void {
+    try {
+      this.persistJob(job);
+    } catch {
+      // Fail-closed in memory. If the durable snapshot cannot be updated,
+      // restart recovery will treat any prior nonterminal record as unknown.
     }
   }
 

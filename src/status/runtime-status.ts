@@ -1,7 +1,7 @@
 import { ConfigManager } from "../config/config-manager.js";
 import { getProfileStatus } from "../config/profile-service.js";
 import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
-import { getApprovalEngine } from "../approval/runtime.js";
+import { getApprovalEngine, getApprovalPersistenceStatus } from "../approval/runtime.js";
 import { summarizeRuntimeRisk } from "../permissions/risk.js";
 import { getPackageVersion } from "../utils/version.js";
 import {
@@ -73,6 +73,17 @@ export function buildRuntimeStatusSnapshot(
       jobTtlMs: config.approval?.jobTtlMs ?? null,
       maxPending: config.approval?.maxPending ?? null,
       pendingJobs,
+      journal: (() => {
+        const status = getApprovalPersistenceStatus();
+        if (!status) return null;
+        return {
+          path: status.journalPath,
+          integrityFailure: status.integrityFailure,
+          quarantinedPath: status.quarantinedPath,
+          recoveredJobs: status.recoveredJobs,
+          unknownRecoveredJobs: status.unknownRecoveredJobs,
+        };
+      })(),
     },
     config: {
       valid: mode !== "invalid",

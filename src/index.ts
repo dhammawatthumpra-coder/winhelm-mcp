@@ -12,6 +12,7 @@ import { runControlCliCommand } from "./cli/commands.js";
 import { runSetupCliCommand } from "./cli/setup.js";
 import { runConnectCliCommand } from "./cli/connect.js";
 import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
+import { initializeApprovalPersistence } from "./approval/runtime.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -100,6 +101,24 @@ async function main() {
   const NO_PERSIST = args.includes("--no-persist");
   const configManager = ConfigManager.getInstance(CONFIG_ARG);
   await configManager.init(CONFIG_ARG);
+
+  const approvalPersistence = initializeApprovalPersistence();
+  if (approvalPersistence.integrityFailure) {
+    console.error(
+      `[WinHelm] Approval journal could not be trusted (${approvalPersistence.integrityFailure}). ` +
+        "New approval-gated actions are refused until it is repaired."
+    );
+    if (approvalPersistence.quarantinedPath) {
+      console.error(
+        `[WinHelm] Untrusted journal preserved at ${approvalPersistence.quarantinedPath}`
+      );
+    }
+  } else if (approvalPersistence.recoveredJobs > 0) {
+    console.error(
+      `[WinHelm] Restored ${approvalPersistence.recoveredJobs} approval job record(s); ` +
+        `${approvalPersistence.unknownRecoveredJobs} unfinished job(s) are marked unknown and were not re-run.`
+    );
+  }
 
   const PORT = parseInt(getArg("--port", process.env.PORT || "8788")!, 10);
   const HOST = getArg("--host", process.env.HOST || "127.0.0.1")!;
