@@ -14,6 +14,10 @@ import type {
 } from "./schema-v2.js";
 import { buildPresetConfig } from "../permissions/presets.js";
 import {
+  proposeLegacyMigration,
+  type LegacyMigrationProposal,
+} from "./migrate.js";
+import {
   diffGovernedState,
   fingerprintGovernedState,
   type GovernedPermissionState,
@@ -54,6 +58,16 @@ export interface ProfilePreview {
 
 export interface ProfileApplyResult {
   backupPath: string | null;
+  status: ProfileStatus;
+}
+
+export interface LegacyMigrationInput {
+  folders?: ProfileFolderSelection[];
+}
+
+export interface LegacyMigrationApplyResult {
+  backupPath: string | null;
+  proposal: LegacyMigrationProposal;
   status: ProfileStatus;
 }
 
@@ -333,6 +347,138 @@ async function backupConfig(
   const backupPath = `${source}.backup-${stamp}`;
   await fs.copyFile(source, backupPath);
   return backupPath;
+}
+
+function normalizeMigrationCandidateFolders(
+  proposal: LegacyMigrationProposal,
+  input: LegacyMigrationInput
+): LegacyMigrationProposal {
+  if (!proposal.candidate) return proposal;
+
+  const candidate = structuredClone(proposal.candidate);
+  const aliases = input.folders ?? candidate.folders.map((folder) => ({
+    path: folder.path,
+    ...(folder.alias ? { alias: folder.alias } : {}),
+  }));
+  const seen = new Set<string>();
+
+  candidate.folders = candidate.folders.map((folder, index) => {
+    const selection = aliases[index] ?? { path: folder.path };
+    const resolved = validateWizardFolder(selection.path);
+    const compare = normalizeComparable(resolved);
+    if (seen.has(compare)) {
+      throw new ProfileServiceError(
+        "WIZARD_FOLDER_DUPLICATE",
+        `Folder is selected more than once: ${resolved}`
+      );
+    }
+    seen.add(compare);
+
+    return {
+      ...folder,
+      path: resolved,
+      alias:
+        selection.alias?.normalize("NFKC").trim() ||
+        folder.alias ||
+        autoAlias(resolved),
+    };
+  });
+
+  if (candidate.profileState) {
+    candidate.profileState.appliedSnapshot.folders =
+      candidate.profileState.appliedSnapshot.folders.map(
+        (folder, index) => ({
+          ...folder,
+          path: candidate.folders[index]?.path ?? folder.path,
+          alias:
+            candidate.folders[index]?.alias ??
+            folder.alias,
+        })
+      );
+    candidate.profileState.appliedFingerprint =
+      fingerprintGovernedState(
+        candidate.profileState.appliedSnapshot
+      );
+  }
+
+  return {
+    ...proposal,
+    candidate,
+  };
+}
+
+export function previewLegacyMigrationApplication(
+  input: LegacyMigrationInput = {},
+  manager = ConfigManager.getInstance()
+): LegacyMigrationProposal {
+  const explicitFolders = input.folders?.map((folder) => folder.path);
+  const proposal = proposeLegacyMigration(
+    manager.getConfig(),
+    new Date().toISOString(),
+    explicitFolders
+  );
+
+  if (!proposal.candidate) return proposal;
+  return normalizeMigrationCandidateFolders(proposal, input);
+}
+
+export async function applyLegacyMigrationApplication(
+  input: LegacyMigrationInput = {},
+  manager = ConfigManager.getInstance()
+): Promise<LegacyMigrationApplyResult> {
+  const proposal = previewLegacyMigrationApplication(input, manager);
+
+  if (proposal.status === "not-legacy") {
+    throw new ProfileServiceError(
+      "MIGRATION_NOT_AVAILABLE",
+      "Legacy migration is only available while WinHelm is using a config without schemaVersion."
+    );
+  }
+
+  if (
+    proposal.status === "folder-selection-required" ||
+    !proposal.candidate
+  ) {
+    throw new ProfileServiceError(
+      "FOLDER_SELECTION_REQUIRED",
+      "Legacy wildcard access cannot be migrated automatically. Select explicit folders first."
+    );
+  }
+
+  const backupPath = await backupConfig(manager);
+
+  try {
+    await manager.updateConfig(
+      proposal.candidate as unknown as Partial<ServerConfig>,
+      true
+    );
+  } catch (err) {
+    if (backupPath && existsSync(backupPath)) {
+      await fs
+        .copyFile(backupPath, manager.getConfigFilePath())
+        .catch(() => {});
+      await manager
+        .init(manager.getConfigFilePath())
+        .catch(() => {});
+    }
+    throw new ProfileServiceError(
+      "CONFIG_PERSIST_FAILED",
+      `Failed to persist migrated configuration: ${(err as Error).message}`
+    );
+  }
+
+  if (manager.getConfigMode() !== "v2") {
+    throw new ProfileServiceError(
+      "CONFIG_PERSIST_FAILED",
+      "Legacy migration did not produce a valid schema-v2 configuration."
+    );
+  }
+
+  return {
+    backupPath,
+    proposal,
+    status: getProfileStatus(manager),
+  };
 }
 
 export async function applyProfilePreset(

@@ -6,10 +6,13 @@ import express, {
 } from "express";
 import { ConfigManager } from "../config/config-manager.js";
 import {
+  applyLegacyMigrationApplication,
   applyProfilePreset,
   getProfileStatus,
+  previewLegacyMigrationApplication,
   previewProfileApplication,
   ProfileServiceError,
+  type LegacyMigrationInput,
   type ProfileApplyInput,
 } from "../config/profile-service.js";
 import { getApprovalEngine } from "../approval/runtime.js";
@@ -160,11 +163,67 @@ function parseProfileBody(body: unknown): ProfileApplyInput {
   };
 }
 
+function parseMigrationBody(body: unknown): LegacyMigrationInput {
+  if (body === undefined || body === null) return {};
+  if (typeof body !== "object" || Array.isArray(body)) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "Migration request body must be an object."
+    );
+  }
+
+  const raw = body as Record<string, unknown>;
+  if (raw.folders === undefined) return {};
+  if (!Array.isArray(raw.folders)) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "folders must be an array when provided."
+    );
+  }
+
+  const folders = raw.folders.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ProfileServiceError(
+        "INVALID_ARGUMENT",
+        `folders[${index}] must be an object.`
+      );
+    }
+
+    const folder = item as Record<string, unknown>;
+    if (typeof folder.path !== "string" || !folder.path.trim()) {
+      throw new ProfileServiceError(
+        "INVALID_ARGUMENT",
+        `folders[${index}].path must be a non-empty string.`
+      );
+    }
+    if (
+      folder.alias !== undefined &&
+      (typeof folder.alias !== "string" ||
+        !folder.alias.trim())
+    ) {
+      throw new ProfileServiceError(
+        "INVALID_ARGUMENT",
+        `folders[${index}].alias must be a non-empty string when provided.`
+      );
+    }
+
+    return {
+      path: folder.path,
+      ...(typeof folder.alias === "string"
+        ? { alias: folder.alias }
+        : {}),
+    };
+  });
+
+  return { folders };
+}
+
 function profileErrorStatus(err: ProfileServiceError): number {
   if (err.code === "CONFIG_PERSIST_FAILED") return 500;
   if (
     err.code === "TYPED_CONFIRMATION_REQUIRED" ||
-    err.code === "FOLDER_SELECTION_REQUIRED"
+    err.code === "FOLDER_SELECTION_REQUIRED" ||
+    err.code === "MIGRATION_NOT_AVAILABLE"
   ) {
     return 409;
   }
@@ -381,6 +440,171 @@ export function registerAdminRoutes(app: Express): void {
               }
             : null,
       });
+    }
+  );
+
+  router.get(
+    "/migration",
+    requireAdminSession,
+    (_req: Request, res: Response) => {
+      try {
+        const migration = previewLegacyMigrationApplication(
+          {},
+          ConfigManager.getInstance()
+        );
+        res.json({ migration });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Migration preview failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/migration/preview",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    (req: Request, res: Response) => {
+      try {
+        const input = parseMigrationBody(req.body);
+        const migration = previewLegacyMigrationApplication(
+          input,
+          ConfigManager.getInstance()
+        );
+        res.json({ migration });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Migration preview failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/migration/apply",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      const before = getProfileStatus(manager);
+
+      try {
+        const input = parseMigrationBody(req.body);
+        const previewBefore = previewLegacyMigrationApplication(
+          input,
+          manager
+        );
+        const result = await applyLegacyMigrationApplication(
+          input,
+          manager
+        );
+
+        auditLogger.log({
+          event: "LEGACY_MIGRATION_APPLIED",
+          severity: "WARN",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/migration/apply",
+          resource:
+            previewBefore.sourceProfile ?? "legacy",
+          outcome: "ALLOWED",
+          details: {
+            from: {
+              schemaMode: before.schemaMode,
+            },
+            to: {
+              schemaMode: result.status.schemaMode,
+              preset: result.status.preset,
+              terminalMode: result.status.terminalMode,
+              modified: result.status.modified,
+            },
+            folderCount: result.status.folders.length,
+            warnings: previewBefore.warnings,
+            backupCreated: Boolean(result.backupPath),
+          },
+        });
+
+        res.json({
+          success: true,
+          backupPath: result.backupPath,
+          migration: result.proposal,
+          profile: result.status,
+        });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          auditLogger.log({
+            event: "LEGACY_MIGRATION_REJECTED",
+            severity: "WARN",
+            actor: {
+              ip: req.ip,
+              authType: "session_cookie",
+              sessionId: res.locals.adminSessionId as string,
+            },
+            action: "POST /admin/migration/apply",
+            outcome: "DENIED",
+            details: {
+              code: err.code,
+              fromSchemaMode: before.schemaMode,
+            },
+          });
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+
+        auditLogger.log({
+          event: "LEGACY_MIGRATION_ERROR",
+          severity: "CRITICAL",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/migration/apply",
+          outcome: "ERROR",
+          details: (err as Error).message || String(err),
+        });
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Migration apply failed."
+        );
+      }
     }
   );
 

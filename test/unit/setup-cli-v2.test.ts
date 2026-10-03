@@ -201,6 +201,146 @@ describe("winhelm setup CLI", () => {
     }
   });
 
+  it("previews legacy migration without changing config", async () => {
+    const f = await fixture();
+    try {
+      const before = await fs.readFile(f.configFile, "utf8");
+      const result = await runSetupCliCommand([
+        "setup",
+        "--config",
+        f.configFile,
+        "--migrate-legacy",
+        "--dry-run",
+      ]);
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.match(
+        result.output ?? "",
+        /legacy migration preview/i
+      );
+      assert.match(result.output ?? "", /Status: ready/i);
+      assert.match(result.output ?? "", /Source profile: core/i);
+      assert.strictEqual(
+        await fs.readFile(f.configFile, "utf8"),
+        before
+      );
+    } finally {
+      ConfigManager.resetInstance();
+      await fs.rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires --yes before persisting legacy migration", async () => {
+    const f = await fixture();
+    try {
+      const result = await runSetupCliCommand([
+        "setup",
+        "--config",
+        f.configFile,
+        "--migrate-legacy",
+      ]);
+
+      assert.strictEqual(result.exitCode, 2);
+      assert.match(result.error ?? "", /requires --yes/i);
+      const persisted = JSON.parse(
+        await fs.readFile(f.configFile, "utf8")
+      );
+      assert.strictEqual(persisted.schemaVersion, undefined);
+    } finally {
+      ConfigManager.resetInstance();
+      await fs.rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  it("applies legacy migration with backup when explicitly confirmed", async () => {
+    const f = await fixture();
+    try {
+      const result = await runSetupCliCommand([
+        "setup",
+        "--config",
+        f.configFile,
+        "--migrate-legacy",
+        "--yes",
+      ]);
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.match(
+        result.output ?? "",
+        /legacy migration complete/i
+      );
+      assert.match(result.output ?? "", /Preset: core/i);
+      assert.match(result.output ?? "", /Backup:/i);
+
+      const persisted = JSON.parse(
+        await fs.readFile(f.configFile, "utf8")
+      );
+      assert.strictEqual(persisted.schemaVersion, 2);
+      assert.strictEqual(persisted.profilePreset, "core");
+      assert.strictEqual(persisted.terminal.mode, "ask");
+    } finally {
+      ConfigManager.resetInstance();
+      await fs.rm(f.root, { recursive: true, force: true });
+    }
+  });
+
+  it("requires explicit --folder values to migrate wildcard legacy access", async () => {
+    const f = await fixture();
+    try {
+      await fs.writeFile(
+        f.configFile,
+        JSON.stringify(
+          {
+            profile: "full",
+            allowedDirectories: ["*"],
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      ConfigManager.resetInstance();
+
+      const blocked = await runSetupCliCommand([
+        "setup",
+        "--config",
+        f.configFile,
+        "--migrate-legacy",
+        "--yes",
+      ]);
+      assert.strictEqual(blocked.exitCode, 2);
+      assert.match(
+        blocked.error ?? "",
+        /explicit --folder/i
+      );
+
+      ConfigManager.resetInstance();
+      const applied = await runSetupCliCommand([
+        "setup",
+        "--config",
+        f.configFile,
+        "--migrate-legacy",
+        "--folder",
+        f.workspace + "::workspace",
+        "--yes",
+      ]);
+      assert.strictEqual(applied.exitCode, 0);
+
+      const persisted = JSON.parse(
+        await fs.readFile(f.configFile, "utf8")
+      );
+      assert.strictEqual(persisted.schemaVersion, 2);
+      assert.strictEqual(persisted.profilePreset, "full");
+      assert.strictEqual(persisted.terminal.mode, "ask");
+      assert.strictEqual(
+        persisted.folders[0].alias,
+        "workspace"
+      );
+    } finally {
+      ConfigManager.resetInstance();
+      await fs.rm(f.root, { recursive: true, force: true });
+    }
+  });
+
   it("lets CLI flags override answer-file preset/folders", async () => {
     const f = await fixture();
     const second = path.join(f.root, "second");
