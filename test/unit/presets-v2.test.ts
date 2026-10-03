@@ -11,14 +11,17 @@ import {
   buildPresetConfig,
   buildToolPolicyForPreset,
 } from "../../src/permissions/presets.js";
-import { ALL_TOOL_NAMES } from "../../src/tools/registry.js";
+import {
+  ALL_TOOL_NAMES,
+  PROFILE_CONTROLLED_V13_TOOL_NAMES,
+} from "../../src/tools/registry.js";
 
 function countPolicy(policy: Record<string, string>, value: string): number {
   return Object.values(policy).filter((entry) => entry === value).length;
 }
 
 describe("Schema-v2 product preset mapping", () => {
-  it("keeps the current 38-tool risk classes complete and disjoint", () => {
+  it("keeps the 39 profile-controlled v1.3 risk classes complete and disjoint", () => {
     const classified = [
       ...R0_TOOLS,
       ...R1_TOOLS,
@@ -28,12 +31,14 @@ describe("Schema-v2 product preset mapping", () => {
       ...R5_TOOLS,
     ];
 
-    assert.strictEqual(classified.length, 38);
-    assert.strictEqual(new Set(classified).size, 38);
+    assert.strictEqual(classified.length, 39);
+    assert.strictEqual(new Set(classified).size, 39);
     assert.deepStrictEqual(
       [...new Set(classified)].sort(),
-      [...ALL_TOOL_NAMES].sort()
+      [...PROFILE_CONTROLLED_V13_TOOL_NAMES].sort()
     );
+    assert.ok(R5_TOOLS.has("command_run"));
+    assert.strictEqual(ALL_TOOL_NAMES.length, 38);
   });
 
   it("builds Safe according to Appendix A", () => {

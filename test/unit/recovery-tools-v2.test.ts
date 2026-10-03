@@ -45,9 +45,10 @@ describe("Schema-v2 recovery tools", () => {
       registerAllTools(server);
       const tools = (server as any)._registeredTools;
 
-      assert.strictEqual(Object.keys(tools).length, 40);
+      assert.strictEqual(Object.keys(tools).length, 41);
       assert.ok(tools.winhelm_status);
       assert.ok(tools.winhelm_job_status);
+      assert.ok(tools.command_run);
 
       const status = await tools.winhelm_status.handler({}, {});
       assert.notStrictEqual(status.isError, true);
@@ -70,7 +71,8 @@ describe("Schema-v2 recovery tools", () => {
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
 
-        assert.strictEqual(Object.keys(tools).length, 40);
+        assert.strictEqual(Object.keys(tools).length, 41);
+        assert.ok(tools.command_run);
 
         const status = await tools.winhelm_status.handler({}, {});
         assert.notStrictEqual(status.isError, true);

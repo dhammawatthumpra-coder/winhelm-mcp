@@ -233,7 +233,8 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const server = new McpServer({ name: "schema-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 40);
+        assert.strictEqual(Object.keys(tools).length, 41);
+        assert.ok(tools.command_run);
 
         const autoResult = await tools["system_info"].handler({}, {});
         assert.notStrictEqual(autoResult.isError, true);
@@ -301,7 +302,8 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const server = new McpServer({ name: "invalid-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 40);
+        assert.strictEqual(Object.keys(tools).length, 41);
+        assert.ok(tools.command_run);
 
         const result = await tools["system_info"].handler({}, {});
         assert.strictEqual(result.isError, true);

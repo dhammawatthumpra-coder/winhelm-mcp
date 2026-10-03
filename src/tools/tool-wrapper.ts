@@ -63,7 +63,7 @@ export function registerTracedTool(
   const configMode = configManager.getConfigMode();
   const recoveryTool = isRecoveryToolName(name);
 
-  if (configMode === "legacy") {
+  if (configMode === "legacy" && !recoveryTool) {
     const profile = config.profile || "full";
     if (!isToolInProfile(name, profile, config.customTools)) {
       return;

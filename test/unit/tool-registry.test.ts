@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { ALL_TOOL_NAMES } from "../../src/tools/registry.js";
+import {
+  ALL_TOOL_NAMES,
+  ALL_V13_TOOL_NAMES,
+  PROFILE_CONTROLLED_V13_TOOL_NAMES,
+  RECOVERY_TOOL_NAMES,
+} from "../../src/tools/registry.js";
 import { PROFILES } from "../../src/config/profiles.js";
 
 test("Canonical Tool Registry & Documentation Integrity", async (t) => {
@@ -10,6 +15,16 @@ test("Canonical Tool Registry & Documentation Integrity", async (t) => {
     assert.equal(ALL_TOOL_NAMES.length, 38);
     const uniqueTools = new Set(ALL_TOOL_NAMES);
     assert.equal(uniqueTools.size, 38, "All tool names must be unique");
+  });
+
+  await t.test("should define the additive v1.3 surface as 41 tools", () => {
+    assert.equal(ALL_V13_TOOL_NAMES.length, 41);
+    assert.equal(new Set(ALL_V13_TOOL_NAMES).size, 41);
+    assert.equal(PROFILE_CONTROLLED_V13_TOOL_NAMES.length, 39);
+    assert.equal(RECOVERY_TOOL_NAMES.length, 2);
+    assert.ok(ALL_V13_TOOL_NAMES.includes("command_run"));
+    assert.ok(ALL_V13_TOOL_NAMES.includes("winhelm_status"));
+    assert.ok(ALL_V13_TOOL_NAMES.includes("winhelm_job_status"));
   });
 
   await t.test("should match exact tool counts in all profiles", () => {

@@ -28,6 +28,8 @@ const TERMINAL_EXECUTION_TOOLS = new Set([
   "terminal_task_kill",
 ]);
 
+const COMMAND_RUN_TOOL = "command_run";
+
 interface PathRequirement {
   value: unknown;
   access: "read" | "write";
@@ -126,6 +128,71 @@ export function evaluateSchemaV2ToolAccess(
   config: SchemaV2PermissionConfig,
   options: ToolAccessOptions = {}
 ): ToolAccessResult {
+  if (toolName === COMMAND_RUN_TOOL) {
+    const terminal = evaluateTerminalMode(config.terminal.mode);
+
+    if (config.terminal.mode === "safe") {
+      const cwdCheck = checkFolderAccess(
+        args.cwd,
+        "write",
+        config.folders,
+        {
+          denyRootMutation: false,
+          rejectReparseMutation: true,
+          protectedPaths: options.protectedPaths,
+        }
+      );
+
+      if (!cwdCheck.allowed) {
+        return {
+          decision: "deny",
+          code: cwdCheck.code === "PATH_INVALID"
+            ? "SAFE_CWD_REQUIRED"
+            : cwdCheck.code,
+          reason:
+            cwdCheck.code === "PATH_INVALID"
+              ? "Safe command_run requires an explicit cwd inside a readwrite WinHelm folder."
+              : cwdCheck.reason,
+          userAction:
+            "Choose a readwrite WinHelm folder as cwd or change Terminal mode locally.",
+          pathChecks: [cwdCheck],
+        };
+      }
+
+      return {
+        decision: "allow",
+        code: "TERMINAL_SAFE",
+        reason:
+          "Safe command_run is permitted; the package-manager adapter performs the command allowlist and trusted executable checks.",
+        pathChecks: [cwdCheck],
+      };
+    }
+
+    if (terminal.decision === "deny") {
+      return {
+        decision: "deny",
+        code: "TERMINAL_MODE_REQUIRED",
+        reason: terminal.reason,
+        userAction: "Change Terminal mode in WinHelm settings.",
+      };
+    }
+
+    if (terminal.decision === "ask") {
+      return {
+        decision: "ask",
+        code: "APPROVAL_REQUIRED",
+        reason: terminal.reason,
+        userAction: "Approve this command in WinHelm.",
+      };
+    }
+
+    return {
+      decision: "allow",
+      code: terminal.code,
+      reason: terminal.reason,
+    };
+  }
+
   if (TERMINAL_EXECUTION_TOOLS.has(toolName)) {
     const terminal = evaluateTerminalMode(config.terminal.mode);
 

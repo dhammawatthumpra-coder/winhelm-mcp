@@ -77,3 +77,17 @@ export const RESOURCE_NAMES = {
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
 
 export const ALL_TOOL_NAMES: ToolName[] = Object.values(TOOL_NAMES);
+
+/** Original v1.2.1 corpus; kept separate for legacy profile compatibility. */
+export const LEGACY_TOOL_NAMES = ALL_TOOL_NAMES;
+
+/** Full v1.3 schema-v2 surface: 38 legacy + 3 schema-v2 additions. */
+export const ALL_V13_TOOL_NAMES: string[] = [
+  ...ALL_TOOL_NAMES,
+  ...Object.values(SCHEMA_V2_TOOL_NAMES),
+];
+
+export const PROFILE_CONTROLLED_V13_TOOL_NAMES: string[] = [
+  ...ALL_TOOL_NAMES,
+  SCHEMA_V2_TOOL_NAMES.COMMAND_RUN,
+];
