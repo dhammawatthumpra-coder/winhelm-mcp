@@ -6,6 +6,7 @@ import {
   type ProtectedPathRule,
 } from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
+import { translate as t } from "../i18n/messages.js";
 
 export type ToolAccessDecision = "allow" | "ask" | "deny";
 
@@ -116,8 +117,8 @@ function deniedFromPath(check: FolderAccessResult): ToolAccessResult {
     reason: check.reason,
     userAction:
       check.code === "FOLDER_READ_ONLY"
-        ? "Choose a readwrite folder or change its permission in WinHelm settings."
-        : "Choose a path inside an allowed WinHelm folder.",
+        ? t("action.folder.readwrite")
+        : t("action.folder.allowed"),
     pathChecks: [check],
   };
 }
@@ -153,8 +154,7 @@ export function evaluateSchemaV2ToolAccess(
             cwdCheck.code === "PATH_INVALID"
               ? "Safe command_run requires an explicit cwd inside a readwrite WinHelm folder."
               : cwdCheck.reason,
-          userAction:
-            "Choose a readwrite WinHelm folder as cwd or change Terminal mode locally.",
+          userAction: t("action.safe.cwd"),
           pathChecks: [cwdCheck],
         };
       }
@@ -173,7 +173,7 @@ export function evaluateSchemaV2ToolAccess(
         decision: "deny",
         code: "TERMINAL_MODE_REQUIRED",
         reason: terminal.reason,
-        userAction: "Change Terminal mode in WinHelm settings.",
+        userAction: t("action.terminal.change"),
       };
     }
 
@@ -182,7 +182,7 @@ export function evaluateSchemaV2ToolAccess(
         decision: "ask",
         code: "APPROVAL_REQUIRED",
         reason: terminal.reason,
-        userAction: "Approve this command in WinHelm.",
+        userAction: t("action.approve.command"),
       };
     }
 
@@ -201,7 +201,7 @@ export function evaluateSchemaV2ToolAccess(
         decision: "deny",
         code: "TERMINAL_MODE_REQUIRED",
         reason: "Safe terminal mode permits only the dedicated command_run adapter, not terminal_* execution tools.",
-        userAction: "Use command_run for supported package-manager operations or change Terminal mode locally.",
+        userAction: t("action.terminal.safe_command"),
       };
     }
 
@@ -210,7 +210,7 @@ export function evaluateSchemaV2ToolAccess(
         decision: "deny",
         code: "TERMINAL_MODE_REQUIRED",
         reason: terminal.reason,
-        userAction: "Change Terminal mode in WinHelm settings.",
+        userAction: t("action.terminal.change"),
       };
     }
 
@@ -219,7 +219,7 @@ export function evaluateSchemaV2ToolAccess(
         decision: "ask",
         code: "APPROVAL_REQUIRED",
         reason: terminal.reason,
-        userAction: "Approve this terminal action in WinHelm.",
+        userAction: t("action.approve.terminal"),
       };
     }
 
@@ -236,7 +236,7 @@ export function evaluateSchemaV2ToolAccess(
       decision: "deny",
       code: "TOOL_POLICY_OFF",
       reason: policy.reason,
-      userAction: "Enable this tool in WinHelm permissions.",
+      userAction: t("action.tool.enable"),
     };
   }
 
@@ -266,7 +266,7 @@ export function evaluateSchemaV2ToolAccess(
       decision: "ask",
       code: "APPROVAL_REQUIRED",
       reason: policy.reason,
-      userAction: "Approve this action in WinHelm.",
+      userAction: t("action.approve.generic"),
       pathChecks,
     };
   }
