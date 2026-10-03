@@ -7,6 +7,7 @@ import { evaluateSchemaV2ToolAccess } from "../permissions/tool-access.js";
 import { getApprovalEngine } from "../approval/runtime.js";
 import { runToolWithHybridApproval } from "../approval/tool-flow.js";
 import { isRecoveryToolName } from "./registry.js";
+import { getToolMetadata } from "./metadata.js";
 
 function createPolicyError(
   code: string,
@@ -170,5 +171,15 @@ export function registerTracedTool(
     }
   };
 
-  server.registerTool(name, { inputSchema: schema }, wrappedHandler);
+  const metadata = getToolMetadata(name);
+  server.registerTool(
+    name,
+    {
+      title: metadata.title,
+      description: metadata.description,
+      inputSchema: schema,
+      annotations: metadata.annotations,
+    },
+    wrappedHandler
+  );
 }
