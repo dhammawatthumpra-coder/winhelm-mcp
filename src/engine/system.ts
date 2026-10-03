@@ -21,6 +21,7 @@ import {
   rewriteNotificationTitle,
   sanitizeNotificationMessage,
 } from "../utils/notification-policy.js";
+import { translate as t } from "../i18n/messages.js";
 
 /**
  * Read text from Windows Clipboard
@@ -672,6 +673,102 @@ export async function getNetworkInfo(includeListeningPorts = false): Promise<Net
     dnsServers,
     tailscaleIp,
     listeningPorts,
+  };
+}
+
+/**
+ * Build the approval toast XML. Unlike AI-authored notifications this one is
+ * never written by the model: the text comes from the catalog and only the
+ * loopback approval URL is injected, so a toast cannot impersonate an approval
+ * request. All values are XML-escaped.
+ */
+export function buildApprovalToastXml(
+  title: string,
+  message: string,
+  actionLabel: string,
+  activationUrl?: string,
+  sound = true
+): string {
+  const escapeXml = (value: string): string =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+
+  const soundTag = sound
+    ? "<audio src='ms-winsoundevent:Notification.Default' />"
+    : "<audio silent='true' />";
+  const launch = activationUrl
+    ? ` activationType='protocol' launch='${escapeXml(activationUrl)}'`
+    : "";
+  const actions = activationUrl
+    ? `<actions><action content='${escapeXml(actionLabel)}' activationType='protocol' arguments='${escapeXml(activationUrl)}' /></actions>`
+    : "";
+
+  return (
+    `<toast${launch}><visual><binding template='ToastGeneric'>` +
+    `<text>${escapeXml(title)}</text><text>${escapeXml(message)}</text>` +
+    `</binding></visual>${actions}${soundTag}</toast>`
+  );
+}
+
+/**
+ * WinHelm's own approval notification. The title, body and action label come
+ * from the message catalog, so no AI-supplied text can reach the toast.
+ */
+export async function sendWinHelmApprovalNotification(
+  activationUrl?: string
+): Promise<NotificationResult> {
+  const title = sanitizeNotificationMessage(t("notify.approval.title"));
+  const message = sanitizeNotificationMessage(t("notify.approval.body"));
+  const actionLabel = sanitizeNotificationMessage(
+    t("notify.approval.action")
+  );
+  const toastXml = buildApprovalToastXml(
+    title,
+    message,
+    actionLabel,
+    activationUrl
+  );
+
+  const psScript = `
+$toastXml = $env:WH_ARG_TOAST_XML;
+$title = $env:WH_ARG_TITLE;
+$msg = $env:WH_ARG_MSG;
+
+try {
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+  $xmlDoc = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $xmlDoc.LoadXml($toastXml)
+  $toast = New-Object Windows.UI.Notifications.ToastNotification $xmlDoc
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("WinHelm").Show($toast)
+} catch {
+  Add-Type -AssemblyName System.Windows.Forms
+  $balloon = New-Object System.Windows.Forms.NotifyIcon
+  $balloon.Icon = [System.Drawing.SystemIcons]::Information
+  $balloon.BalloonTipTitle = $title
+  $balloon.BalloonTipText = $msg
+  $balloon.Visible = $true
+  $balloon.ShowBalloonTip(4000)
+}
+`;
+
+  await runPowerShell(psScript, {
+    timeoutMs: 6000,
+    env: {
+      WH_ARG_TOAST_XML: toastXml,
+      WH_ARG_TITLE: title,
+      WH_ARG_MSG: message,
+    },
+  });
+
+  return {
+    success: true,
+    title,
+    message,
+    timestamp: new Date().toISOString(),
   };
 }
 

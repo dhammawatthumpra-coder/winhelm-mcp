@@ -520,8 +520,13 @@ export function createServer(options: ServerOptions): {
         }
       }
 
-      // Allow unauthenticated GET / and /dashboard shell (data endpoints /api/monitor/* remain strictly guarded)
-      if (req.path === "/" || req.path === "/dashboard") {
+      // Allow unauthenticated GET / and /dashboard shell (data endpoints /api/monitor/* remain strictly guarded).
+      // /approvals/<jobId> is the same shell, opened by the Windows toast deep link.
+      if (
+        req.path === "/" ||
+        req.path === "/dashboard" ||
+        req.path.startsWith("/approvals/")
+      ) {
         return next();
       }
 
@@ -540,8 +545,7 @@ export function createServer(options: ServerOptions): {
     logger.info("Public network mode active (No auth token set)");
   }
 
-  // Web Monitor Dashboard
-  app.get(["/", "/dashboard"], (_req: Request, res: Response) => {
+  const sendDashboard = (_req: Request, res: Response): void => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader(
       "Content-Security-Policy",
@@ -557,7 +561,14 @@ export function createServer(options: ServerOptions): {
         terminalMode: profileStatus.terminalMode,
       })
     );
-  });
+  };
+
+  // Web Monitor Dashboard
+  app.get(["/", "/dashboard"], sendDashboard);
+
+  // Approval deep link opened by the Windows toast; the Approvals panel itself
+  // stays behind the local admin code.
+  app.get("/approvals/:jobId", sendDashboard);
 
   // Interactive File & Markdown Previewer
   app.get("/preview", async (req: Request, res: Response) => {

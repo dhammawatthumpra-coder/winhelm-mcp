@@ -72,6 +72,11 @@ export interface ApprovalEngineOptions {
   retryRetentionMs?: number;
   persist?: (job: RecoverableApprovalJob) => void;
   /**
+   * Advisory hook fired once when a new job is queued (for example a desktop
+   * notification). It never affects the approval flow.
+   */
+  onCreated?: (job: ApprovalJob) => void;
+  /**
    * Set when the durable journal could not be trusted at startup. Creating new
    * approval jobs is then refused, because retry protection cannot be
    * guaranteed while earlier transitions are unreadable.
@@ -173,12 +178,14 @@ export class ApprovalEngine {
   private readonly now: () => number;
   private readonly retryRetentionMs: number;
   private readonly persist?: (job: RecoverableApprovalJob) => void;
+  private readonly onCreated?: (job: ApprovalJob) => void;
   private readonly journalIntegrityFailed: boolean;
 
   constructor(options: ApprovalEngineOptions = {}) {
     this.now = options.now ?? (() => Date.now());
     this.retryRetentionMs = options.retryRetentionMs ?? 60_000;
     this.persist = options.persist;
+    this.onCreated = options.onCreated;
     this.journalIntegrityFailed = options.journalIntegrityFailed ?? false;
   }
 
@@ -272,7 +279,14 @@ export class ApprovalEngine {
         "Approval journal write failed; the action was not queued."
       );
     }
-    return { kind: "created", job: publicJob(job) };
+
+    const visibleJob = publicJob(job);
+    try {
+      this.onCreated?.(visibleJob);
+    } catch {
+      // Advisory only: a notification failure must not affect approvals.
+    }
+    return { kind: "created", job: visibleJob };
   }
 
   restoreRecoveredJobs(jobs: RecoverableApprovalJob[]): void {
