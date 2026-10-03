@@ -37,6 +37,14 @@ export const EN_MESSAGES = {
     "Approve",
   "dashboard.approvals.deny":
     "Deny",
+  "dashboard.clients.title":
+    "Connected MCP Clients",
+  "dashboard.clients.note":
+    "Client names are supplied by the connecting client and are displayed as text only.",
+  "dashboard.clients.empty":
+    "No session has announced clientInfo yet.",
+  "dashboard.clients.loading":
+    "Loading…",
 
   "action.folder.readwrite":
     "Choose a readwrite folder or change its permission in WinHelm settings.",
@@ -126,6 +134,14 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "อนุมัติ",
   "dashboard.approvals.deny":
     "ปฏิเสธ",
+  "dashboard.clients.title":
+    "ไคลเอนต์ MCP ที่เชื่อมต่อ",
+  "dashboard.clients.note":
+    "ชื่อไคลเอนต์มาจากตัวไคลเอนต์ที่เชื่อมต่อ และแสดงเป็นข้อความเท่านั้น",
+  "dashboard.clients.empty":
+    "ยังไม่มี session ที่แจ้ง clientInfo",
+  "dashboard.clients.loading":
+    "กำลังโหลด…",
 
   "action.folder.readwrite":
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",

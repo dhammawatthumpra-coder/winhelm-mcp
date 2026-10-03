@@ -94,6 +94,24 @@ export function getSessionClientInfo(
   return value ? { ...value } : undefined;
 }
 
+export interface SessionClientSummary {
+  sessionId: string;
+  clientInfo: McpClientInfo;
+}
+
+/**
+ * Snapshot of the sessions that announced clientInfo, in announce order. Used
+ * by the Dashboard connection list; callers hash the session id before it
+ * leaves the admin plane. clientInfo is client-supplied and must be rendered as
+ * text only.
+ */
+export function listSessionClients(): SessionClientSummary[] {
+  return [...clientsBySession.entries()].map(([sessionId, clientInfo]) => ({
+    sessionId,
+    clientInfo: { ...clientInfo },
+  }));
+}
+
 export function clearSessionRuntimeContext(sessionId: string): void {
   clientsBySession.delete(sessionId);
 }
