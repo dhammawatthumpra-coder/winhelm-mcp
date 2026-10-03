@@ -1,5 +1,11 @@
 import fs from "node:fs/promises";
-import { existsSync, realpathSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  realpathSync,
+  readFileSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -44,6 +50,9 @@ export class ConfigManager {
   private configValidationErrors: string[] = [];
   private runtimeEffectivePort: number | undefined;
   private configFilePath: string;
+  private configWatcher: FSWatcher | null = null;
+  private configReloadTimer: NodeJS.Timeout | null = null;
+  private readonly configReloadDebounceMs = 100;
   private executionHistory: CommandLogEntry[] = [];
   private readonly maxHistoryLength = 500;
 
@@ -172,19 +181,140 @@ export class ConfigManager {
   public static getInstance(customConfigPath?: string): ConfigManager {
     if (!ConfigManager.instance) {
       ConfigManager.instance = new ConfigManager(customConfigPath);
-    } else if (customConfigPath && ConfigManager.instance.configFilePath !== path.resolve(customConfigPath)) {
+    } else if (
+      customConfigPath &&
+      ConfigManager.instance.configFilePath !== path.resolve(customConfigPath)
+    ) {
+      ConfigManager.instance.stopWatchingConfig();
       ConfigManager.instance = new ConfigManager(customConfigPath);
     }
     return ConfigManager.instance;
   }
 
   public static resetInstance(customConfigPath?: string): ConfigManager {
+    ConfigManager.instance?.stopWatchingConfig();
     ConfigManager.instance = new ConfigManager(customConfigPath);
     return ConfigManager.instance;
   }
 
   public getConfigFilePath(): string {
     return this.configFilePath;
+  }
+
+  private replaceRawConfigFromFile(
+    parsed: Record<string, unknown>
+  ): void {
+    this.rawConfig = {
+      ...DEFAULT_CONFIG,
+      ...parsed,
+    } as ServerConfig;
+  }
+
+  private applyEnvironmentOverrides(): void {
+    const rawModeBeforeEnv = detectConfigMode(
+      this.rawConfig as unknown as Record<string, unknown>
+    );
+
+    if (process.env.MCP_AUTH_TOKEN) {
+      this.rawConfig.authToken = process.env.MCP_AUTH_TOKEN;
+    }
+
+    if (process.env.MCP_ALLOWED_DIRECTORIES) {
+      const envDirectories =
+        process.env.MCP_ALLOWED_DIRECTORIES.split(",")
+          .map((p) => p.trim())
+          .filter(Boolean);
+
+      if (rawModeBeforeEnv === "v2") {
+        const readOnlyEnv =
+          process.env.MCP_READ_ONLY === "true" ||
+          process.env.MCP_READ_ONLY === "1";
+        this.rawConfig.folders = envDirectories
+          .filter((entry) => !isWildcardAllowAll([entry]))
+          .map((folderPath) => ({
+            path: folderPath,
+            permission: readOnlyEnv ? "read" : "readwrite",
+          }));
+      } else {
+        this.rawConfig.allowedDirectories = envDirectories;
+      }
+    }
+
+    if (process.env.MCP_BLOCKED_COMMANDS) {
+      const extraBlocked = process.env.MCP_BLOCKED_COMMANDS.split(",")
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean);
+      this.rawConfig.blockedCommands = Array.from(
+        new Set([
+          ...this.rawConfig.blockedCommands,
+          ...extraBlocked,
+        ])
+      );
+    }
+
+    if (process.env.MCP_ALLOWED_HOSTS) {
+      const extraHosts = process.env.MCP_ALLOWED_HOSTS.split(",")
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean);
+      const existing = this.rawConfig.allowedHosts || [];
+      this.rawConfig.allowedHosts = Array.from(
+        new Set([...existing, ...extraHosts])
+      );
+    }
+
+    if (
+      process.env.MCP_READ_ONLY === "true" ||
+      process.env.MCP_READ_ONLY === "1"
+    ) {
+      if (rawModeBeforeEnv === "v2") {
+        this.rawConfig.folders = (this.rawConfig.folders ?? []).map(
+          (folder) => ({
+            ...folder,
+            permission: "read",
+          })
+        );
+        this.rawConfig.terminal = {
+          ...(this.rawConfig.terminal ?? { mode: "off" }),
+          mode: "off",
+        };
+      } else {
+        this.rawConfig.readOnly = true;
+      }
+    }
+
+    if (
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "true" ||
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "1" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "true" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
+    ) {
+      this.rawConfig.allowSystemExecution = true;
+    } else if (
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "0" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "false" ||
+      process.env.MCP_ALLOW_SYSTEM_EXEC === "0"
+    ) {
+      this.rawConfig.allowSystemExecution = false;
+    }
+  }
+
+  private enterFailClosedConfig(reason: string): void {
+    this.configMode = "invalid";
+    this.configValidationErrors = [reason];
+    this.config = {
+      ...this.rawConfig,
+      folders: [],
+      terminal: { mode: "off" },
+      toolPolicy: {},
+      approval: normalizeApprovalConfig(DEFAULT_APPROVAL_CONFIG),
+      network: { ...DEFAULT_NETWORK_CONFIG },
+      allowedDirectories: [],
+      readOnly: false,
+      profile: undefined,
+      customTools: undefined,
+    };
+    setConfiguredLocale(this.config.ui?.language);
   }
 
   /**
@@ -205,7 +335,10 @@ export class ConfigManager {
         const cleanRaw = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
         if (cleanRaw.trim()) {
           const parsed = JSON.parse(cleanRaw);
-          this.applyRawUpdates(parsed);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("Configuration root must be a JSON object.");
+          }
+          this.replaceRawConfigFromFile(parsed as Record<string, unknown>);
           console.log(`[ConfigManager] Loaded configuration from ${this.configFilePath}`);
         }
       } else if (typeof configOrPath === "string") {
@@ -216,86 +349,123 @@ export class ConfigManager {
       throw new Error(`Failed to load configuration file (${this.configFilePath}): ${(err as Error).message}`);
     }
 
-    // Apply environment variables to the raw config, then re-derive the
-    // effective config. In schema-v2, permission-related legacy env vars map
-    // into the authoritative folders/terminal model instead of reviving the
-    // legacy governed fields.
-    const rawModeBeforeEnv = detectConfigMode(
-      this.rawConfig as unknown as Record<string, unknown>
-    );
-
-    if (process.env.MCP_AUTH_TOKEN) {
-      this.rawConfig.authToken = process.env.MCP_AUTH_TOKEN;
-    }
-    if (process.env.MCP_ALLOWED_DIRECTORIES) {
-      const envDirectories = process.env.MCP_ALLOWED_DIRECTORIES.split(",")
-        .map((p) => p.trim())
-        .filter(Boolean);
-
-      if (rawModeBeforeEnv === "v2") {
-        const readOnlyEnv =
-          process.env.MCP_READ_ONLY === "true" ||
-          process.env.MCP_READ_ONLY === "1";
-        this.rawConfig.folders = envDirectories
-          .filter((entry) => !isWildcardAllowAll([entry]))
-          .map((folderPath) => ({
-            path: folderPath,
-            permission: readOnlyEnv ? "read" : "readwrite",
-          }));
-      } else {
-        this.rawConfig.allowedDirectories = envDirectories;
-      }
-    }
-    if (process.env.MCP_BLOCKED_COMMANDS) {
-      const extraBlocked = process.env.MCP_BLOCKED_COMMANDS.split(",")
-        .map((c) => c.trim().toLowerCase())
-        .filter(Boolean);
-      this.rawConfig.blockedCommands = Array.from(new Set([...this.rawConfig.blockedCommands, ...extraBlocked]));
-    }
-    if (process.env.MCP_ALLOWED_HOSTS) {
-      const extraHosts = process.env.MCP_ALLOWED_HOSTS.split(",")
-        .map((h) => h.trim().toLowerCase())
-        .filter(Boolean);
-      const existing = this.rawConfig.allowedHosts || [];
-      this.rawConfig.allowedHosts = Array.from(new Set([...existing, ...extraHosts]));
-    }
-    if (
-      process.env.MCP_READ_ONLY === "true" ||
-      process.env.MCP_READ_ONLY === "1"
-    ) {
-      if (rawModeBeforeEnv === "v2") {
-        this.rawConfig.folders = (this.rawConfig.folders ?? []).map(
-          (folder) => ({
-            ...folder,
-            permission: "read",
-          })
-        );
-        this.rawConfig.terminal = {
-          ...(this.rawConfig.terminal ?? { mode: "off" }),
-          mode: "off",
-        };
-      } else {
-        this.rawConfig.readOnly = true;
-      }
-    }
-    if (
-      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "true" ||
-      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "1" ||
-      process.env.MCP_ALLOW_SYSTEM_EXEC === "true" ||
-      process.env.MCP_ALLOW_SYSTEM_EXEC === "1"
-    ) {
-      this.rawConfig.allowSystemExecution = true;
-    } else if (
-      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "false" ||
-      process.env.WINHELM_ALLOW_SYSTEM_EXEC === "0" ||
-      process.env.MCP_ALLOW_SYSTEM_EXEC === "false" ||
-      process.env.MCP_ALLOW_SYSTEM_EXEC === "0"
-    ) {
-      this.rawConfig.allowSystemExecution = false;
-    }
+    this.applyEnvironmentOverrides();
 
     this.refreshEffectiveConfig();
     this.logSecurityWarnings();
+  }
+
+  private async reloadConfigFromDisk(): Promise<boolean> {
+    try {
+      if (!existsSync(this.configFilePath)) {
+        throw new Error("Configuration file was removed.");
+      }
+
+      const raw = await fs.readFile(this.configFilePath, "utf8");
+      const cleanRaw =
+        raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+      if (!cleanRaw.trim()) {
+        throw new Error("Configuration file is empty.");
+      }
+
+      const parsed = JSON.parse(cleanRaw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Configuration root must be a JSON object.");
+      }
+
+      this.replaceRawConfigFromFile(
+        parsed as Record<string, unknown>
+      );
+      this.applyEnvironmentOverrides();
+      this.refreshEffectiveConfig();
+      this.logSecurityWarnings();
+
+      console.log(
+        `[ConfigManager] Hot-reloaded configuration from ${this.configFilePath}`
+      );
+      return true;
+    } catch (err) {
+      const reason =
+        `Hot reload failed for ${this.configFilePath}: ` +
+        ((err as Error).message || String(err));
+      this.enterFailClosedConfig(reason);
+      console.error(`[ConfigManager] ${reason}`);
+      return false;
+    }
+  }
+
+  private scheduleConfigReload(): void {
+    if (this.configReloadTimer) {
+      clearTimeout(this.configReloadTimer);
+    }
+
+    this.configReloadTimer = setTimeout(() => {
+      this.configReloadTimer = null;
+      void this.reloadConfigFromDisk();
+    }, this.configReloadDebounceMs);
+  }
+
+  public startWatchingConfig(): boolean {
+    this.stopWatchingConfig();
+
+    const directory = path.dirname(this.configFilePath);
+    if (!existsSync(directory)) {
+      console.warn(
+        `[ConfigManager] Config watch directory does not exist: ${directory}`
+      );
+      return false;
+    }
+
+    const expectedName = path.basename(this.configFilePath);
+    const expectedCompare =
+      process.platform === "win32"
+        ? expectedName.toLowerCase()
+        : expectedName;
+
+    try {
+      this.configWatcher = watch(
+        directory,
+        { persistent: false },
+        (_eventType, filename) => {
+          if (filename) {
+            const observed = filename.toString();
+            const observedCompare =
+              process.platform === "win32"
+                ? observed.toLowerCase()
+                : observed;
+            if (observedCompare !== expectedCompare) return;
+          }
+          this.scheduleConfigReload();
+        }
+      );
+
+      this.configWatcher.on("error", (err) => {
+        console.error(
+          `[ConfigManager] Config watcher error for ${this.configFilePath}:`,
+          err
+        );
+      });
+      this.configWatcher.unref?.();
+      return true;
+    } catch (err) {
+      console.error(
+        `[ConfigManager] Failed to watch config file ${this.configFilePath}:`,
+        err
+      );
+      this.configWatcher = null;
+      return false;
+    }
+  }
+
+  public stopWatchingConfig(): void {
+    if (this.configReloadTimer) {
+      clearTimeout(this.configReloadTimer);
+      this.configReloadTimer = null;
+    }
+    if (this.configWatcher) {
+      this.configWatcher.close();
+      this.configWatcher = null;
+    }
   }
 
   private static hasLoggedSystemExecWarning = false;
