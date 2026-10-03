@@ -132,6 +132,25 @@ function canonicalFolders(folders: FolderPermission[]): CanonicalFolder[] {
   return result;
 }
 
+/**
+ * Whether one protected rule covers an already canonicalized target path.
+ * Shared by the schema-v2 folder check and the legacy allowedDirectories check
+ * so both modes protect WinHelm's own config/data/log/install paths.
+ */
+export function protectedRuleBlocksPath(
+  rule: ProtectedPathRule,
+  canonicalPath: string
+): boolean {
+  const protectedCanonical = canonicalizeExistingAware(rule.path);
+  return rule.kind === "tree"
+    ? isInsideOrEqual(protectedCanonical, canonicalPath)
+    : normalizeForCompare(protectedCanonical) === normalizeForCompare(canonicalPath);
+}
+
+export function canonicalizeExistingAwarePath(inputPath: string): string {
+  return canonicalizeExistingAware(inputPath);
+}
+
 export function checkFolderAccess(
   targetPath: unknown,
   access: FolderAccessKind,
@@ -173,13 +192,7 @@ export function checkFolderAccess(
 
   for (const protectedRule of options.protectedPaths ?? []) {
     try {
-      const protectedCanonical = canonicalizeExistingAware(protectedRule.path);
-      const blocked =
-        protectedRule.kind === "tree"
-          ? isInsideOrEqual(protectedCanonical, canonicalPath)
-          : normalizeForCompare(protectedCanonical) === normalizeForCompare(canonicalPath);
-
-      if (blocked) {
+      if (protectedRuleBlocksPath(protectedRule, canonicalPath)) {
         return {
           allowed: false,
           code: "FOLDER_PROTECTED_PATH",
