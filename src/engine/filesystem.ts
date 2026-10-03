@@ -459,6 +459,68 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
   };
 }
 
+async function listZipEntryNames(zipPath: string): Promise<string[]> {
+  const psCmd = [
+    "Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue",
+    "$zip = [System.IO.Compression.ZipFile]::OpenRead($env:WH_ARG_ZIP)",
+    "try {",
+    "  $names = @($zip.Entries | ForEach-Object { $_.FullName })",
+    "  ConvertTo-Json -Compress -InputObject $names",
+    "} finally {",
+    "  $zip.Dispose()",
+    "}",
+  ].join("; ");
+
+  const result = await runPowerShell(psCmd, {
+    timeoutMs: 15000,
+    env: { WH_ARG_ZIP: zipPath },
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Failed to inspect zip archive: ${result.stderr || result.stdout}`
+    );
+  }
+
+  const raw = result.stdout.trim();
+  if (!raw) return [];
+
+  const parsed = JSON.parse(raw);
+  if (Array.isArray(parsed)) {
+    return parsed.map((value) => String(value));
+  }
+  return [String(parsed)];
+}
+
+function resolveZipEntryDestination(
+  targetDir: string,
+  entryName: string
+): string {
+  const normalizedName = entryName
+    .normalize("NFKC")
+    .replace(/\//g, path.sep);
+
+  if (!normalizedName || path.isAbsolute(normalizedName)) {
+    throw new Error(
+      `Unsafe zip entry path is not permitted: ${entryName}`
+    );
+  }
+
+  const candidate = path.resolve(targetDir, normalizedName);
+  const relative = path.relative(targetDir, candidate);
+  if (
+    relative === ".." ||
+    relative.startsWith(".." + path.sep) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(
+      `Zip entry escapes the target directory: ${entryName}`
+    );
+  }
+
+  return candidate;
+}
+
 /**
  * Extract a .zip archive to a target directory using native PowerShell Expand-Archive
  */
@@ -487,6 +549,24 @@ export async function extractZip(
 
   if (!existsSync(resolvedZip)) {
     throw new Error(`Zip archive not found: ${zipPath}`);
+  }
+
+  const entryNames = await listZipEntryNames(resolvedZip);
+  for (const entryName of entryNames) {
+    const destination = resolveZipEntryDestination(
+      resolvedTarget,
+      entryName
+    );
+    const entryCheck = configManager.checkPathAccess(
+      destination,
+      "write",
+      { denyRootMutation: false }
+    );
+    if (!entryCheck.allowed) {
+      throw new Error(
+        `Zip entry "${entryName}" is blocked: ${entryCheck.reason}`
+      );
+    }
   }
 
   await fs.mkdir(resolvedTarget, { recursive: true });
