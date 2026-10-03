@@ -11,6 +11,8 @@ async function fixture(): Promise<{
   winhelmConfig: string;
   claudeConfig: string;
   cursorConfig: string;
+  nodeExecutable: string;
+  entryPoint: string;
 }> {
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), "winhelm-connect-cli-")
@@ -22,6 +24,11 @@ async function fixture(): Promise<{
     "claude_desktop_config.json"
   );
   const cursorConfig = path.join(root, ".cursor", "mcp.json");
+  const nodeExecutable = path.join(root, "node.exe");
+  const entryPoint = path.join(root, "dist", "index.js");
+  await fs.mkdir(path.dirname(entryPoint), { recursive: true });
+  await fs.writeFile(nodeExecutable, "fixture", "utf8");
+  await fs.writeFile(entryPoint, "fixture", "utf8");
 
   await fs.writeFile(
     winhelmConfig,
@@ -43,6 +50,8 @@ async function fixture(): Promise<{
     winhelmConfig,
     claudeConfig,
     cursorConfig,
+    nodeExecutable,
+    entryPoint,
   };
 }
 
@@ -77,8 +86,8 @@ describe("winhelm connect CLI", () => {
         ],
         {
           cursorConfigPath: f.cursorConfig,
-          nodeExecutable: path.join(f.root, "node.exe"),
-          entryPoint: path.join(f.root, "dist", "index.js"),
+          nodeExecutable: f.nodeExecutable,
+          entryPoint: f.entryPoint,
         }
       );
 
@@ -106,8 +115,8 @@ describe("winhelm connect CLI", () => {
         ],
         {
           claudeConfigPath: f.claudeConfig,
-          nodeExecutable: path.join(f.root, "node.exe"),
-          entryPoint: path.join(f.root, "dist", "index.js"),
+          nodeExecutable: f.nodeExecutable,
+          entryPoint: f.entryPoint,
         }
       );
 
@@ -136,8 +145,8 @@ describe("winhelm connect CLI", () => {
         {
           claudeConfigPath: f.claudeConfig,
           cursorConfigPath: f.cursorConfig,
-          nodeExecutable: path.join(f.root, "node.exe"),
-          entryPoint: path.join(f.root, "dist", "index.js"),
+          nodeExecutable: f.nodeExecutable,
+          entryPoint: f.entryPoint,
         }
       );
 

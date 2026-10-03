@@ -74,10 +74,14 @@ export function resolveClientConnectionTarget(
   const configPath =
     client === "claude"
       ? path.resolve(
-          overrides.claudeConfigPath ?? claudeConfigPath()
+          overrides.claudeConfigPath ??
+            process.env.WINHELM_CLAUDE_CONFIG_PATH ??
+            claudeConfigPath()
         )
       : path.resolve(
-          overrides.cursorConfigPath ?? cursorConfigPath()
+          overrides.cursorConfigPath ??
+            process.env.WINHELM_CURSOR_CONFIG_PATH ??
+            cursorConfigPath()
         );
 
   return {
@@ -124,10 +128,14 @@ export function buildWinHelmLocalMcpEntry(
   } = {}
 ): WinHelmLocalMcpEntry {
   const command = path.resolve(
-    options.nodeExecutable ?? process.execPath
+    options.nodeExecutable ??
+      process.env.WINHELM_NODE_EXECUTABLE_PATH ??
+      process.execPath
   );
   const entryPoint = path.resolve(
-    options.entryPoint ?? runtimeEntryPoint()
+    options.entryPoint ??
+      process.env.WINHELM_SERVER_ENTRYPOINT_PATH ??
+      runtimeEntryPoint()
   );
   const configPath = path.resolve(winhelmConfigPath);
 
@@ -220,6 +228,16 @@ export async function previewClientConnection(
         );
 
   const warnings: string[] = [];
+  if (!existsSync(proposedEntry.command)) {
+    warnings.push(
+      `Node executable was not found at ${proposedEntry.command}.`
+    );
+  }
+  if (!existsSync(proposedEntry.args[0])) {
+    warnings.push(
+      `WinHelm server entrypoint was not found at ${proposedEntry.args[0]}.`
+    );
+  }
   if (!target.configDirectoryExists) {
     warnings.push(
       `${target.displayName} config directory was not detected yet; it will be created if you apply this connection.`
@@ -267,6 +285,19 @@ export async function applyClientConnection(
     winhelmConfigPath,
     options
   );
+  if (!existsSync(preview.proposedEntry.command)) {
+    throw new ClientConnectionError(
+      "NODE_EXECUTABLE_NOT_FOUND",
+      `Node executable was not found: ${preview.proposedEntry.command}`
+    );
+  }
+  if (!existsSync(preview.proposedEntry.args[0])) {
+    throw new ClientConnectionError(
+      "WINHELM_ENTRYPOINT_NOT_FOUND",
+      `WinHelm server entrypoint was not found: ${preview.proposedEntry.args[0]}`
+    );
+  }
+
   const current = await loadClientConfig(preview.target.configPath);
   const servers = mcpServersObject(current);
   const merged = {
