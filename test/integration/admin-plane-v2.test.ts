@@ -106,7 +106,10 @@ describe("Isolated admin HTTP plane", () => {
       let executions = 0;
       const approval = getApprovalEngine().request({
         tool: "fixture_action",
-        args: { value: 1 },
+        args: {
+          value: 1,
+          headers: { authorization: "Bearer dashboard-secret-token" },
+        },
         sessionId: "fixture-session",
         requestId: 1,
         ttlMs: 30_000,
@@ -127,6 +130,21 @@ describe("Isolated admin HTTP plane", () => {
         approvalsBody.jobs.some(
           (job: any) => job.id === approval.job.id
         )
+      );
+      const approvalView = approvalsBody.jobs.find(
+        (job: any) => job.id === approval.job.id
+      );
+      assert.ok(approvalView);
+      assert.ok(
+        !JSON.stringify(approvalView).includes(
+          "dashboard-secret-token"
+        ),
+        "Admin approval API must redact secrets before Dashboard rendering"
+      );
+      assert.notStrictEqual(
+        approvalView.sessionId,
+        "fixture-session",
+        "Admin approval API must not expose raw MCP session IDs"
       );
 
       // CSRF is mandatory for mutations.

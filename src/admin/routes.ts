@@ -13,7 +13,8 @@ import {
   type ProfileApplyInput,
 } from "../config/profile-service.js";
 import { getApprovalEngine } from "../approval/runtime.js";
-import { auditLogger } from "../utils/audit-logger.js";
+import { auditLogger, hashSessionId } from "../utils/audit-logger.js";
+import { sanitizeObject } from "../utils/sanitizer.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
   isLoopbackOrigin,
@@ -162,6 +163,20 @@ function profileErrorStatus(err: ProfileServiceError): number {
     return 409;
   }
   return 400;
+}
+
+function adminApprovalView(job: any): Record<string, unknown> {
+  return {
+    id: job.id,
+    state: job.state,
+    tool: job.tool,
+    args: sanitizeObject(job.args ?? {}),
+    sessionId: hashSessionId(job.sessionId),
+    createdAt: job.createdAt,
+    expiresAt: job.expiresAt,
+    updatedAt: job.updatedAt,
+    executionCount: job.executionCount,
+  };
 }
 
 function requireLocality(
@@ -494,7 +509,7 @@ export function registerAdminRoutes(app: Express): void {
     requireAdminSession,
     (_req: Request, res: Response) => {
       res.json({
-        jobs: getApprovalEngine().list(),
+        jobs: getApprovalEngine().list().map(adminApprovalView),
       });
     }
   );

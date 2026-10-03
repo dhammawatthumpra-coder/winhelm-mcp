@@ -3,6 +3,7 @@ import cors from "cors";
 import crypto from "node:crypto";
 import type { Server } from "node:http";
 import { ConfigManager } from "../config/config-manager.js";
+import { getProfileStatus } from "../config/profile-service.js";
 import { SseGateway } from "./sse-gateway.js";
 import { StreamableGateway } from "./streamable-gateway.js";
 import { logger } from "../utils/logger.js";
@@ -547,7 +548,15 @@ export function createServer(options: ServerOptions): {
       "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'self';"
     );
     const activeProfile = configManager.getConfig().profile || "full";
-    res.send(getDashboardHtml(activeProfile));
+    const profileStatus = getProfileStatus(configManager);
+    res.send(
+      getDashboardHtml(activeProfile, {
+        schemaMode: profileStatus.schemaMode,
+        preset: profileStatus.preset,
+        modified: profileStatus.modified,
+        terminalMode: profileStatus.terminalMode,
+      })
+    );
   });
 
   // Interactive File & Markdown Previewer
