@@ -126,6 +126,35 @@ describe("Dashboard canonical tool surface", () => {
     );
   });
 
+  it("discloses a legacy configuration and hides the disclosure under schema-v2", () => {
+    const legacy = getDashboardHtml("full", { schemaMode: "legacy" });
+    assert.ok(
+      legacy.includes(
+        'id="legacyConfigBanner" class="risk-banner warning" style="display:block;"'
+      ),
+      "legacy config must be disclosed visibly"
+    );
+    assert.ok(
+      legacy.includes("Legacy configuration — upgrade available.")
+    );
+    // The live profile refresh must keep the disclosure in sync.
+    assert.match(
+      legacy,
+      /legacyBanner\.style\.display\s*=\s*profile\.schemaMode === 'legacy' \? 'block' : 'none';/
+    );
+
+    const v2 = getDashboardHtml("full", {
+      schemaMode: "v2",
+      preset: "balanced",
+      terminalMode: "ask",
+    });
+    assert.ok(
+      v2.includes(
+        'id="legacyConfigBanner" class="risk-banner warning" style="display:none;"'
+      )
+    );
+  });
+
   it("hides the banner when terminal access is not unrestricted", () => {
     const html = getDashboardHtml("full", {
       schemaMode: "v2",
