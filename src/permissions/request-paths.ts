@@ -39,6 +39,24 @@ function normalizeAlias(value: string): string {
 }
 
 /**
+ * §5.1: `file_list "."` (or no path) while several folders are configured does
+ * not name one location, so it lists the configured folders instead of being
+ * refused as an ambiguous path.
+ */
+export function isFolderListingRequest(
+  value: unknown,
+  folders: FolderPermission[] | undefined
+): boolean {
+  const configured = (folders ?? []).filter(
+    (folder) =>
+      typeof folder.path === "string" && folder.path.trim().length > 0
+  );
+  if (configured.length <= 1) return false;
+  if (value === undefined || value === null) return true;
+  return typeof value === "string" && value.trim() === ".";
+}
+
+/**
  * Resolve one schema-v2 request path before authorization.
  *
  * The baseline allows a full path or `@alias/...`. A relative path is only
