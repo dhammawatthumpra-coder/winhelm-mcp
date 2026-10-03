@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getDashboardHtml } from "../../src/gateway/dashboard-html.js";
+import { escapeHtml, getDashboardHtml } from "../../src/gateway/dashboard-html.js";
 import { PROFILES } from "../../src/config/profiles.js";
+import { translate } from "../../src/i18n/messages.js";
 import {
   ALL_TOOL_NAMES,
   ALL_V13_TOOL_NAMES,
@@ -119,10 +120,13 @@ describe("Dashboard canonical tool surface", () => {
         '<div id="runtimeRiskBanner" class="risk-banner danger">'
       )
     );
-    assert.ok(html.includes("Full terminal access is active."));
+    // The baseline 7.6 message is the banner text, in the configured locale.
+    assert.ok(
+      html.includes(escapeHtml(translate("mode.full.warn", {}, "en")))
+    );
     assert.match(
       html,
-      /banner\.classList\.add\('danger'\);\s*banner\.textContent\s*=\s*'Full terminal access is active\./
+      /banner\.classList\.add\('danger'\);\s*banner\.textContent\s*=\s*DASHBOARD_MESSAGES\.fullWarn;/
     );
   });
 
@@ -171,7 +175,9 @@ describe("Dashboard canonical tool surface", () => {
     // full-access banner may be server-rendered in ask mode.
     assert.strictEqual(
       html.includes(
-        'class="risk-banner danger"><strong>Full terminal access is active.'
+        `class="risk-banner danger"><strong>${escapeHtml(
+          translate("mode.full.warn", {}, "en")
+        )}`
       ),
       false
     );

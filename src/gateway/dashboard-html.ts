@@ -1,4 +1,5 @@
 import { PROFILES, type ToolProfile } from "../config/profiles.js";
+import { getRuntimeLocale, translate as t } from "../i18n/messages.js";
 import {
   ALL_TOOL_NAMES,
   ALL_V13_TOOL_NAMES,
@@ -36,6 +37,17 @@ export function getDashboardHtml(
 ): string {
   const profileDef = PROFILES[activeProfile] || PROFILES.full;
   const schemaMode = permissionSummary?.schemaMode ?? "legacy";
+  // Baseline 7.6 messages that the Dashboard must show, in the configured
+  // locale. Only these keys are normative, so untranslated UI stays English.
+  const uiMessages = {
+    fullWarn: t("mode.full.warn"),
+    expiry: t("approve.expiry"),
+    confirmType: t("confirm.type"),
+  };
+  const dashboardMessagesScript = `const DASHBOARD_MESSAGES = ${JSON.stringify({
+    fullWarn: uiMessages.fullWarn,
+    expiry: uiMessages.expiry,
+  }).replace(/</g, "\\u003c")};`;
   const schemaV2Surface = schemaMode !== "legacy";
   const legacyActiveTools = new Set<string>([
     ...profileDef.tools,
@@ -68,7 +80,7 @@ export function getDashboardHtml(
       : terminalMode === "dangerous"
         ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>DANGEROUS terminal mode is active.</strong> Command blocklists may be bypassed for the current configured window.</div>`
         : terminalMode === "full"
-          ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>Full terminal access is active.</strong> AI commands can execute automatically with your user-level filesystem reach.</div>`
+          ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>${escapeHtml(uiMessages.fullWarn)}</strong></div>`
           : `<div id="runtimeRiskBanner" class="risk-banner" style="display:none;"></div>`;
   // The baseline requires an explicit legacy-configuration disclosure so a
   // pre-schema-v2 file is never mistaken for a v2 permission state.
@@ -568,7 +580,7 @@ export function getDashboardHtml(
             <textarea id="profileFoldersInput" spellcheck="false" placeholder="D:\\Workspace::workspace"></textarea>
 
             <label class="field-label" for="profileConfirmInput">Typed confirmation · Power/full only</label>
-            <input id="profileConfirmInput" type="text" autocomplete="off" placeholder='Type "confirm" when required'>
+            <input id="profileConfirmInput" type="text" autocomplete="off" placeholder="${escapeHtml(uiMessages.confirmType)}">
 
             <div class="permissions-actions">
               <button onclick="previewProfile()">Preview</button>
@@ -721,6 +733,7 @@ export function getDashboardHtml(
   </div>
 
   <script>
+    ${dashboardMessagesScript}
     let currentFilter = 'all';
     let logsCache = [];
     let adminCsrfToken = null;
@@ -862,8 +875,7 @@ export function getDashboardHtml(
       if (profile.terminalMode === 'full') {
         banner.style.display = 'block';
         banner.classList.add('danger');
-        banner.textContent =
-          'Full terminal access is active. AI commands can execute automatically with your user-level filesystem reach.';
+        banner.textContent = DASHBOARD_MESSAGES.fullWarn;
         return;
       }
 
@@ -1173,6 +1185,7 @@ export function getDashboardHtml(
             'data-approval-expires',
             String(job.expiresAt || 0)
           );
+          addTextElement(meta, 'span', ' · ' + DASHBOARD_MESSAGES.expiry);
           row.appendChild(meta);
 
           if (typeof job.dataDisclosure === 'string' && job.dataDisclosure) {
