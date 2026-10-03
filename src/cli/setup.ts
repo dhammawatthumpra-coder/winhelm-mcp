@@ -5,7 +5,9 @@ import readline from "node:readline/promises";
 import type { Readable, Writable } from "node:stream";
 import { ConfigManager } from "../config/config-manager.js";
 import {
+  applyLegacyMigrationApplication,
   applyProfilePreset,
+  previewLegacyMigrationApplication,
   previewProfileApplication,
   ProfileServiceError,
   type ProfileApplyInput,
@@ -43,6 +45,7 @@ interface SetupArgs {
   preset?: ProfilePreset;
   folders?: ProfileFolderSelection[];
   confirmation?: string;
+  migrateLegacy: boolean;
   dryRun: boolean;
   yes: boolean;
 }
@@ -127,6 +130,7 @@ function parseCliArgs(args: string[]): SetupArgs {
         ? folderValues.map(parseFolderSpec)
         : undefined,
     confirmation: argValue(args, "--confirm"),
+    migrateLegacy: args.includes("--migrate-legacy"),
     dryRun: args.includes("--dry-run"),
     yes: args.includes("--yes") || args.includes("-y"),
   };
@@ -216,6 +220,49 @@ function currentSuggestedFolders(manager: ConfigManager): string {
   }
 
   return "";
+}
+
+function formatMigrationPreview(
+  proposal: ReturnType<typeof previewLegacyMigrationApplication>
+): string {
+  const lines = [
+    "",
+    "WinHelm legacy migration preview",
+    "-------------------------------",
+    `Status: ${proposal.status}`,
+    `Source profile: ${proposal.sourceProfile ?? "n/a"}`,
+    `Suggested preset: ${proposal.suggestedPreset ?? "manual/modified"}`,
+  ];
+
+  if (proposal.candidate) {
+    const counts = { auto: 0, ask: 0, off: 0 };
+    for (const value of Object.values(proposal.candidate.toolPolicy)) {
+      if (value === "auto") counts.auto += 1;
+      else if (value === "ask") counts.ask += 1;
+      else if (value === "off") counts.off += 1;
+    }
+
+    lines.push(
+      `Terminal: ${proposal.candidate.terminal.mode}`,
+      `Folders: ${proposal.candidate.folders.length}`,
+      `Tool policy: auto=${counts.auto}, ask=${counts.ask}, off=${counts.off}`
+    );
+
+    for (const folder of proposal.candidate.folders) {
+      lines.push(
+        `  - ${folder.path} [${folder.permission}]${folder.alias ? ` @${folder.alias}` : ""}`
+      );
+    }
+  }
+
+  for (const warning of proposal.warnings) {
+    lines.push(`WARNING: ${warning}`);
+  }
+  for (const note of proposal.notes) {
+    lines.push(`NOTE: ${note}`);
+  }
+
+  return lines.join("\n");
 }
 
 function formatPreview(
@@ -360,6 +407,84 @@ export async function runSetupCliCommand(
     const parsed = parseCliArgs(args.slice(1));
     const manager = ConfigManager.getInstance(parsed.configPath);
     await manager.init(parsed.configPath);
+
+    if (parsed.migrateLegacy) {
+      if (
+        parsed.answersPath ||
+        parsed.preset ||
+        parsed.confirmation
+      ) {
+        throw new Error(
+          "--migrate-legacy cannot be combined with --answers, --preset, or --confirm."
+        );
+      }
+
+      const migrationInput = parsed.folders
+        ? { folders: parsed.folders }
+        : {};
+      const proposal = previewLegacyMigrationApplication(
+        migrationInput,
+        manager
+      );
+      const previewText = formatMigrationPreview(proposal);
+
+      if (parsed.dryRun) {
+        return {
+          handled: true,
+          exitCode: 0,
+          output:
+            previewText +
+            "\nDry run only; no configuration was changed.",
+        };
+      }
+
+      if (proposal.status !== "ready") {
+        return {
+          handled: true,
+          exitCode: 2,
+          output: previewText,
+          error:
+            proposal.status === "folder-selection-required"
+              ? "Legacy wildcard access requires one or more explicit --folder values."
+              : "This config is not eligible for legacy migration.",
+        };
+      }
+
+      if (!parsed.yes) {
+        return {
+          handled: true,
+          exitCode: 2,
+          output: previewText,
+          error:
+            "Legacy migration requires --yes to persist changes (or use --dry-run).",
+        };
+      }
+
+      const migrated = await applyLegacyMigrationApplication(
+        migrationInput,
+        manager
+      );
+      return {
+        handled: true,
+        exitCode: 0,
+        output: [
+          "WinHelm legacy migration complete.",
+          "Preset: " + (migrated.status.preset ?? "manual/modified"),
+          "Terminal: " + (migrated.status.terminalMode ?? "off"),
+          "Folders: " + migrated.status.folders.length,
+          "Modified: " +
+            (migrated.status.modified === true
+              ? "yes"
+              : migrated.status.modified === false
+                ? "no"
+                : "n/a"),
+          ...(migrated.backupPath
+            ? ["Backup: " + migrated.backupPath]
+            : []),
+          "Restart/reconnect the MCP client if it cached the previous tool list.",
+        ].join("\n"),
+      };
+    }
 
     let profileInput: ProfileApplyInput;
     let confirmed = true;

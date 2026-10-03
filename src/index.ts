@@ -33,13 +33,15 @@ Usage:
   winhelm deny <jobId>
   winhelm admin-code [--refresh]
   winhelm setup [--preset <name>] [--folder <path>] [--answers <file.json>] [--yes] [--dry-run]
+  winhelm setup --migrate-legacy [--folder <path>] [--yes|--dry-run]
 
 Setup:
   --preset <name>       safe, balanced, power, minimal, core, dev, sysadmin, or full
   --folder <path>       Allowed folder; repeat for multiple folders. Optional "path::alias"
   --answers <file>      Non-interactive JSON answer file
+  --migrate-legacy      Explicitly migrate current v1.2.1 permissions to schema-v2
   --confirm <text>      Typed confirmation for Power/full ("confirm" or "ยืนยัน")
-  --yes, -y             Apply non-interactive answers without another prompt
+  --yes, -y             Persist non-interactive setup/migration without another prompt
   --dry-run             Preview permission changes without writing config
 
 Options:

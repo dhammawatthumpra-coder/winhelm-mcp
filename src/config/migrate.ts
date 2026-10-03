@@ -148,7 +148,8 @@ function customTerminalMode(
  */
 export function proposeLegacyMigration(
   config: Readonly<ServerConfig>,
-  now = new Date().toISOString()
+  now = new Date().toISOString(),
+  explicitFolders?: string[]
 ): LegacyMigrationProposal {
   if (config.schemaVersion !== undefined) {
     return {
@@ -164,9 +165,17 @@ export function proposeLegacyMigration(
   }
 
   const sourceProfile: ToolProfile = config.profile ?? "full";
-  const legacyDirectories = [...(config.allowedDirectories ?? [])];
+  const originalDirectories = [...(config.allowedDirectories ?? [])];
+  const legacyDirectories =
+    explicitFolders !== undefined
+      ? [...explicitFolders]
+      : originalDirectories;
 
-  if (isWildcardAllowAll(legacyDirectories)) {
+  if (
+    isWildcardAllowAll(legacyDirectories) ||
+    (explicitFolders === undefined &&
+      isWildcardAllowAll(originalDirectories))
+  ) {
     return {
       status: "folder-selection-required",
       sourceProfile,
@@ -214,6 +223,15 @@ export function proposeLegacyMigration(
 
   const warnings: string[] = [];
   const notes: string[] = [];
+
+  if (
+    explicitFolders !== undefined &&
+    isWildcardAllowAll(originalDirectories)
+  ) {
+    warnings.push(
+      "Explicit folder selection replaces legacy wildcard access; wildcard access is not carried into schema-v2."
+    );
+  }
 
   if (selected) {
     applyCustomToolPolicy(candidate, selected);
