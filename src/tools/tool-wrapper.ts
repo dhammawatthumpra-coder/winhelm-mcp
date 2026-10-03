@@ -164,15 +164,21 @@ export function registerTracedTool(
           access.code,
           access.reason,
           access.userAction,
-          access.pathChecks
+          access.pathChecks || access.details
             ? {
-                pathChecks: access.pathChecks.map((check) => ({
-                  code: check.code,
-                  reason: check.reason,
-                  canonicalPath: check.canonicalPath,
-                  matchedFolder:
-                    check.matchedFolder?.alias ?? check.matchedFolder?.path,
-                })),
+                ...(access.pathChecks
+                  ? {
+                      pathChecks: access.pathChecks.map((check) => ({
+                        code: check.code,
+                        reason: check.reason,
+                        canonicalPath: check.canonicalPath,
+                        matchedFolder:
+                          check.matchedFolder?.alias ??
+                          check.matchedFolder?.path,
+                      })),
+                    }
+                  : {}),
+                ...(access.details ?? {}),
               }
             : undefined
         );

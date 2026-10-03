@@ -12,6 +12,8 @@ export const EN_MESSAGES = {
     "Choose a readwrite folder or change its permission in WinHelm settings.",
   "action.folder.allowed":
     "Choose a path inside an allowed WinHelm folder.",
+  "action.path.alias":
+    "Use a full path or @alias/... for one of the configured WinHelm folders.",
   "action.safe.cwd":
     "Choose a readwrite WinHelm folder as cwd or change Terminal mode locally.",
   "action.terminal.change":
@@ -69,6 +71,8 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "เลือกโฟลเดอร์ที่อนุญาตให้อ่านและเขียน หรือเปลี่ยนสิทธิ์โฟลเดอร์ใน WinHelm",
   "action.folder.allowed":
     "เลือก path ที่อยู่ภายในโฟลเดอร์ที่อนุญาตใน WinHelm",
+  "action.path.alias":
+    "ใช้ path เต็ม หรือ @alias/... โดยอ้างโฟลเดอร์ WinHelm ที่ตั้งค่าไว้",
   "action.safe.cwd":
     "เลือกโฟลเดอร์ WinHelm ที่อ่านและเขียนได้เป็น cwd หรือเปลี่ยนโหมด Terminal ในเครื่อง",
   "action.terminal.change":
