@@ -654,6 +654,7 @@ export function registerAdminRoutes(app: Express): void {
             previewBefore.sourceProfile ?? "legacy",
           outcome: "ALLOWED",
           details: {
+            channel: "dashboard",
             from: {
               schemaMode: before.schemaMode,
             },
@@ -783,6 +784,7 @@ export function registerAdminRoutes(app: Express): void {
           resource: input.preset,
           outcome: "ALLOWED",
           details: {
+            channel: "dashboard",
             from: {
               schemaMode: before.schemaMode,
               preset: before.preset,

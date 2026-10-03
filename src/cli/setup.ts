@@ -7,12 +7,14 @@ import { ConfigManager } from "../config/config-manager.js";
 import {
   applyLegacyMigrationApplication,
   applyProfilePreset,
+  getProfileStatus,
   previewLegacyMigrationApplication,
   previewProfileApplication,
   ProfileServiceError,
   type ProfileApplyInput,
   type ProfileFolderSelection,
 } from "../config/profile-service.js";
+import { logPermissionChange } from "../config/permission-audit.js";
 import type { ProfilePreset } from "../config/schema-v2.js";
 
 const PRESETS = new Set<ProfilePreset>([
@@ -407,6 +409,8 @@ export async function runSetupCliCommand(
     const parsed = parseCliArgs(args.slice(1));
     const manager = ConfigManager.getInstance(parsed.configPath);
     await manager.init(parsed.configPath);
+    // Captured before any apply so the audit record carries from -> to.
+    const before = getProfileStatus(manager);
 
     if (parsed.migrateLegacy) {
       if (
@@ -464,6 +468,14 @@ export async function runSetupCliCommand(
         migrationInput,
         manager
       );
+      logPermissionChange({
+        event: "LEGACY_MIGRATION_APPLIED",
+        channel: "cli",
+        action: "winhelm setup --migrate-legacy",
+        from: before,
+        to: migrated.status,
+        backupCreated: Boolean(migrated.backupPath),
+      });
       return {
         handled: true,
         exitCode: 0,
@@ -546,6 +558,15 @@ export async function runSetupCliCommand(
 
     const result = await applyProfilePreset(profileInput, manager);
     const status = result.status;
+
+    logPermissionChange({
+      event: "PROFILE_PRESET_APPLIED",
+      channel: "cli",
+      action: "winhelm setup",
+      from: before,
+      to: status,
+      backupCreated: Boolean(result.backupPath),
+    });
 
     return {
       handled: true,
