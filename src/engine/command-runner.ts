@@ -487,17 +487,19 @@ export async function runCommandNoShell(
     );
     plan = safePlan;
     finalArgs = safePlan.args;
-  } else if (mode === "ask" || mode === "full" || mode === "dangerous") {
+  } else if (mode === "ask" || mode === "full") {
     plan = resolveDirectExecutable(input.command, cwd);
     finalArgs = [...plan.argsPrefix, ...args];
 
-    if (mode !== "dangerous") {
-      const displayCommand = [input.command, ...args].join(" ");
-      const allowed = manager.isCommandAllowed(displayCommand);
-      if (!allowed.allowed) {
-        throw new Error(allowed.reason || "Command blocked by WinHelm security policy.");
-      }
+    const displayCommand = [input.command, ...args].join(" ");
+    const allowed = manager.isCommandAllowed(displayCommand);
+    if (!allowed.allowed) {
+      throw new Error(allowed.reason || "Command blocked by WinHelm security policy.");
     }
+  } else if (mode === "dangerous") {
+    throw new Error(
+      "Dangerous terminal mode is reserved for WinHelm v1.4 and is blocked by the v1.3 runtime."
+    );
   } else {
     throw new Error("Terminal mode does not permit command_run.");
   }

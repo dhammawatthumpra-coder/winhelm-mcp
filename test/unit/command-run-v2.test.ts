@@ -305,6 +305,14 @@ describe("command_run terminal-mode policy", () => {
       "allow"
     );
 
+    const dangerous = evaluateSchemaV2ToolAccess(
+      "command_run",
+      { command: "node", args: ["--version"] },
+      config("dangerous", [])
+    );
+    assert.strictEqual(dangerous.decision, "deny");
+    assert.strictEqual(dangerous.code, "TERMINAL_MODE_REQUIRED");
+
     const off = evaluateSchemaV2ToolAccess(
       "command_run",
       { command: "node", args: ["--version"] },
