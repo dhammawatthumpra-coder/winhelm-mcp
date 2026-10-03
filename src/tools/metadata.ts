@@ -20,12 +20,35 @@ export interface WinHelmToolMetadata {
   >;
 }
 
+/**
+ * Baseline 5.2 requires every tool description to state that WinHelm acts on
+ * the user's real machine and to tell the model how to react to a policy
+ * refusal. Both statements are appended uniformly so no tool can drift.
+ */
+export const PC_SCOPE_STATEMENT =
+  "Runs on the user's real Windows PC, not a sandbox; use it when the user refers to files, apps or processes on that computer.";
+
+export const USER_ACTION_STATEMENT =
+  'If a result contains "userAction", relay it to the user and do not try to work around it.';
+
+/** Bounds that keep the mandated guidance while limiting the tools/list payload. */
+export const DESCRIPTION_MIN_LENGTH = 140;
+export const DESCRIPTION_MAX_LENGTH = 800;
+
+function withMandatoryGuidance(description: string): string {
+  return `${description.trim()} ${PC_SCOPE_STATEMENT} ${USER_ACTION_STATEMENT}`;
+}
+
 function metadata(
   title: string,
   description: string,
   annotations: WinHelmToolMetadata["annotations"]
 ): WinHelmToolMetadata {
-  return { title, description, annotations };
+  return {
+    title,
+    description: withMandatoryGuidance(description),
+    annotations,
+  };
 }
 
 const READ_ONLY = {
@@ -308,6 +331,21 @@ export function validateToolMetadataRegistry(): string[] {
     const entry = getToolMetadata(name);
     if (!entry.title.trim()) issues.push(`empty title: ${name}`);
     if (!entry.description.trim()) issues.push(`empty description: ${name}`);
+
+    if (
+      entry.description.length < DESCRIPTION_MIN_LENGTH ||
+      entry.description.length > DESCRIPTION_MAX_LENGTH
+    ) {
+      issues.push(
+        `description length ${entry.description.length} outside ${DESCRIPTION_MIN_LENGTH}-${DESCRIPTION_MAX_LENGTH}: ${name}`
+      );
+    }
+    if (!entry.description.includes(PC_SCOPE_STATEMENT)) {
+      issues.push(`description missing real-PC scope statement: ${name}`);
+    }
+    if (!entry.description.includes(USER_ACTION_STATEMENT)) {
+      issues.push(`description missing userAction rule: ${name}`);
+    }
 
     for (const key of [
       "readOnlyHint",

@@ -34,7 +34,9 @@ export function registerRecoveryTools(server: McpServer): void {
       idempotencyKey: z
         .string()
         .optional()
-        .describe("Optional client idempotency key used by the original action"),
+        .describe(
+          "Client idempotency key used by the original action. It recovers the same approval job after a dropped connection; it never authorizes a new run."
+        ),
     },
     async ({ jobId, idempotencyKey }, extra) => {
       if (!jobId && !idempotencyKey) {
