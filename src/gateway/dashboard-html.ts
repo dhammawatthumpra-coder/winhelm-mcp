@@ -13,14 +13,46 @@ export function escapeHtml(str: any): string {
     .replace(/'/g, "&#39;");
 }
 
+export interface DashboardPermissionSummary {
+  schemaMode: "legacy" | "v2" | "invalid";
+  preset?: string | null;
+  modified?: boolean | null;
+  terminalMode?: string | null;
+}
+
 /**
  * Lightweight, zero-dependency, self-contained Web Monitor Dashboard for WinHelm.
  * Served directly by Express without external CDN dependencies.
  */
-export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
+export function getDashboardHtml(
+  activeProfile: ToolProfile = "full",
+  permissionSummary?: DashboardPermissionSummary
+): string {
   const profileDef = PROFILES[activeProfile] || PROFILES.full;
   const activeTools = profileDef.tools;
   const activeCount = activeTools.length;
+  const schemaMode = permissionSummary?.schemaMode ?? "legacy";
+  const displayProfile =
+    schemaMode === "v2"
+      ? String(permissionSummary?.preset ?? "modified")
+      : profileDef.name;
+  const modifiedText =
+    schemaMode === "v2" && permissionSummary?.modified === true
+      ? " · MODIFIED"
+      : "";
+  const headerProfileText =
+    schemaMode === "v2"
+      ? `PROFILE: ${displayProfile.toUpperCase()}${modifiedText} · 41 SCHEMAS`
+      : `PROFILE: ${profileDef.name.toUpperCase()} · ${activeCount} LEGACY + 2 RECOVERY`;
+  const terminalMode = permissionSummary?.terminalMode ?? null;
+  const riskBannerHtml =
+    schemaMode === "invalid"
+      ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>Configuration unavailable.</strong> Schema-v2 validation failed; ordinary tool execution is fail-closed. Open Permissions with a local admin code to repair it.</div>`
+      : terminalMode === "dangerous"
+        ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>DANGEROUS terminal mode is active.</strong> Command blocklists may be bypassed for the current configured window.</div>`
+        : terminalMode === "full"
+          ? `<div id="runtimeRiskBanner" class="risk-banner warning"><strong>Full terminal access is active.</strong> AI commands can execute automatically with your user-level filesystem reach.</div>`
+          : `<div id="runtimeRiskBanner" class="risk-banner" style="display:none;"></div>`;
 
   const renderTool = (name: string, color: string) => {
     const isAct = activeTools.includes(name);
@@ -131,6 +163,91 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
       font-size: 13px;
       color: var(--text-muted);
       cursor: pointer;
+    }
+
+    .risk-banner {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid transparent;
+    }
+    .risk-banner.warning {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.45);
+      color: #fcd34d;
+    }
+    .risk-banner.danger {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+    }
+    .permissions-shell { margin-bottom: 24px; }
+    .permissions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .field-label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 10px 0 6px;
+    }
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: #0b1220;
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 9px 10px;
+      font: inherit;
+    }
+    textarea { min-height: 92px; resize: vertical; }
+    .permissions-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .permission-summary {
+      white-space: pre-wrap;
+      background: #0b1220;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 88px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #cbd5e1;
+      overflow-wrap: anywhere;
+    }
+    .admin-locked { color: var(--text-muted); font-size: 13px; }
+    .admin-ok { color: var(--success); font-size: 13px; }
+    .admin-error { color: #fca5a5; font-size: 13px; }
+    .approval-row {
+      border: 1px solid var(--card-border);
+      background: #0b1220;
+      border-radius: 7px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .approval-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .approval-args {
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+      color: #cbd5e1;
+      margin-top: 8px;
+      max-height: 160px;
+      overflow: auto;
     }
 
     /* Grid Layout */
@@ -287,18 +404,90 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
       <div class="logo-area">
         <h2>⚡ WinHelm</h2>
         <span class="status-badge"><span class="pulse-dot"></span> LIVE MONITOR</span>
-        <span class="status-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); text-transform: uppercase;">PROFILE: ${profileDef.name.toUpperCase()} (${activeCount} TOOLS)</span>
+        <span class="status-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); text-transform: uppercase;">${escapeHtml(headerProfileText)}</span>
       </div>
       <div class="header-controls">
         <label class="toggle-label">
           <input type="checkbox" id="autoRefresh" checked> Auto-refresh (2.5s)
         </label>
         <button id="btnRefresh" onclick="fetchData()">🔄 Refresh</button>
+        <button onclick="document.getElementById('permissionsPanel').scrollIntoView({behavior:'smooth'})">🔐 Permissions</button>
         <button onclick="window.open('/api/monitor/export?format=json')">📥 Export JSON</button>
         <button onclick="window.open('/api/monitor/export?format=csv')">📥 Export CSV</button>
         <button id="btnClear" onclick="clearLogs()">🗑️ Clear</button>
       </div>
     </header>
+
+    ${riskBannerHtml}
+
+    <div class="card permissions-shell" id="permissionsPanel">
+      <div class="card-title">
+        <span>Permissions & Setup</span>
+        <span id="adminState" class="admin-locked">Locked · local admin code required</span>
+      </div>
+
+      <div id="adminUnlock">
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.55;">
+          Run <code>winhelm admin-code</code> in a local terminal, then enter the one-time code here.
+          The admin credential is separate from MCP authentication. Never paste the code into an AI chat.
+        </div>
+        <div style="display:flex;gap:8px;max-width:520px;margin-top:10px;">
+          <input id="adminCodeInput" type="password" autocomplete="one-time-code" placeholder="One-time admin code">
+          <button class="primary" onclick="unlockAdmin()">Unlock</button>
+        </div>
+        <div id="adminUnlockError" class="admin-error" style="margin-top:8px;"></div>
+      </div>
+
+      <div id="permissionsUnlocked" style="display:none;">
+        <div class="permissions-grid">
+          <div>
+            <div style="font-weight:600;">Profile Wizard</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+              Profile is a preset only. The permission state shown below is authoritative.
+            </div>
+
+            <label class="field-label" for="profilePresetSelect">Preset</label>
+            <select id="profilePresetSelect">
+              <option value="safe">Safe</option>
+              <option value="balanced">Balanced</option>
+              <option value="power">Power</option>
+              <option value="minimal">Legacy minimal</option>
+              <option value="core">Legacy core</option>
+              <option value="dev">Legacy dev</option>
+              <option value="sysadmin">Legacy sysadmin</option>
+              <option value="full">Legacy full</option>
+            </select>
+
+            <label class="field-label" for="profileFoldersInput">Folders · one per line, optional <code>path::alias</code></label>
+            <textarea id="profileFoldersInput" spellcheck="false" placeholder="D:\\Workspace::workspace"></textarea>
+
+            <label class="field-label" for="profileConfirmInput">Typed confirmation · Power/full only</label>
+            <input id="profileConfirmInput" type="text" autocomplete="off" placeholder='Type "confirm" when required'>
+
+            <div class="permissions-actions">
+              <button onclick="previewProfile()">Preview</button>
+              <button class="primary" onclick="applyProfile()">Apply</button>
+              <button onclick="loadAdminProfile()">Refresh</button>
+            </div>
+
+            <div id="profilePreview" class="permission-summary" style="margin-top:12px;">Unlock completed. Loading current permissions…</div>
+          </div>
+
+          <div>
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+              <div style="font-weight:600;">Approval Jobs</div>
+              <button onclick="loadApprovals()">Refresh</button>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin:4px 0 10px;">
+              Pending approvals are local-only. Arguments are displayed as text, never rendered as HTML/Markdown.
+            </div>
+            <div id="approvalJobs">
+              <div class="admin-locked">No admin data loaded yet.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Top Metrics -->
     <div class="grid">
@@ -452,6 +641,367 @@ export function getDashboardHtml(activeProfile: ToolProfile = "full"): string {
   <script>
     let currentFilter = 'all';
     let logsCache = [];
+    let adminCsrfToken = null;
+
+    function setAdminState(text, className) {
+      const el = document.getElementById('adminState');
+      el.textContent = text;
+      el.className = className || 'admin-locked';
+    }
+
+    function setUnlockError(text) {
+      document.getElementById('adminUnlockError').textContent = text || '';
+    }
+
+    async function readJsonResponse(response) {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(
+          body && body.error && body.error.message
+            ? body.error.message
+            : 'WinHelm admin request failed (' + response.status + ')'
+        );
+        err.code =
+          body && body.error && body.error.code
+            ? body.error.code
+            : 'ADMIN_REQUEST_FAILED';
+        throw err;
+      }
+      return body;
+    }
+
+    async function adminRequest(url, options) {
+      const init = Object.assign({}, options || {});
+      init.headers = Object.assign({}, init.headers || {});
+      const method = String(init.method || 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') {
+        if (!adminCsrfToken) {
+          throw new Error('Admin session is not unlocked.');
+        }
+        init.headers['x-winhelm-csrf'] = adminCsrfToken;
+      }
+      return readJsonResponse(await fetch(url, init));
+    }
+
+    async function unlockAdmin() {
+      const input = document.getElementById('adminCodeInput');
+      const code = input.value.trim();
+      setUnlockError('');
+      if (!code) {
+        setUnlockError('Enter the one-time code from "winhelm admin-code".');
+        return;
+      }
+
+      try {
+        const response = await fetch('/admin/auth/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code })
+        });
+        const body = await readJsonResponse(response);
+        adminCsrfToken = body.csrfToken;
+        input.value = '';
+        document.getElementById('adminUnlock').style.display = 'none';
+        document.getElementById('permissionsUnlocked').style.display = 'block';
+        setAdminState('Unlocked · local admin session', 'admin-ok');
+        await Promise.all([loadAdminProfile(), loadApprovals()]);
+      } catch (err) {
+        setAdminState('Locked · local admin code required', 'admin-locked');
+        setUnlockError(err.message || String(err));
+      }
+    }
+
+    function parseFolderEditor() {
+      const raw = document.getElementById('profileFoldersInput').value;
+      return raw
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const marker = line.lastIndexOf('::');
+          if (marker > 1) {
+            const p = line.slice(0, marker).trim();
+            const alias = line.slice(marker + 2).trim();
+            if (p && alias) return { path: p, alias: alias };
+          }
+          return { path: line };
+        });
+    }
+
+    function profilePayload() {
+      const preset = document.getElementById('profilePresetSelect').value;
+      const confirmation = document.getElementById('profileConfirmInput').value;
+      const payload = {
+        preset: preset,
+        folders: parseFolderEditor()
+      };
+      if (confirmation.trim()) payload.confirmation = confirmation.trim();
+      return payload;
+    }
+
+    function policyCounts(policy) {
+      const counts = { auto: 0, ask: 0, off: 0 };
+      Object.values(policy || {}).forEach(value => {
+        if (value === 'auto') counts.auto += 1;
+        else if (value === 'ask') counts.ask += 1;
+        else if (value === 'off') counts.off += 1;
+      });
+      return counts;
+    }
+
+    function updateRuntimeRisk(profile) {
+      const banner = document.getElementById('runtimeRiskBanner');
+      if (!banner) return;
+      banner.textContent = '';
+      banner.className = 'risk-banner';
+
+      if (profile.schemaMode === 'invalid') {
+        banner.style.display = 'block';
+        banner.classList.add('danger');
+        banner.textContent =
+          'Configuration unavailable. Schema-v2 validation failed; ordinary tool execution is fail-closed.';
+        return;
+      }
+
+      if (profile.terminalMode === 'dangerous') {
+        banner.style.display = 'block';
+        banner.classList.add('danger');
+        banner.textContent =
+          'DANGEROUS terminal mode is active. Command blocklists may be bypassed for the configured window.';
+        return;
+      }
+
+      if (profile.terminalMode === 'full') {
+        banner.style.display = 'block';
+        banner.classList.add('warning');
+        banner.textContent =
+          'Full terminal access is active. AI commands can execute automatically with your user-level filesystem reach.';
+        return;
+      }
+
+      banner.style.display = 'none';
+    }
+
+    function renderProfileState(profile, legacy) {
+      const presetSelect = document.getElementById('profilePresetSelect');
+      if (profile.preset && presetSelect.querySelector('option[value="' + profile.preset + '"]')) {
+        presetSelect.value = profile.preset;
+      } else if (legacy && legacy.profile && presetSelect.querySelector('option[value="' + legacy.profile + '"]')) {
+        presetSelect.value = legacy.profile;
+      } else {
+        presetSelect.value = 'balanced';
+      }
+
+      const folders = Array.isArray(profile.folders) && profile.folders.length
+        ? profile.folders
+        : legacy && Array.isArray(legacy.allowedDirectories)
+          ? legacy.allowedDirectories
+              .filter(value => value !== '*' && String(value).toLowerCase() !== 'all')
+              .map(value => ({ path: value }))
+          : [];
+
+      document.getElementById('profileFoldersInput').value = folders
+        .map(folder =>
+          folder.alias
+            ? String(folder.path) + '::' + String(folder.alias)
+            : String(folder.path)
+        )
+        .join('\n');
+
+      const counts = policyCounts(profile.toolPolicy);
+      const modified =
+        profile.modified === true
+          ? 'yes · ' + (profile.modifiedFields || []).join(', ')
+          : profile.modified === false
+            ? 'no'
+            : 'n/a';
+
+      const lines = [
+        'Schema: ' + profile.schemaMode,
+        'Preset: ' + (profile.preset || (legacy ? legacy.profile : 'none')),
+        'Modified: ' + modified,
+        'Terminal: ' + (profile.terminalMode || (legacy ? 'legacy' : 'off')),
+        'Folders: ' + folders.length,
+        'Tool policy: auto=' + counts.auto + ', ask=' + counts.ask + ', off=' + counts.off
+      ];
+
+      if (profile.validationErrors && profile.validationErrors.length) {
+        lines.push('Validation: ' + profile.validationErrors.join(' | '));
+      }
+
+      document.getElementById('profilePreview').textContent = lines.join('\n');
+      updateRuntimeRisk(profile);
+    }
+
+    async function loadAdminProfile() {
+      try {
+        const body = await adminRequest('/admin/profile');
+        renderProfileState(body.profile, body.legacy);
+      } catch (err) {
+        document.getElementById('profilePreview').textContent =
+          'Profile load failed: ' + (err.message || String(err));
+      }
+    }
+
+    function renderProfilePreview(preview) {
+      const counts = policyCounts(preview.toolPolicy);
+      const lines = [
+        'Preview preset: ' + preview.preset,
+        'Terminal: ' + preview.terminalMode,
+        'Changed: ' + (preview.changedFields.length ? preview.changedFields.join(', ') : 'none'),
+        'Folders: ' + preview.folders.length,
+        'Tool policy: auto=' + counts.auto + ', ask=' + counts.ask + ', off=' + counts.off
+      ];
+
+      if (preview.requiresTypedConfirmation) {
+        lines.push('Typed confirmation is required before Apply.');
+      }
+      (preview.warnings || []).forEach(warning => {
+        lines.push('WARNING: ' + warning);
+      });
+
+      preview.folders.forEach(folder => {
+        lines.push(
+          '  ' +
+            folder.path +
+            ' [' +
+            folder.permission +
+            ']' +
+            (folder.alias ? ' @' + folder.alias : '')
+        );
+      });
+
+      document.getElementById('profilePreview').textContent = lines.join('\n');
+    }
+
+    async function previewProfile() {
+      try {
+        const body = await adminRequest('/admin/profiles/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profilePayload())
+        });
+        renderProfilePreview(body.preview);
+      } catch (err) {
+        document.getElementById('profilePreview').textContent =
+          (err.code ? err.code + ': ' : '') + (err.message || String(err));
+      }
+    }
+
+    async function applyProfile() {
+      try {
+        const body = await adminRequest('/admin/profiles/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profilePayload())
+        });
+        document.getElementById('profileConfirmInput').value = '';
+        renderProfileState(body.profile, null);
+        const backupLine = body.backupPath
+          ? '\nBackup created: ' + body.backupPath
+          : '';
+        document.getElementById('profilePreview').textContent +=
+          '\nApplied successfully.' +
+          backupLine +
+          '\nReconnect the MCP client if it cached the previous tool list.';
+      } catch (err) {
+        document.getElementById('profilePreview').textContent =
+          (err.code ? err.code + ': ' : '') + (err.message || String(err));
+      }
+    }
+
+    function addTextElement(parent, tagName, text, className) {
+      const el = document.createElement(tagName);
+      if (className) el.className = className;
+      el.textContent = text;
+      parent.appendChild(el);
+      return el;
+    }
+
+    async function approvalAction(jobId, action) {
+      try {
+        await adminRequest(
+          '/admin/approvals/' + encodeURIComponent(jobId) + '/' + action,
+          { method: 'POST' }
+        );
+        await loadApprovals();
+      } catch (err) {
+        const target = document.getElementById('approvalJobs');
+        target.textContent =
+          (err.code ? err.code + ': ' : '') + (err.message || String(err));
+        target.className = 'admin-error';
+      }
+    }
+
+    async function loadApprovals() {
+      const target = document.getElementById('approvalJobs');
+      try {
+        const body = await adminRequest('/admin/approvals');
+        const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+        target.className = '';
+        target.replaceChildren();
+
+        if (!jobs.length) {
+          addTextElement(target, 'div', 'No approval jobs.', 'admin-locked');
+          return;
+        }
+
+        jobs.forEach(job => {
+          const row = document.createElement('div');
+          row.className = 'approval-row';
+
+          addTextElement(
+            row,
+            'div',
+            String(job.tool || 'unknown') + ' · ' + String(job.state || 'unknown')
+          );
+          addTextElement(
+            row,
+            'div',
+            'Job ' +
+              String(job.id || '') +
+              ' · session ' +
+              String(job.sessionId || 'n/a') +
+              ' · expires ' +
+              (job.expiresAt ? new Date(job.expiresAt).toLocaleTimeString() : 'n/a'),
+            'approval-meta'
+          );
+
+          const args = addTextElement(
+            row,
+            'div',
+            JSON.stringify(job.args || {}, null, 2),
+            'approval-args'
+          );
+          args.setAttribute('aria-label', 'Approval arguments');
+
+          if (job.state === 'awaiting_approval') {
+            const actions = document.createElement('div');
+            actions.className = 'permissions-actions';
+
+            const approve = document.createElement('button');
+            approve.className = 'primary';
+            approve.textContent = 'Approve';
+            approve.addEventListener('click', () => approvalAction(job.id, 'approve'));
+
+            const deny = document.createElement('button');
+            deny.textContent = 'Deny';
+            deny.addEventListener('click', () => approvalAction(job.id, 'deny'));
+
+            actions.appendChild(approve);
+            actions.appendChild(deny);
+            row.appendChild(actions);
+          }
+
+          target.appendChild(row);
+        });
+      } catch (err) {
+        target.replaceChildren();
+        target.className = 'admin-error';
+        target.textContent =
+          'Approval load failed: ' + (err.message || String(err));
+      }
+    }
 
     function formatUptime(seconds) {
       const h = Math.floor(seconds / 3600);
