@@ -87,6 +87,10 @@ export function registerTracedTool(
     const effectiveSessionId =
       extra?.sessionId ?? runtimeContext?.sessionId;
     const sessionKey = approvalSessionKey(effectiveSessionId);
+    const baseExecutionExtra =
+      effectiveSessionId && extra?.sessionId !== effectiveSessionId
+        ? { ...extra, sessionId: effectiveSessionId }
+        : extra;
 
     const executeAndRecord = async (executionExtra: any) => {
       try {
@@ -109,7 +113,7 @@ export function registerTracedTool(
       }
     };
 
-    let executeTool = () => executeAndRecord(extra);
+    let executeTool = () => executeAndRecord(baseExecutionExtra);
 
     if (liveMode === "invalid" && !recoveryTool) {
       return logAndReturnPolicyError(
@@ -151,7 +155,7 @@ export function registerTracedTool(
       if (access.decision === "ask") {
         const executionController = new AbortController();
         const executionExtra = {
-          ...extra,
+          ...baseExecutionExtra,
           signal: executionController.signal,
         };
         const requestId =

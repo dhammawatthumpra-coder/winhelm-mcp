@@ -101,17 +101,25 @@ describe("MCP session runtime context", () => {
     });
 
     try {
+      let handlerExtra: any;
       registerTracedTool(
         server,
         "system_info",
         {},
-        async () => ({
-          content: [{ type: "text", text: "fixture result" }],
-        })
+        async (_args, extra) => {
+          handlerExtra = extra;
+          return {
+            content: [{ type: "text", text: "fixture result" }],
+          };
+        }
       );
 
       assert.ok(captured);
       await captured.handler({}, {});
+      assert.strictEqual(
+        handlerExtra?.sessionId,
+        "gateway-session-123"
+      );
 
       const recent = getProvenanceTracker().getRecent(
         "gateway-session-123",

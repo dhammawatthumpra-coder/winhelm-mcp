@@ -5,6 +5,7 @@ import os from "node:os";
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { createServer, safeCompare } from "../../src/gateway/server.js";
 import { getSessionClientInfo } from "../../src/gateway/session-context.js";
+import { getApprovalEngine } from "../../src/approval/runtime.js";
 
 function rawHttpRequest(
   port: number,
@@ -112,6 +113,87 @@ describe("Unified Gateway Server Integration", () => {
     assert.strictEqual(data.server, "winhelm-mcp");
     assert.strictEqual(typeof data.uptimeSeconds, "number");
     assert.ok(data.activeSessions);
+  });
+
+  it("should keep winhelm_job_status isolated between live Streamable sessions", async () => {
+    const initialize = async (name: string, id: number): Promise<string> => {
+      const res = await fetch(`${BASE_URL}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name, version: "1.0" },
+          },
+        }),
+      });
+      assert.strictEqual(res.status, 200);
+      const sessionId = res.headers.get("mcp-session-id");
+      assert.ok(sessionId);
+      return sessionId;
+    };
+
+    const sessionA = await initialize("session-a-client", 901);
+    const sessionB = await initialize("session-b-client", 902);
+
+    const created = getApprovalEngine().request({
+      tool: "http_request",
+      args: { url: "https://example.com" },
+      sessionId: sessionA,
+      ttlMs: 60_000,
+      maxPending: 5,
+      execute: async () => ({
+        content: [{ type: "text", text: "should-not-run" }],
+      }),
+    });
+
+    try {
+      const callStatus = async (
+        sessionId: string,
+        requestId: number
+      ): Promise<string> => {
+        const res = await fetch(`${BASE_URL}/mcp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            "mcp-session-id": sessionId,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: requestId,
+            method: "tools/call",
+            params: {
+              name: "winhelm_job_status",
+              arguments: { jobId: created.job.id },
+            },
+          }),
+        });
+        assert.strictEqual(res.status, 200);
+        return res.text();
+      };
+
+      const foreign = await callStatus(sessionB, 903);
+      assert.match(foreign, /NOT_FOUND/);
+      assert.ok(
+        !foreign.includes(created.job.id),
+        "Foreign session must not receive the protected jobId"
+      );
+
+      const owner = await callStatus(sessionA, 904);
+      assert.ok(owner.includes(created.job.id));
+      assert.ok(owner.includes("awaiting_approval"));
+    } finally {
+      getApprovalEngine().cancelSession(sessionA);
+      getApprovalEngine().cancelSession(sessionB);
+    }
   });
 
   it("should handle Streamable HTTP initialize flow on /mcp and record tool logs", async () => {
