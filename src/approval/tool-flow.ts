@@ -1,4 +1,5 @@
 import type { ApprovalConfig } from "../config/schema-v2.js";
+import { translate as t } from "../i18n/messages.js";
 import {
   ApprovalEngine,
   ApprovalEngineError,
@@ -72,35 +73,35 @@ function terminalResult(job: ApprovalJob): any {
       return structuredError(
         "INTERNAL_ERROR",
         job.error || "Approved action failed.",
-        "Review the WinHelm job details before retrying.",
+        t("action.approval.review_before_retry"),
         { jobId: job.id }
       );
     case "denied":
       return structuredError(
         "PERMISSION_DENIED",
         "The user denied this WinHelm action.",
-        "Do not retry unless the user explicitly asks you to try again.",
+        t("action.approval.denied"),
         { jobId: job.id }
       );
     case "expired":
       return structuredError(
         "APPROVAL_EXPIRED",
         "The WinHelm approval request expired before it was approved.",
-        "Ask the user whether they want to submit the action again.",
+        t("action.approval.expired"),
         { jobId: job.id }
       );
     case "cancelled":
       return structuredError(
         "CANCELLED",
         "The WinHelm approval request was cancelled.",
-        "Do not retry automatically.",
+        t("action.approval.cancelled"),
         { jobId: job.id }
       );
     default:
       return structuredError(
         "CONFLICT",
         `Approval job is not terminal (state: ${job.state}).`,
-        "Use winhelm_job_status instead of re-running the original tool.",
+        t("action.approval.use_status"),
         { jobId: job.id, state: job.state }
       );
   }
@@ -128,7 +129,7 @@ export async function runToolWithHybridApproval<T = any>(
       return structuredError(
         err.code,
         err.message,
-        "Resolve or deny an existing pending WinHelm approval before retrying."
+        t("action.approval.resolve_pending")
       );
     }
     throw err;
@@ -152,7 +153,7 @@ export async function runToolWithHybridApproval<T = any>(
       return structuredError(
         "CONFLICT",
         "An equivalent WinHelm action is already in progress.",
-        "Use winhelm_job_status for the existing job; do not re-run the original tool.",
+        t("action.approval.use_status"),
         { jobId: job.id, state: job.state }
       );
     }
@@ -160,7 +161,7 @@ export async function runToolWithHybridApproval<T = any>(
     return structuredError(
       "CONFLICT",
       "A recent equivalent WinHelm action exists in another session. The retry was blocked to prevent duplicate side effects.",
-      "Review recent WinHelm jobs before attempting this action again.",
+      t("action.approval.review_recent"),
       { state: job.state }
     );
   }
@@ -185,7 +186,7 @@ export function formatApprovalJobStatus(
     return structuredError(
       "NOT_FOUND",
       "Approval job was not found for this MCP session.",
-      "Check the jobId and do not use a jobId from another session."
+      t("action.job.check_id")
     );
   }
 
@@ -213,7 +214,7 @@ export function formatApprovalJobStatus(
     return structuredError(
       "INTERNAL_ERROR",
       job.error || "Approved action failed.",
-      "Review the WinHelm job before retrying.",
+      t("action.job.review"),
       base
     );
   }
