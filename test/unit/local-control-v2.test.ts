@@ -96,6 +96,24 @@ describe("Local WinHelm control channel", () => {
     });
   });
 
+  it("returns a read-only runtime status snapshot", async () => {
+    await withControl(async (metadataPath) => {
+      const status = await sendControlCommand(
+        { command: "status" },
+        { metadataPath }
+      );
+      assert.strictEqual(status.ok, true);
+      assert.ok(status.status);
+      assert.strictEqual(
+        typeof status.status.schemaMode,
+        "string"
+      );
+      assert.ok(status.status.profile);
+      assert.ok(status.status.riskState);
+      assert.ok(status.status.approval);
+    });
+  });
+
   it("lists jobs and approves an exactly-once action", async () => {
     await withControl(async (metadataPath) => {
       let executions = 0;

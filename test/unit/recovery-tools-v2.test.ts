@@ -56,6 +56,20 @@ describe("Schema-v2 recovery tools", () => {
       assert.strictEqual(payload.schemaMode, "v2");
       assert.strictEqual(payload.config.valid, true);
       assert.strictEqual(payload.approval.pendingJobs, 0);
+      assert.deepStrictEqual(payload.profile, {
+        preset: "balanced",
+        modified: null,
+        modifiedFields: [],
+      });
+      assert.strictEqual(payload.riskState.available, true);
+      assert.strictEqual(
+        payload.riskState.maxAutoPolicyRisk,
+        "R0"
+      );
+      assert.strictEqual(
+        payload.riskState.terminalExecution,
+        "approval-required"
+      );
     });
   });
 
@@ -80,6 +94,9 @@ describe("Schema-v2 recovery tools", () => {
         assert.strictEqual(payload.schemaMode, "invalid");
         assert.strictEqual(payload.config.valid, false);
         assert.ok(payload.config.validationErrors.length > 0);
+        assert.ok(payload.config.userAction);
+        assert.strictEqual(payload.riskState.available, false);
+        assert.match(payload.riskState.reason, /invalid/i);
 
         const ordinary = await tools.system_info.handler({}, {});
         assert.strictEqual(ordinary.isError, true);

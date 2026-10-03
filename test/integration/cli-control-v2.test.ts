@@ -58,6 +58,30 @@ async function waitForFile(filePath: string, timeoutMs = 20000): Promise<void> {
 }
 
 describe("WinHelm control CLI entrypoint", () => {
+  it("reads runtime status from the running process without starting another MCP server", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-status-"));
+    const metadataPath = path.join(dir, "control.json");
+    const control = new LocalControlServer({ metadataPath });
+    resetApprovalEngine();
+    resetAdminAuthManager();
+
+    try {
+      await control.start();
+      const result = await runCli(["status"], metadataPath);
+      assert.strictEqual(result.code, 0);
+      assert.match(result.stdout, /"schemaMode"/);
+      assert.match(result.stdout, /"riskState"/);
+      assert.match(result.stdout, /"profile"/);
+      assert.doesNotMatch(result.stdout, /MCP Server is running/i);
+      assert.doesNotMatch(result.stderr, /MCP Server is running/i);
+    } finally {
+      await control.close();
+      resetApprovalEngine();
+      resetAdminAuthManager();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("connects to the running process for jobs without starting another MCP server", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-entry-"));
     const metadataPath = path.join(dir, "control.json");

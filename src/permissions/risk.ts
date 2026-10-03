@@ -7,6 +7,10 @@ import {
   R5_TOOLS,
 } from "./presets.js";
 import { isRecoveryToolName } from "../tools/registry.js";
+import type {
+  SchemaV2PermissionConfig,
+  ToolPolicy,
+} from "../config/schema-v2.js";
 
 export type ToolRiskClass = "R0" | "R1" | "R2" | "R3" | "R4" | "R5";
 
@@ -88,4 +92,91 @@ export function getDesktopDataDisclosure(
   toolName: string
 ): string | undefined {
   return DESKTOP_DISCLOSURES[toolName];
+}
+
+export type TerminalExecutionState =
+  | "disabled"
+  | "safe-adapter"
+  | "approval-required"
+  | "unrestricted-auto"
+  | "dangerous-auto";
+
+export interface RuntimeRiskState {
+  available: true;
+  maxAutoPolicyRisk: ToolRiskClass | null;
+  policyByRisk: Record<
+    ToolRiskClass,
+    { auto: number; ask: number; off: number; unknown: number }
+  >;
+  terminalExecution: TerminalExecutionState;
+  terminalMode: SchemaV2PermissionConfig["terminal"]["mode"];
+  readwriteFolderCount: number;
+  totalFolderCount: number;
+}
+
+const RISK_ORDER: ToolRiskClass[] = ["R0", "R1", "R2", "R3", "R4", "R5"];
+
+function terminalExecutionState(
+  mode: SchemaV2PermissionConfig["terminal"]["mode"]
+): TerminalExecutionState {
+  switch (mode) {
+    case "off":
+      return "disabled";
+    case "safe":
+      return "safe-adapter";
+    case "ask":
+      return "approval-required";
+    case "full":
+      return "unrestricted-auto";
+    case "dangerous":
+      return "dangerous-auto";
+  }
+}
+
+function emptyRiskCounts(): RuntimeRiskState["policyByRisk"] {
+  return {
+    R0: { auto: 0, ask: 0, off: 0, unknown: 0 },
+    R1: { auto: 0, ask: 0, off: 0, unknown: 0 },
+    R2: { auto: 0, ask: 0, off: 0, unknown: 0 },
+    R3: { auto: 0, ask: 0, off: 0, unknown: 0 },
+    R4: { auto: 0, ask: 0, off: 0, unknown: 0 },
+    R5: { auto: 0, ask: 0, off: 0, unknown: 0 },
+  };
+}
+
+export function summarizeRuntimeRisk(
+  config: SchemaV2PermissionConfig
+): RuntimeRiskState {
+  const policyByRisk = emptyRiskCounts();
+  let maxAutoPolicyRisk: ToolRiskClass | null = null;
+
+  for (const [toolName, rawPolicy] of Object.entries(config.toolPolicy ?? {})) {
+    const riskClass = getToolRiskClass(toolName);
+    const policy: ToolPolicy | "unknown" =
+      rawPolicy === "auto" || rawPolicy === "ask" || rawPolicy === "off"
+        ? rawPolicy
+        : "unknown";
+    policyByRisk[riskClass][policy] += 1;
+
+    if (policy === "auto") {
+      if (
+        maxAutoPolicyRisk === null ||
+        RISK_ORDER.indexOf(riskClass) > RISK_ORDER.indexOf(maxAutoPolicyRisk)
+      ) {
+        maxAutoPolicyRisk = riskClass;
+      }
+    }
+  }
+
+  return {
+    available: true,
+    maxAutoPolicyRisk,
+    policyByRisk,
+    terminalExecution: terminalExecutionState(config.terminal.mode),
+    terminalMode: config.terminal.mode,
+    readwriteFolderCount: config.folders.filter(
+      (folder) => folder.permission === "readwrite"
+    ).length,
+    totalFolderCount: config.folders.length,
+  };
 }
