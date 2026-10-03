@@ -23,7 +23,10 @@ import {
   getDesktopDataDisclosure,
   getToolRiskPresentation,
 } from "../permissions/risk.js";
-import { getSessionClientInfo } from "../gateway/session-context.js";
+import {
+  getSessionClientInfo,
+  listSessionClients,
+} from "../gateway/session-context.js";
 import {
   applyClientConnection,
   previewClientConnection,
@@ -456,6 +459,34 @@ export function registerAdminRoutes(app: Express): void {
               job.state === "approved" ||
               job.state === "running"
           ).length,
+      });
+    }
+  );
+
+  router.get(
+    "/sessions",
+    requireAdminSession,
+    (_req: Request, res: Response) => {
+      const pendingBySession = new Map<string, number>();
+      for (const job of getApprovalEngine().list()) {
+        if (
+          job.state === "awaiting_approval" ||
+          job.state === "approved" ||
+          job.state === "running"
+        ) {
+          pendingBySession.set(
+            job.sessionId,
+            (pendingBySession.get(job.sessionId) ?? 0) + 1
+          );
+        }
+      }
+
+      res.json({
+        sessions: listSessionClients().map((session) => ({
+          sessionId: hashSessionId(session.sessionId) ?? null,
+          clientInfo: session.clientInfo,
+          pendingApprovals: pendingBySession.get(session.sessionId) ?? 0,
+        })),
       });
     }
   );

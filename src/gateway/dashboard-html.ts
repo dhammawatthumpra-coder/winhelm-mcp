@@ -55,6 +55,10 @@ export function getDashboardHtml(
     approvalsEmpty: t("dashboard.approvals.empty"),
     approvalsApprove: t("dashboard.approvals.approve"),
     approvalsDeny: t("dashboard.approvals.deny"),
+    clientsTitle: t("dashboard.clients.title"),
+    clientsNote: t("dashboard.clients.note"),
+    clientsEmpty: t("dashboard.clients.empty"),
+    clientsLoading: t("dashboard.clients.loading"),
   };
   const dashboardMessagesScript = `const DASHBOARD_MESSAGES = ${JSON.stringify({
     fullWarn: uiMessages.fullWarn,
@@ -65,6 +69,8 @@ export function getDashboardHtml(
     approvalsEmpty: uiMessages.approvalsEmpty,
     approvalsApprove: uiMessages.approvalsApprove,
     approvalsDeny: uiMessages.approvalsDeny,
+    clientsEmpty: uiMessages.clientsEmpty,
+    clientsLoading: uiMessages.clientsLoading,
   }).replace(/</g, "\\u003c")};`;
   const schemaV2Surface = schemaMode !== "legacy";
   const legacyActiveTools = new Set<string>([
@@ -635,6 +641,17 @@ export function getDashboardHtml(
             <div id="approvalJobs">
               <div class="admin-locked">No admin data loaded yet.</div>
             </div>
+
+            <div style="margin-top:16px;border-top:1px solid var(--card-border);padding-top:12px;">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                <div style="font-weight:600;">${escapeHtml(uiMessages.clientsTitle)}</div>
+                <button onclick="loadSessions()">Refresh</button>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin:4px 0 8px;">
+                ${escapeHtml(uiMessages.clientsNote)}
+              </div>
+              <div id="sessionClients" class="permission-summary">${escapeHtml(uiMessages.clientsEmpty)}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -817,7 +834,7 @@ export function getDashboardHtml(
         document.getElementById('adminUnlock').style.display = 'none';
         document.getElementById('permissionsUnlocked').style.display = 'block';
         setAdminState(DASHBOARD_MESSAGES.adminUnlocked, 'admin-ok');
-        await Promise.all([loadAdminProfile(), loadApprovals()]);
+        await Promise.all([loadAdminProfile(), loadApprovals(), loadSessions()]);
       } catch (err) {
         setAdminState(DASHBOARD_MESSAGES.adminLocked, 'admin-locked');
         setUnlockError(err.message || String(err));
@@ -1089,6 +1106,47 @@ export function getDashboardHtml(
         setClientPreview(
           (err.code ? err.code + ': ' : '') + (err.message || String(err))
         );
+      }
+    }
+
+    function renderSessionClients(sessions) {
+      const target = document.getElementById('sessionClients');
+      target.className = 'permission-summary';
+      target.textContent = '';
+
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        target.textContent = DASHBOARD_MESSAGES.clientsEmpty;
+        return;
+      }
+
+      sessions.forEach(session => {
+        const client = session.clientInfo || {};
+        const label =
+          String(client.name || 'unknown client') +
+          (client.version ? ' ' + String(client.version) : '');
+        addTextElement(
+          target,
+          'div',
+          label +
+            ' · session ' +
+            String(session.sessionId || 'n/a') +
+            ' · pending ' +
+            String(session.pendingApprovals || 0)
+        );
+      });
+    }
+
+    async function loadSessions() {
+      const target = document.getElementById('sessionClients');
+      target.className = 'permission-summary';
+      target.textContent = DASHBOARD_MESSAGES.clientsLoading;
+      try {
+        const body = await adminRequest('/admin/sessions');
+        renderSessionClients(body.sessions);
+      } catch (err) {
+        target.className = 'admin-error';
+        target.textContent =
+          (err.code ? err.code + ': ' : '') + (err.message || String(err));
       }
     }
 

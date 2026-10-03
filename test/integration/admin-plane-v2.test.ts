@@ -181,6 +181,26 @@ describe("Isolated admin HTTP plane", () => {
         name: "Claude Desktop",
         version: "fixture-1",
       });
+
+      const sessions = await fetch(`${base}/admin/sessions`, {
+        headers: { Cookie: adminCookie },
+      });
+      assert.strictEqual(sessions.status, 200);
+      const sessionsBody = await sessions.json() as any;
+      const sessionView = sessionsBody.sessions.find(
+        (session: any) => session.clientInfo?.name === "Claude Desktop"
+      );
+      assert.ok(sessionView, "the connection list must include the session");
+      assert.deepStrictEqual(sessionView.clientInfo, {
+        name: "Claude Desktop",
+        version: "fixture-1",
+      });
+      assert.notStrictEqual(
+        sessionView.sessionId,
+        "fixture-session",
+        "the connection list must not expose raw MCP session IDs"
+      );
+      assert.strictEqual(sessionView.pendingApprovals, 1);
       assert.strictEqual(approvalView.risk.class, "R3");
       assert.strictEqual(approvalView.risk.level, "elevated");
       assert.match(
