@@ -145,7 +145,7 @@ export function getDashboardHtml(
   // pre-schema-v2 file is never mistaken for a v2 permission state.
   const legacyBannerHtml = `<div id="legacyConfigBanner" class="risk-banner warning" style="display:${
     schemaMode === "legacy" ? "block" : "none"
-  };"><strong>Legacy configuration — upgrade available.</strong> This config has no <code>schemaVersion</code>, so v1.2.1 permissions, profile filtering and allowed directories stay in effect. Review the schema-v2 upgrade in Permissions with a local admin code.</div>`;
+  };"><strong>Legacy configuration — upgrade available.</strong> This config has no <code>schemaVersion</code>, so v1.2.1 permissions, profile filtering and allowed directories stay in effect. Approval-gated policies (such as approval for terminating processes WinHelm did not start) are schema-v2 features and are not active in legacy mode. Review the schema-v2 upgrade in Permissions with a local admin code.</div>`;
 
   const toolColor = (name: string): string => {
     if (RECOVERY_TOOL_NAMES.includes(name as any)) return "#a78bfa";
