@@ -122,6 +122,103 @@ describe("Schema-v2 profile service", () => {
     }
   });
 
+  it("changes only governed profile fields and preserves v2 approval/network/ui settings", async () => {
+    const workspace = await fs.mkdtemp(
+      path.join(os.tmpdir(), "winhelm-profile-preserve-")
+    );
+
+    try {
+      await withLegacyConfig(
+        {
+          profile: "core",
+          allowedDirectories: [workspace],
+        },
+        async (manager, configFile) => {
+          await applyProfilePreset(
+            {
+              preset: "balanced",
+              folders: [{ path: workspace, alias: "workspace" }],
+            },
+            manager
+          );
+
+          await manager.updateConfig(
+            {
+              terminal: {
+                mode: "ask",
+                approvalTtlSeconds: 77,
+              },
+              approval: {
+                channels: ["dashboard", "cli"],
+                blockHoldMs: 45_000,
+                jobTtlMs: 120_000,
+                maxPending: 4,
+              },
+              network: { allowLoopback: true },
+              ui: { language: "th" },
+            },
+            true
+          );
+
+          const applied = await applyProfilePreset(
+            {
+              preset: "safe",
+              folders: [{ path: workspace, alias: "workspace" }],
+            },
+            manager
+          );
+
+          assert.strictEqual(applied.status.preset, "safe");
+          assert.strictEqual(applied.status.modified, false);
+
+          const effective = manager.getConfig();
+          assert.deepStrictEqual(effective.approval, {
+            channels: ["dashboard", "cli"],
+            blockHoldMs: 45_000,
+            jobTtlMs: 120_000,
+            maxPending: 4,
+          });
+          assert.deepStrictEqual(effective.network, {
+            allowLoopback: true,
+          });
+          assert.deepStrictEqual(effective.ui, {
+            language: "th",
+          });
+          assert.deepStrictEqual(effective.terminal, {
+            mode: "off",
+            approvalTtlSeconds: 77,
+          });
+
+          const persisted = JSON.parse(
+            await fs.readFile(configFile, "utf8")
+          );
+          assert.deepStrictEqual(persisted.approval, {
+            channels: ["dashboard", "cli"],
+            blockHoldMs: 45_000,
+            jobTtlMs: 120_000,
+            maxPending: 4,
+          });
+          assert.deepStrictEqual(persisted.network, {
+            allowLoopback: true,
+          });
+          assert.deepStrictEqual(persisted.ui, {
+            language: "th",
+          });
+          assert.deepStrictEqual(persisted.terminal, {
+            mode: "off",
+            approvalTtlSeconds: 77,
+          });
+          assert.deepStrictEqual(
+            persisted.profileState.appliedSnapshot.terminal,
+            { mode: "off" }
+          );
+        }
+      );
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true });
+    }
+  });
+
   it("reports Modified from preset after an authoritative permission field changes", async () => {
     const workspace = await fs.mkdtemp(
       path.join(os.tmpdir(), "winhelm-profile-modified-")
