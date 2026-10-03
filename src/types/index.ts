@@ -90,6 +90,15 @@ export interface ServerConfig {
   preferPwsh?: boolean;
   sessionIdleTimeoutMs?: number;
   maxConcurrentSessions?: number;
+
+  // Schema-v2 is explicitly opt-in. Absence preserves v1.2.1 legacy behavior.
+  schemaVersion?: 1 | import("../config/schema-v2.js").SchemaVersion;
+  profilePreset?: import("../config/schema-v2.js").ProfilePreset;
+  folders?: import("../config/schema-v2.js").FolderPermission[];
+  terminal?: import("../config/schema-v2.js").TerminalPermissionConfig;
+  toolPolicy?: Record<string, import("../config/schema-v2.js").ToolPolicy>;
+  approval?: Partial<import("../config/schema-v2.js").ApprovalConfig>;
+  profileState?: import("../config/schema-v2.js").ProfileState;
 }
 
 // Group 1: File Safety & Archives
