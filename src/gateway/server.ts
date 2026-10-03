@@ -16,6 +16,8 @@ import { getFilePreviewHtml } from "./preview-html.js";
 import { getGpuInfo, getSystemInfo } from "../engine/system.js";
 import type { GpuInfoResult, SystemInfo } from "../types/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
+import { registerAdminRoutes } from "../admin/routes.js";
+import { getAdminAuthManager } from "../admin/runtime.js";
 
 export interface ServerOptions {
   port: number;
@@ -300,6 +302,11 @@ export function createServer(options: ServerOptions): {
 
   // Rate Limiting Guard
   app.use(rateLimiter.middleware());
+
+  // Schema-v2 admin plane is isolated from MCP Bearer/session auth. It
+  // authenticates itself with a local-only admin credential and never falls
+  // through to the generic MCP authentication middleware.
+  registerAdminRoutes(app);
 
   // 1-Time / Ephemeral Token Exchange Endpoint
   app.post("/auth/exchange", (req: Request, res: Response) => {
@@ -685,6 +692,7 @@ export function createServer(options: ServerOptions): {
 
   const stop = async (server: Server): Promise<void> => {
     configManager.setRuntimeEffectivePort(undefined);
+    getAdminAuthManager().revokeAll();
 
     // 1. Kill any active background tasks
     taskManager.killAll();
