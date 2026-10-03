@@ -57,6 +57,26 @@ async function waitForFile(filePath: string, timeoutMs = 20000): Promise<void> {
   throw new Error("Timed out waiting for file: " + filePath);
 }
 
+async function waitForJson(
+  filePath: string,
+  predicate: (value: any) => boolean,
+  timeoutMs = 20000
+): Promise<any> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const value = JSON.parse(
+        await fs.readFile(filePath, "utf8")
+      );
+      if (predicate(value)) return value;
+    } catch {
+      // File may be between atomic replacement steps or not written yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Timed out waiting for JSON state: " + filePath);
+}
+
 describe("WinHelm control CLI entrypoint", () => {
   it("reads runtime status from the running process without starting another MCP server", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-status-"));
@@ -168,6 +188,171 @@ describe("WinHelm control CLI entrypoint", () => {
           resolve();
         });
       });
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies schema-v2 CLI permission overrides after ENV and persists them", async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "winhelm-cli-v2-overrides-")
+    );
+    const metadataPath = path.join(dir, "control.json");
+    const configPath = path.join(dir, "config.json");
+    const envFolder = path.join(dir, "env-folder");
+    const cliFolder = path.join(dir, "cli-folder");
+    await fs.mkdir(envFolder);
+    await fs.mkdir(cliFolder);
+    await fs.writeFile(
+      configPath,
+      JSON.stringify(
+        {
+          schemaVersion: 2,
+          profilePreset: "balanced",
+          folders: [
+            {
+              path: envFolder,
+              alias: "original",
+              permission: "readwrite",
+            },
+          ],
+          terminal: {
+            mode: "ask",
+            approvalTtlSeconds: 77,
+          },
+          toolPolicy: {
+            winhelm_status: "auto",
+            winhelm_job_status: "auto",
+          },
+          approval: {
+            channels: ["dashboard", "cli"],
+            blockHoldMs: 45000,
+            jobTtlMs: 120000,
+            maxPending: 4,
+          },
+          network: { allowLoopback: true },
+          ui: { language: "th" },
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const child = spawn(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "src/index.ts",
+        "--stdio",
+        "--config",
+        configPath,
+        "--allowed-dirs",
+        cliFolder,
+        "--read-only",
+        "--persist",
+      ],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          WINHELM_CONTROL_METADATA_PATH: metadataPath,
+          MCP_ALLOWED_DIRECTORIES: envFolder,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    try {
+      const persisted = await waitForJson(
+        configPath,
+        (value) =>
+          value?.folders?.[0]?.path === path.resolve(cliFolder) &&
+          value?.folders?.[0]?.permission === "read" &&
+          value?.terminal?.mode === "off"
+      );
+
+      assert.deepStrictEqual(persisted.folders, [
+        {
+          path: path.resolve(cliFolder),
+          permission: "read",
+        },
+      ]);
+      assert.deepStrictEqual(persisted.terminal, {
+        mode: "off",
+        approvalTtlSeconds: 77,
+      });
+      assert.deepStrictEqual(persisted.approval, {
+        channels: ["dashboard", "cli"],
+        blockHoldMs: 45000,
+        jobTtlMs: 120000,
+        maxPending: 4,
+      });
+      assert.deepStrictEqual(persisted.network, {
+        allowLoopback: true,
+      });
+      assert.deepStrictEqual(persisted.ui, {
+        language: "th",
+      });
+    } finally {
+      child.kill("SIGTERM");
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          resolve();
+        }, 3000);
+        child.once("exit", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects legacy exposure flags in schema-v2 instead of silently ignoring them", async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "winhelm-cli-v2-profile-")
+    );
+    const metadataPath = path.join(dir, "control.json");
+    const configPath = path.join(dir, "config.json");
+    const original = {
+      schemaVersion: 2,
+      profilePreset: "balanced",
+      folders: [],
+      terminal: { mode: "ask" },
+      toolPolicy: {
+        winhelm_status: "auto",
+        winhelm_job_status: "auto",
+      },
+    };
+    await fs.writeFile(
+      configPath,
+      JSON.stringify(original, null, 2),
+      "utf8"
+    );
+
+    try {
+      const result = await runCli(
+        [
+          "--stdio",
+          "--config",
+          configPath,
+          "--profile",
+          "full",
+        ],
+        metadataPath
+      );
+      assert.strictEqual(result.code, 1);
+      assert.match(result.stderr, /legacy exposure flags/i);
+      assert.match(result.stderr, /winhelm setup --preset/i);
+      assert.doesNotMatch(result.stderr, /MCP Server is running/i);
+
+      const persisted = JSON.parse(
+        await fs.readFile(configPath, "utf8")
+      );
+      assert.deepStrictEqual(persisted, original);
+    } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
