@@ -2,17 +2,44 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../utils/logger.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { isToolInProfile } from "../config/profiles.js";
+import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
+import { evaluateSchemaV2ToolAccess } from "../permissions/tool-access.js";
 
-function createPolicyError(code: string, message: string, userAction: string): any {
+function createPolicyError(
+  code: string,
+  message: string,
+  userAction?: string,
+  details?: Record<string, unknown>
+): any {
   return {
     isError: true,
     content: [
       {
         type: "text",
-        text: JSON.stringify({ code, message, userAction }),
+        text: JSON.stringify({
+          error: {
+            code,
+            message,
+            ...(userAction ? { userAction } : {}),
+            ...(details ? { details } : {}),
+          },
+        }),
       },
     ],
   };
+}
+
+function logAndReturnPolicyError(
+  name: string,
+  startTime: number,
+  code: string,
+  message: string,
+  userAction?: string,
+  details?: Record<string, unknown>
+): any {
+  const res = createPolicyError(code, message, userAction, details);
+  logger.toolFail(name, Date.now() - startTime, res.content[0].text);
+  return res;
 }
 
 /**
@@ -47,23 +74,52 @@ export function registerTracedTool(
     const liveMode = liveConfigManager.getConfigMode();
 
     if (liveMode === "invalid") {
-      const res = createPolicyError(
-        "CONFIG_INVALID",
+      return logAndReturnPolicyError(
+        name,
+        startTime,
+        "CONFIGURATION_UNAVAILABLE",
         "WinHelm configuration is invalid; tool execution is fail-closed.",
-        "Open WinHelm settings and repair the configuration before retrying."
+        "Open WinHelm to repair the configuration before retrying.",
+        { validationErrors: [...liveConfigManager.getConfigValidationErrors()] }
       );
-      logger.toolFail(name, Date.now() - startTime, res.content[0].text);
-      return res;
     }
 
     if (liveMode === "v2") {
-      const res = createPolicyError(
-        "SCHEMA_V2_ENFORCEMENT_PENDING",
-        "Schema-v2 is enabled, but the v2 permission enforcement layer is not fully wired in this implementation checkpoint.",
-        "Keep schema-v2 disabled for normal use until the permission layer is completed."
-      );
-      logger.toolFail(name, Date.now() - startTime, res.content[0].text);
-      return res;
+      const liveConfig =
+        liveConfigManager.getConfig() as unknown as SchemaV2PermissionConfig;
+      const access = evaluateSchemaV2ToolAccess(name, args ?? {}, liveConfig);
+
+      if (access.decision === "deny") {
+        return logAndReturnPolicyError(
+          name,
+          startTime,
+          access.code,
+          access.reason,
+          access.userAction,
+          access.pathChecks
+            ? {
+                pathChecks: access.pathChecks.map((check) => ({
+                  code: check.code,
+                  reason: check.reason,
+                  canonicalPath: check.canonicalPath,
+                  matchedFolder:
+                    check.matchedFolder?.alias ?? check.matchedFolder?.path,
+                })),
+              }
+            : undefined
+        );
+      }
+
+      if (access.decision === "ask") {
+        return logAndReturnPolicyError(
+          name,
+          startTime,
+          "APPROVAL_REQUIRED",
+          access.reason,
+          access.userAction ?? "Approve this action in WinHelm.",
+          { tool: name, approvalEngine: "pending" }
+        );
+      }
     }
 
     try {
