@@ -1,6 +1,10 @@
 import { fileURLToPath } from "node:url";
 import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
-import { checkFolderAccess, type FolderAccessResult } from "./folder-access.js";
+import {
+  checkFolderAccess,
+  type FolderAccessResult,
+  type ProtectedPathRule,
+} from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
 
 export type ToolAccessDecision = "allow" | "ask" | "deny";
@@ -11,6 +15,10 @@ export interface ToolAccessResult {
   reason: string;
   userAction?: string;
   pathChecks?: FolderAccessResult[];
+}
+
+export interface ToolAccessOptions {
+  protectedPaths?: ProtectedPathRule[];
 }
 
 const TERMINAL_EXECUTION_TOOLS = new Set([
@@ -115,7 +123,8 @@ function deniedFromPath(check: FolderAccessResult): ToolAccessResult {
 export function evaluateSchemaV2ToolAccess(
   toolName: string,
   args: Record<string, any>,
-  config: SchemaV2PermissionConfig
+  config: SchemaV2PermissionConfig,
+  options: ToolAccessOptions = {}
 ): ToolAccessResult {
   if (TERMINAL_EXECUTION_TOOLS.has(toolName)) {
     const terminal = evaluateTerminalMode(config.terminal.mode);
@@ -174,6 +183,7 @@ export function evaluateSchemaV2ToolAccess(
       {
         denyRootMutation: requirement.denyRootMutation,
         rejectReparseMutation: requirement.access === "write",
+        protectedPaths: options.protectedPaths,
       }
     );
     pathChecks.push(check);

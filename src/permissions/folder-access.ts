@@ -8,6 +8,12 @@ import type { FolderPermission } from "../config/schema-v2.js";
 
 export type FolderAccessKind = "read" | "write";
 
+export interface ProtectedPathRule {
+  path: string;
+  kind: "file" | "tree";
+  label?: string;
+}
+
 export interface FolderAccessOptions {
   /**
    * True when the operation can delete/rename/replace the configured folder
@@ -19,6 +25,10 @@ export interface FolderAccessOptions {
    * paths to reduce TOCTOU exposure.
    */
   rejectReparseMutation?: boolean;
+  /**
+   * Protected config/data/audit/install paths override ordinary folder grants.
+   */
+  protectedPaths?: ProtectedPathRule[];
 }
 
 export type FolderAccessCode =
@@ -27,6 +37,7 @@ export type FolderAccessCode =
   | "FOLDER_READ_ONLY"
   | "FOLDER_ROOT_MUTATION"
   | "FOLDER_REPARSE_MUTATION"
+  | "FOLDER_PROTECTED_PATH"
   | "PATH_INVALID";
 
 export interface FolderAccessResult {
@@ -158,6 +169,29 @@ export function checkFolderAccess(
       code: "PATH_INVALID",
       reason: `Unable to canonicalize path: ${rawPath}`,
     };
+  }
+
+  for (const protectedRule of options.protectedPaths ?? []) {
+    try {
+      const protectedCanonical = canonicalizeExistingAware(protectedRule.path);
+      const blocked =
+        protectedRule.kind === "tree"
+          ? isInsideOrEqual(protectedCanonical, canonicalPath)
+          : normalizeForCompare(protectedCanonical) === normalizeForCompare(canonicalPath);
+
+      if (blocked) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Path is protected by WinHelm security policy: ${protectedRule.label || protectedRule.path}`,
+          canonicalPath,
+        };
+      }
+    } catch {
+      // A malformed protected rule never grants access. Continue evaluating
+      // ordinary folder permissions; runtime rule construction is separately
+      // validated before enforcement is activated.
+    }
   }
 
   const candidates = canonicalFolders(folders);
