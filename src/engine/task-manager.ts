@@ -59,13 +59,16 @@ export class TaskManager {
       throw new Error(reason);
     }
 
-    // 2. Validate CWD against allowedDirectories
-    const cwdCheck = configManager.isPathAllowed(cwd);
+    // 2. Legacy mode keeps the v1.2.1 allowedDirectories CWD gate.
+    // Schema-v2 ask/full terminal is not constrained by folder grants.
     const config = configManager.getConfig();
-    if (!cwdCheck.allowed && config.allowSystemExecution === false) {
-      const reason = cwdCheck.reason || `Working directory "${cwd}" is not permitted`;
-      logger.security(reason, command);
-      throw new Error(reason);
+    if (configManager.getConfigMode() === "legacy") {
+      const cwdCheck = configManager.isPathAllowed(cwd);
+      if (!cwdCheck.allowed && config.allowSystemExecution === false) {
+        const reason = cwdCheck.reason || `Working directory "${cwd}" is not permitted`;
+        logger.security(reason, command);
+        throw new Error(reason);
+      }
     }
 
     const taskId = randomUUID().slice(0, 8);

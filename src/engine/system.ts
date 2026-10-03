@@ -68,7 +68,7 @@ $ms.Dispose();
 export async function openTarget(target: string): Promise<{ success: boolean; target: string }> {
   if (!target.startsWith("http://") && !target.startsWith("https://")) {
     const configManager = ConfigManager.getInstance();
-    const pathCheck = configManager.isPathAllowed(target);
+    const pathCheck = configManager.checkPathAccess(target, "read");
     if (!pathCheck.allowed) {
       throw new Error(pathCheck.reason);
     }
@@ -107,7 +107,11 @@ $drives = Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='FreeGB';
     const configManager = ConfigManager.getInstance();
     const config = configManager.getConfig();
 
-    if (config.allowedDirectories && config.allowedDirectories.length > 0) {
+    if (
+      configManager.getConfigMode() === "legacy" &&
+      config.allowedDirectories &&
+      config.allowedDirectories.length > 0
+    ) {
       if (Array.isArray(parsed.Drives)) {
         parsed.Drives = parsed.Drives.filter((d: { Name?: string }) => {
           if (!d.Name) return false;

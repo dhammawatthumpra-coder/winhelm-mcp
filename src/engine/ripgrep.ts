@@ -72,7 +72,7 @@ export async function searchCodebase(
   const configManager = ConfigManager.getInstance();
   const targetPath = options.searchPath ? path.resolve(options.searchPath) : process.cwd();
 
-  const pathCheck = configManager.isPathAllowed(targetPath);
+  const pathCheck = configManager.checkPathAccess(targetPath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }

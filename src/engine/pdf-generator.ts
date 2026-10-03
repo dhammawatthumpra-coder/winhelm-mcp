@@ -274,11 +274,16 @@ export async function generatePdf(options: PdfGenerateOptions): Promise<PdfGener
   const resolvedSource = path.resolve(options.sourcePath);
   const resolvedPdf = path.resolve(options.pdfPath);
 
+  const srcCheck = configManager.checkPathAccess(resolvedSource, "read");
+  if (!srcCheck.allowed) {
+    throw new Error(srcCheck.reason);
+  }
+
   if (!existsSync(resolvedSource)) {
     throw new Error(`Source file not found: ${options.sourcePath}`);
   }
 
-  const dstCheck = configManager.isPathAllowed(resolvedPdf);
+  const dstCheck = configManager.checkPathAccess(resolvedPdf, "write", { denyRootMutation: true });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }

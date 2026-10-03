@@ -43,7 +43,7 @@ export async function readFileContent(
   endLine?: number
 ): Promise<FileReadResult> {
   const configManager = ConfigManager.getInstance();
-  const pathCheck = configManager.isPathAllowed(filePath);
+  const pathCheck = configManager.checkPathAccess(filePath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -112,7 +112,7 @@ export async function writeFileContent(
     throw new Error("File write operation is blocked: Server is operating in read-only mode.");
   }
 
-  const pathCheck = configManager.isPathAllowed(filePath);
+  const pathCheck = configManager.checkPathAccess(filePath, "write", { denyRootMutation: true });
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -140,7 +140,7 @@ export async function editFileContent(
     throw new Error("File edit operation is blocked: Server is operating in read-only mode.");
   }
 
-  const pathCheck = configManager.isPathAllowed(filePath);
+  const pathCheck = configManager.checkPathAccess(filePath, "write", { denyRootMutation: true });
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -171,7 +171,7 @@ export async function listDirectory(
   recursive = false
 ): Promise<DirectoryEntry[]> {
   const configManager = ConfigManager.getInstance();
-  const pathCheck = configManager.isPathAllowed(dirPath);
+  const pathCheck = configManager.checkPathAccess(dirPath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -230,7 +230,7 @@ export async function searchInFiles(
   filePattern = ""
 ): Promise<SearchMatch[]> {
   const configManager = ConfigManager.getInstance();
-  const pathCheck = configManager.isPathAllowed(targetPath);
+  const pathCheck = configManager.checkPathAccess(targetPath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -291,7 +291,7 @@ export async function deleteFileToRecycleBin(targetPath: string): Promise<FileDe
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
-  const pathCheck = configManager.isPathAllowed(targetPath);
+  const pathCheck = configManager.checkPathAccess(targetPath, "write", { denyRootMutation: true });
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -329,12 +329,12 @@ export async function moveFile(
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
-  const srcCheck = configManager.isPathAllowed(sourcePath);
+  const srcCheck = configManager.checkPathAccess(sourcePath, "write", { denyRootMutation: true });
   if (!srcCheck.allowed) {
     throw new Error(srcCheck.reason);
   }
 
-  const dstCheck = configManager.isPathAllowed(destPath);
+  const dstCheck = configManager.checkPathAccess(destPath, "write", { denyRootMutation: true });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }
@@ -383,12 +383,12 @@ export async function copyFileOrDir(
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
-  const srcCheck = configManager.isPathAllowed(sourcePath);
+  const srcCheck = configManager.checkPathAccess(sourcePath, "read");
   if (!srcCheck.allowed) {
     throw new Error(srcCheck.reason);
   }
 
-  const dstCheck = configManager.isPathAllowed(destPath);
+  const dstCheck = configManager.checkPathAccess(destPath, "write", { denyRootMutation: true });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }
@@ -419,12 +419,12 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
-  const srcCheck = configManager.isPathAllowed(sourceDir);
+  const srcCheck = configManager.checkPathAccess(sourceDir, "read");
   if (!srcCheck.allowed) {
     throw new Error(srcCheck.reason);
   }
 
-  const dstCheck = configManager.isPathAllowed(zipPath);
+  const dstCheck = configManager.checkPathAccess(zipPath, "write", { denyRootMutation: true });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }
@@ -472,12 +472,12 @@ export async function extractZip(
     throw new Error("Operation blocked: Server is running in read-only mode.");
   }
 
-  const zipCheck = configManager.isPathAllowed(zipPath);
+  const zipCheck = configManager.checkPathAccess(zipPath, "read");
   if (!zipCheck.allowed) {
     throw new Error(zipCheck.reason);
   }
 
-  const dstCheck = configManager.isPathAllowed(targetDir);
+  const dstCheck = configManager.checkPathAccess(targetDir, "write", { denyRootMutation: false });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }
@@ -517,7 +517,7 @@ export async function tailFileContent(
   linesCount = 50
 ): Promise<FileTailResult> {
   const configManager = ConfigManager.getInstance();
-  const pathCheck = configManager.isPathAllowed(filePath);
+  const pathCheck = configManager.checkPathAccess(filePath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }
@@ -580,7 +580,7 @@ export async function hashFile(
   algorithm: "sha256" | "md5" | "sha1" = "sha256"
 ): Promise<FileHashResult> {
   const configManager = ConfigManager.getInstance();
-  const pathCheck = configManager.isPathAllowed(filePath);
+  const pathCheck = configManager.checkPathAccess(filePath, "read");
   if (!pathCheck.allowed) {
     throw new Error(pathCheck.reason);
   }

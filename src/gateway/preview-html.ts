@@ -11,7 +11,7 @@ export async function getFilePreviewHtml(filePath: string): Promise<string> {
   const configManager = ConfigManager.getInstance();
   const resolvedPath = path.resolve(filePath);
 
-  const pathCheck = configManager.isPathAllowed(resolvedPath);
+  const pathCheck = configManager.checkPathAccess(resolvedPath, "read");
   if (!pathCheck.allowed) {
     return renderErrorPage(resolvedPath, pathCheck.reason || "Access to path is blocked by security policy.");
   }
