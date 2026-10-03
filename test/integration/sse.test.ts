@@ -83,8 +83,16 @@ describe("SSE Gateway Integration", () => {
     });
 
     // Clean up SSE connection and ensure display metadata does not outlive it.
+    // Socket close delivery is asynchronous and can be delayed under the full
+    // suite, so poll with a bounded deadline instead of relying on a fixed nap.
     sseReq.destroy();
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    const cleanupDeadline = Date.now() + 2_000;
+    while (
+      getSessionClientInfo(sessionId!) !== undefined &&
+      Date.now() < cleanupDeadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     assert.strictEqual(getSessionClientInfo(sessionId!), undefined);
   });
 });
