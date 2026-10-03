@@ -123,7 +123,7 @@ describe("Workstation & Inspection Tools (6 Golden Tools)", () => {
     it("should execute toast notification command successfully", async () => {
       const res = await sendNotification("WinHelm Test", "Automated test notification", false);
       assert.strictEqual(res.success, true);
-      assert.strictEqual(res.title, "WinHelm Test");
+      assert.strictEqual(res.title, "AI message: WinHelm Test");
       assert.strictEqual(res.message, "Automated test notification");
     });
   });
