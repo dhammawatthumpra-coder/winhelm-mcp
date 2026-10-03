@@ -70,6 +70,11 @@ export function getDashboardHtml(
         : terminalMode === "full"
           ? `<div id="runtimeRiskBanner" class="risk-banner danger"><strong>Full terminal access is active.</strong> AI commands can execute automatically with your user-level filesystem reach.</div>`
           : `<div id="runtimeRiskBanner" class="risk-banner" style="display:none;"></div>`;
+  // The baseline requires an explicit legacy-configuration disclosure so a
+  // pre-schema-v2 file is never mistaken for a v2 permission state.
+  const legacyBannerHtml = `<div id="legacyConfigBanner" class="risk-banner warning" style="display:${
+    schemaMode === "legacy" ? "block" : "none"
+  };"><strong>Legacy configuration — upgrade available.</strong> This config has no <code>schemaVersion</code>, so v1.2.1 permissions, profile filtering and allowed directories stay in effect. Review the schema-v2 upgrade in Permissions with a local admin code.</div>`;
 
   const toolColor = (name: string): string => {
     if (RECOVERY_TOOL_NAMES.includes(name as any)) return "#a78bfa";
@@ -519,6 +524,7 @@ export function getDashboardHtml(
     </header>
 
     ${riskBannerHtml}
+    ${legacyBannerHtml}
 
     <div class="card permissions-shell" id="permissionsPanel">
       <div class="card-title">
@@ -828,6 +834,11 @@ export function getDashboardHtml(
 
     function updateRuntimeRisk(profile) {
       const banner = document.getElementById('runtimeRiskBanner');
+      const legacyBanner = document.getElementById('legacyConfigBanner');
+      if (legacyBanner) {
+        legacyBanner.style.display =
+          profile.schemaMode === 'legacy' ? 'block' : 'none';
+      }
       if (!banner) return;
       banner.textContent = '';
       banner.className = 'risk-banner';
