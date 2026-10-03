@@ -29,6 +29,14 @@ export interface ApprovalJob<T = unknown> {
 export interface ApprovalRequest<T = unknown> {
   tool: string;
   args: Record<string, unknown>;
+  /**
+   * Canonical args used for retry fingerprinting/dedupe. Defaults to `args`.
+   * Callers that add non-deterministic display metadata (for example probed
+   * process identity) must pass the caller's original args here, otherwise an
+   * equivalent retry would compute a different fingerprint and could execute
+   * the same irreversible action twice.
+   */
+  fingerprintArgs?: Record<string, unknown>;
   sessionId: string;
   requestId?: string | number;
   ttlMs: number;
@@ -135,7 +143,10 @@ export class ApprovalEngine {
     this.pruneRecentHistory();
 
     const now = this.now();
-    const fingerprint = approvalRequestFingerprint(request.tool, request.args);
+    const fingerprint = approvalRequestFingerprint(
+      request.tool,
+      request.fingerprintArgs ?? request.args
+    );
 
     const sameSessionPending = [...this.jobs.values()]
       .filter(

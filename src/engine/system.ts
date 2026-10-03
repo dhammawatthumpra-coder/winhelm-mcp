@@ -164,6 +164,99 @@ if ($conn) {
   }
 }
 
+export interface ProcessIdentity {
+  pid: number;
+  name: string;
+  publisher: string | null;
+}
+
+/**
+ * Resolve process identity for an approval dialog without changing process
+ * state. Publisher is best-effort because protected/system processes may not
+ * expose an executable path to the current user.
+ */
+export async function inspectProcessTargets(
+  pid?: number,
+  name?: string
+): Promise<ProcessIdentity[]> {
+  let selector = "";
+  let env: Record<string, string>;
+
+  if (pid !== undefined) {
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error("Invalid pid");
+    }
+    selector =
+      "$items = @(Get-Process -Id ([int]$env:WH_ARG_PID) -ErrorAction Stop);";
+    env = { WH_ARG_PID: String(pid) };
+  } else if (name) {
+    selector =
+      "$items = @(Get-Process -Name $env:WH_ARG_NAME -ErrorAction Stop | Select-Object -First 50);";
+    env = { WH_ARG_NAME: name };
+  } else {
+    throw new Error("Must provide either pid or name");
+  }
+
+  const script =
+    selector +
+    `
+$result = foreach ($p in $items) {
+  $publisher = $null
+  try {
+    $procPath = $p.Path
+    if ($procPath) {
+      $sig = Get-AuthenticodeSignature -LiteralPath $procPath -ErrorAction SilentlyContinue
+      if ($sig -and $sig.SignerCertificate) {
+        $publisher = $sig.SignerCertificate.Subject
+      } elseif ($sig) {
+        $publisher = $sig.Status.ToString()
+      }
+    }
+  } catch {}
+  [PSCustomObject]@{
+    pid = [int]$p.Id
+    name = [string]$p.ProcessName
+    publisher = $publisher
+  }
+}
+@($result) | ConvertTo-Json -Depth 3 -Compress
+`;
+
+  const result = await runPowerShell(script, {
+    timeoutMs: 5000,
+    env,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(
+      result.stderr ||
+        "Failed to inspect process identity."
+    );
+  }
+
+  const text = result.stdout.trim();
+  if (!text) return [];
+
+  const parsed = JSON.parse(text);
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+
+  return items
+    .filter(
+      (item) =>
+        item &&
+        Number.isInteger(Number(item.pid)) &&
+        typeof item.name === "string"
+    )
+    .map((item) => ({
+      pid: Number(item.pid),
+      name: String(item.name),
+      publisher:
+        typeof item.publisher === "string" &&
+        item.publisher.trim()
+          ? item.publisher.trim()
+          : null,
+    }));
+}
+
 /**
  * Kill process by PID or Name
  */
