@@ -14,6 +14,13 @@ import { runConnectCliCommand } from "./cli/connect.js";
 import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
 import { initializeApprovalPersistence } from "./approval/runtime.js";
 import { defaultApprovalJournalPath } from "./approval/journal.js";
+import { getProvenanceTracker } from "./approval/provenance.js";
+import { getSessionClientInfo } from "./gateway/session-context.js";
+import { describeRequestFolderAccess } from "./permissions/tool-access.js";
+import {
+  getDesktopDataDisclosure,
+  getToolRiskPresentation,
+} from "./permissions/risk.js";
 import { readStoredAuthToken, resolveStartupAuthToken } from "./config/auth-token-store.js";
 
 // Parse CLI arguments
@@ -106,7 +113,26 @@ async function main() {
 
   const approvalPersistence = initializeApprovalPersistence(
     defaultApprovalJournalPath(),
-    { notifyApprovals: true, auditDecisions: true }
+    {
+      notifyApprovals: true,
+      auditDecisions: true,
+      // DEF-02: mirror pending jobs for other WinHelm processes and consume
+      // their decisions through this process's engine, which stays the only
+      // executor. Display metadata is computed here so remote surfaces show
+      // this instance's own permission context and client identity.
+      crossProcess: true,
+      requestMetaProvider: (job) => ({
+        clientInfo: getSessionClientInfo(job.sessionId) ?? null,
+        risk: getToolRiskPresentation(job.tool),
+        dataDisclosure: getDesktopDataDisclosure(job.tool),
+        folderAccess: describeRequestFolderAccess(
+          job.tool,
+          job.args ?? {},
+          configManager.getConfig().folders
+        ),
+        provenance: getProvenanceTracker().getRecent(job.sessionId, 3),
+      }),
+    }
   );
   if (approvalPersistence.integrityFailure) {
     console.error(

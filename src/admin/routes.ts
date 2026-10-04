@@ -15,7 +15,8 @@ import {
   type LegacyMigrationInput,
   type ProfileApplyInput,
 } from "../config/profile-service.js";
-import { getApprovalEngine } from "../approval/runtime.js";
+import { getApprovalEngine, getCrossProcessApprovalSurface } from "../approval/runtime.js";
+import type { CrossProcessRequestRecord } from "../approval/cross-process.js";
 import { getProvenanceTracker } from "../approval/provenance.js";
 import { auditLogger, hashSessionId } from "../utils/audit-logger.js";
 import { sanitizeObject } from "../utils/sanitizer.js";
@@ -280,6 +281,46 @@ function clientConnectionErrorDetails(
     : undefined;
 }
 
+/**
+ * Route an approval decision to a job owned by another WinHelm instance.
+ * Returns true when the response was sent; false when no cross-process
+ * surface is available (caller falls back to NOT_FOUND).
+ */
+async function decideCrossProcess(
+  jobId: string,
+  decision: "approved" | "denied",
+  res: Response
+): Promise<boolean> {
+  const surface = getCrossProcessApprovalSurface();
+  if (!surface) return false;
+  const outcome = await surface.decideRemote(jobId, decision, "dashboard");
+  if (outcome.kind === "applied") {
+    res.json({ success: true, job: outcome.job, source: "remote" });
+    return true;
+  }
+  if (outcome.kind === "pending") {
+    res.json({ success: true, pending: true, jobId: outcome.jobId, source: "remote" });
+    return true;
+  }
+  if (outcome.kind === "unavailable") {
+    structuredError(
+      res,
+      503,
+      outcome.code,
+      "The shared approval journal could not be trusted; the decision was not recorded and the action was not run."
+    );
+    return true;
+  }
+  const message =
+    outcome.code === "ALREADY_DECIDED"
+      ? "This approval job was already decided."
+      : outcome.code === "OWNER_UNAVAILABLE"
+        ? "The WinHelm instance that owns this job is no longer running; the job cannot be executed and will expire."
+        : "Approval job is no longer awaiting approval.";
+  structuredError(res, 409, outcome.code, message);
+  return true;
+}
+
 function adminApprovalView(job: any): Record<string, unknown> {
   return {
     id: job.id,
@@ -302,6 +343,33 @@ function adminApprovalView(job: any): Record<string, unknown> {
     risk: getToolRiskPresentation(job.tool),
     dataDisclosure: getDesktopDataDisclosure(job.tool),
     provenance: getProvenanceTracker().getRecent(job.sessionId, 3),
+  };
+}
+
+function foreignApprovalView(
+  record: CrossProcessRequestRecord
+): Record<string, unknown> {
+  const job = record.job;
+  const display = record.display ?? {};
+  return {
+    id: job.id,
+    state: job.state,
+    tool: job.tool,
+    args: sanitizeObject(job.args ?? {}),
+    // Computed by the owning process against its own permission config, so
+    // the dialog reflects the folder semantics the policy gate will enforce.
+    folderAccess: display.folderAccess ?? null,
+    sessionId: hashSessionId(job.sessionId),
+    clientInfo: display.clientInfo ?? null,
+    createdAt: job.createdAt,
+    expiresAt: job.expiresAt,
+    updatedAt: job.updatedAt,
+    executionCount: job.executionCount,
+    risk: display.risk ?? getToolRiskPresentation(job.tool),
+    dataDisclosure: display.dataDisclosure ?? getDesktopDataDisclosure(job.tool),
+    provenance: display.provenance ?? null,
+    source: "remote",
+    ownerInstanceId: record.instanceId,
   };
 }
 
@@ -997,8 +1065,20 @@ export function registerAdminRoutes(app: Express): void {
     "/approvals",
     requireAdminSession,
     (_req: Request, res: Response) => {
+      const own = getApprovalEngine().list();
+      const ownIds = new Set(own.map((job) => job.id));
+      // DEF-02: pending jobs created by other WinHelm instances (stdio MCP
+      // clients) are visible here with owner-computed display metadata.
+      const foreign = (
+        getCrossProcessApprovalSurface()?.listForeignRequests() ?? []
+      )
+        .filter((record) => !ownIds.has(record.job.id))
+        .map(foreignApprovalView);
       res.json({
-        jobs: getApprovalEngine().list().map(adminApprovalView),
+        jobs: [
+          ...own.map(adminApprovalView),
+          ...foreign,
+        ].sort((a: any, b: any) => b.createdAt - a.createdAt),
       });
     }
   );
@@ -1008,27 +1088,36 @@ export function registerAdminRoutes(app: Express): void {
     requireMutationOrigin,
     requireAdminSession,
     requireCsrf,
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const jobId = routeParam(req.params.jobId);
       if (!jobId) {
         structuredError(res, 400, "INVALID_ARGUMENT", "A valid jobId is required.");
         return;
       }
-      const outcome = getApprovalEngine().approve(jobId, "dashboard");
-      if (!outcome.ok) {
-        structuredError(
-          res,
-          outcome.status,
-          outcome.code,
-          outcome.code === "NOT_FOUND"
-            ? "Approval job not found."
-            : outcome.code === "JOURNAL_UNAVAILABLE"
+      const localOutcome = getApprovalEngine().approve(jobId, "dashboard");
+      if (!localOutcome.ok) {
+        if (localOutcome.code !== "NOT_FOUND") {
+          structuredError(
+            res,
+            localOutcome.status,
+            localOutcome.code,
+            localOutcome.code === "JOURNAL_UNAVAILABLE"
               ? "The approval journal could not record this decision, so the action was not run."
               : "Approval job is no longer awaiting approval."
-        );
+          );
+          return;
+        }
+        // DEF-02: the job may belong to another WinHelm instance (stdio MCP
+        // client). Record the decision; the owning process stays the only
+        // executor and observes it through the shared coordination state.
+        const remote = await decideCrossProcess(jobId, "approved", res);
+        if (remote !== undefined) {
+          return;
+        }
+        structuredError(res, 404, "NOT_FOUND", "Approval job not found.");
         return;
       }
-      res.json({ success: true, job: outcome.job });
+      res.json({ success: true, job: localOutcome.job });
     }
   );
 
@@ -1037,25 +1126,31 @@ export function registerAdminRoutes(app: Express): void {
     requireMutationOrigin,
     requireAdminSession,
     requireCsrf,
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const jobId = routeParam(req.params.jobId);
       if (!jobId) {
         structuredError(res, 400, "INVALID_ARGUMENT", "A valid jobId is required.");
         return;
       }
-      const outcome = getApprovalEngine().deny(jobId, "dashboard");
-      if (!outcome.ok) {
-        structuredError(
-          res,
-          outcome.status,
-          outcome.code,
-          outcome.code === "NOT_FOUND"
-            ? "Approval job not found."
-            : "Approval job is no longer awaiting approval."
-        );
+      const localOutcome = getApprovalEngine().deny(jobId, "dashboard");
+      if (!localOutcome.ok) {
+        if (localOutcome.code !== "NOT_FOUND") {
+          structuredError(
+            res,
+            localOutcome.status,
+            localOutcome.code,
+            "Approval job is no longer awaiting approval."
+          );
+          return;
+        }
+        const remote = await decideCrossProcess(jobId, "denied", res);
+        if (remote !== undefined) {
+          return;
+        }
+        structuredError(res, 404, "NOT_FOUND", "Approval job not found.");
         return;
       }
-      res.json({ success: true, job: outcome.job });
+      res.json({ success: true, job: localOutcome.job });
     }
   );
 

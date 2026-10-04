@@ -95,6 +95,7 @@ export interface ApprovalEngineOptions {
   journalIntegrityFailed?: boolean;
 }
 
+
 const TERMINAL_STATES = new Set<ApprovalJobState>([
   "completed",
   "failed",
@@ -186,6 +187,7 @@ function optionalIdempotencyDigest(
  */
 export class ApprovalEngine {
   private readonly jobs = new Map<string, InternalJob<any>>();
+  private readonly ownedJobIds = new Set<string>();
   private readonly now: () => number;
   private readonly retryRetentionMs: number;
   private readonly persist?: (job: RecoverableApprovalJob) => void;
@@ -196,6 +198,16 @@ export class ApprovalEngine {
     channel: string
   ) => void;
   private readonly journalIntegrityFailed: boolean;
+
+  /**
+   * True only for jobs this engine instance created via `request()`.
+   * Recovered jobs belong to a previous or foreign run: their cross-process
+   * decisions must be consumed by the instance that owns the executor, never
+   * by an unrelated engine that merely saw the job in the shared journal.
+   */
+  ownsJob(jobId: string): boolean {
+    return this.ownedJobIds.has(jobId);
+  }
 
   constructor(options: ApprovalEngineOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -287,10 +299,12 @@ export class ApprovalEngine {
     };
 
     this.jobs.set(job.id, job);
+    this.ownedJobIds.add(job.id);
     try {
       this.persistJob(job);
     } catch (err) {
       this.jobs.delete(job.id);
+      this.ownedJobIds.delete(job.id);
       throw new ApprovalEngineError(
         "JOURNAL_UNAVAILABLE",
         "Approval journal write failed; the action was not queued."
