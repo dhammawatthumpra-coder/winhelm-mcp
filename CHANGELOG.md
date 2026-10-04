@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0-rc.1] - 2026-10-04
+
+### Added
+- **Schema-v2 Permission & Governance Model (`schemaVersion: 2`)**:
+  - Introduced granular, folder-scoped permissions (`read`, `readwrite`) with canonical path resolution and strict boundary enforcement.
+  - Added terminal execution modes (`off`, `ask`, `full`) and risk-tier classification (R0 to R5) across all tools.
+  - Added no-shell command runner (`command_run`) executing argument vectors cleanly without shell interpolation.
+  - Added read-only runtime status inspector (`winhelm_status`) and approval job status recovery tool (`winhelm_job_status`).
+- **Security Profile Presets (Safe, Balanced, Power)**:
+  - `safe`: Read-only folders, terminal disabled (`off`), mutating and network tools disabled.
+  - `balanced`: Readwrite folders, terminal execution gated by approval (`ask`), network and elevated desktop/system tools gated by approval.
+  - `power`: Readwrite folders, autonomous terminal execution (`full`), network tools permitted, elevated system actions gated by approval.
+  - Legacy profiles (`minimal`, `core`, `dev`, `sysadmin`, `full`) supported as compatibility presets.
+- **Cross-Process Human Approval Architecture**:
+  - Multi-instance stdio approval mirror: pending approval jobs created by Claude Desktop or Cursor are durably published to `~/.winhelm/approval-requests/<jobId>.json`.
+  - Local Web Dashboard (`/admin/approvals`) and CLI (`winhelm jobs`, `winhelm approve`, `winhelm deny`) discover and decide foreign stdio approval jobs.
+  - Strict separation of planes: Dashboard records decisions via atomic first-writer-wins records (`~/.winhelm/approval-decisions/<jobId>.json`); owning WinHelm process securely executes approved actions.
+  - Enforced atomic exactly-once execution invariant (`executionCount <= 1`) with CAS state transition.
+- **Client Auto-Connection & Configuration Discovery (`winhelm connect`)**:
+  - Interactive and dry-run CLI connection tooling for Claude Desktop (`winhelm connect claude`) and Cursor IDE (`winhelm connect cursor`).
+  - Automatic preservation of existing third-party MCP servers with timestamped backups (`.backup-<ISO>`).
+- **Setup & Legacy Migration Wizard (`winhelm setup`)**:
+  - Interactive configuration wizard and non-interactive scripted onboarding (`--preset`, `--folder`, `--answers`).
+  - Dedicated legacy migration command (`winhelm setup --migrate-legacy`) safely translating v1.2.1 configurations without silent privilege escalation.
+- **Protected Secret Storage & Admin Code Verification**:
+  - Authentication tokens stored in protected `~/.winhelm/secrets.json` rather than plaintext configuration files.
+  - Single-use administrative codes (`winhelm admin-code`) verified across distinct WinHelm instances via shared SHA-256 digest store (`admin-code-store.json`).
+
+### Changed
+- **Tool Surface & Canonical Registry**:
+  - Expanded canonical tool registry to 41 tools (38 legacy + `command_run`, `winhelm_status`, `winhelm_job_status`), verified via `npm run lint:tools`.
+  - Conditional runtime exposure: Legacy mode exposes 40 tools (preserves legacy profile filters + 2 recovery tools); Schema-v2 mode exposes all 41 tools with call-time policy gating.
+- **Configuration Precedence & Hot-Reload**:
+  - Unified configuration resolution: CLI flags > Environment variables > Local configuration files > Defaults.
+  - In-place configuration changes preserve non-governed user settings across profile adjustments.
+- **Provenance & Client Identity Reporting**:
+  - Stdio instances now publish client identification (`clientInfo` e.g. Claude Desktop, Cursor) to approval mirrors and Dashboard displays.
+  - Structured error responses include descriptive error codes and remediation hints (`userAction`).
+
+### Security
+- **Fail-Closed Approval Journal & Crash Recovery**:
+  - Approval state persisted durably to disk before notification dispatch.
+  - In-flight unconfirmed jobs on process termination recover as `unknown` and are never automatically replayed.
+  - Approvals received after job TTL expiration (`expired`) or cancellation are rejected fail-closed.
+- **Protected Internal Paths**:
+  - WinHelm internal directories (`~/.winhelm`, logs, config, secrets, journals) are explicitly protected from AI filesystem tools (`file_write`, `file_edit`, `file_delete_safe`), even if broad wildcard filesystem access is configured.
+- **External Process Termination Governance**:
+  - Terminating processes not initiated by WinHelm (`process_kill`) requires human approval under schema-v2.
+- **Direct Argument Vector Execution (`command_run`)**:
+  - Direct execution bypasses PowerShell command-line interpretation, eliminating shell quote-injection vulnerabilities.
+- **Network Request Validation**:
+  - Host validation, DNS rebinding guards, and redirect protection applied across HTTP client requests.
+
+### Fixed
+- **DEF-01: Claude Desktop Packaged (MSIX) Configuration Discovery**:
+  - Resolved configuration resolver failure when Claude Desktop is installed via Windows Store / MSIX package.
+  - Resolver checks both classic `%APPDATA%\Claude` and packaged `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`, failing closed if candidate locations are ambiguous.
+- **DEF-02: Cross-Process Approval Routing**:
+  - Resolved architectural disconnect where approval jobs created by stdio clients (Claude Desktop, Cursor) were invisible to the Web Dashboard.
+  - Implemented shared durable request/decision coordination enabling full human review and decision delivery across processes.
+- **DEF-02a: Multi-Instance CLI Routing**:
+  - Removed reliance on single-slot `control.json` pipe for approval commands. CLI now directly inspects and decides jobs through the shared durable coordination state.
+- **DEF-02b: Multi-Instance Admin Code Verification**:
+  - Resolved HTTP 401 rejection when using an admin code generated by the local CLI on a Dashboard served by a different background process. Admin codes now share single-use SHA-256 digests across instances.
+
+---
+
 ## [1.2.1] - 2026-09-29
 
 ### Security & Hardening (Tasks 1–10)
