@@ -43,6 +43,12 @@ export interface UiConfig {
   language: UiLanguage;
 }
 
+export type InstallRootAccess = "none" | "read" | "readwrite";
+
+export interface DevelopmentConfig {
+  installRootAccess: InstallRootAccess;
+}
+
 export interface ProfileState {
   preset: ProfilePreset;
   appliedAt: string;
@@ -63,6 +69,7 @@ export interface SchemaV2PermissionConfig {
   approval: ApprovalConfig;
   network: NetworkPermissionConfig;
   ui?: UiConfig;
+  development?: DevelopmentConfig;
   profileState?: ProfileState;
 }
 
@@ -112,6 +119,11 @@ const TERMINAL_MODES = new Set<TerminalMode>([
 
 const TOOL_POLICIES = new Set<ToolPolicy>(["auto", "ask", "off"]);
 const APPROVAL_CHANNELS = new Set<ApprovalChannel>(["dashboard", "toast", "cli"]);
+const INSTALL_ROOT_ACCESS = new Set<InstallRootAccess>([
+  "none",
+  "read",
+  "readwrite",
+]);
 
 /**
  * Config mode is explicit:
@@ -329,6 +341,32 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
     }
   }
 
+  let development: DevelopmentConfig | undefined;
+  if (input.development !== undefined) {
+    if (
+      !input.development ||
+      typeof input.development !== "object" ||
+      Array.isArray(input.development)
+    ) {
+      errors.push("development must be an object");
+    } else {
+      const rawDevelopment = input.development as Record<string, unknown>;
+      const rawInstallRootAccess = rawDevelopment.installRootAccess;
+      if (
+        typeof rawInstallRootAccess !== "string" ||
+        !INSTALL_ROOT_ACCESS.has(rawInstallRootAccess as InstallRootAccess)
+      ) {
+        errors.push(
+          "development.installRootAccess must be none, read, or readwrite"
+        );
+      } else {
+        development = {
+          installRootAccess: rawInstallRootAccess as InstallRootAccess,
+        };
+      }
+    }
+  }
+
   let ui: UiConfig | undefined;
   if (input.ui !== undefined) {
     if (!input.ui || typeof input.ui !== "object" || Array.isArray(input.ui)) {
@@ -354,6 +392,7 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
       approval: approvalResult.value,
       network: valid ? network : { ...DEFAULT_NETWORK_CONFIG },
       ...(ui ? { ui } : {}),
+      ...(development ? { development } : {}),
       ...(valid && input.profileState && typeof input.profileState === "object"
         ? { profileState: input.profileState as unknown as ProfileState }
         : {}),

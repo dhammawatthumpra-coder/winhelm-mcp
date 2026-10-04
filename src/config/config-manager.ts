@@ -802,7 +802,14 @@ export class ConfigManager {
     }
 
     if (this.configMode === "v2") {
-      const protectedPaths = this.getProtectedPathRules();
+      const installRootAccess =
+        this.config.development?.installRootAccess ?? "none";
+      const allowInstallRootAccess =
+        installRootAccess === "readwrite" ||
+        (access === "read" && installRootAccess === "read");
+      const protectedPaths = this.getProtectedPathRules({
+        includeInstallRoot: !allowInstallRootAccess,
+      });
 
       const result = checkFolderAccess(
         targetPath,

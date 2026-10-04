@@ -100,6 +100,7 @@ export interface ServerConfig {
   approval?: Partial<import("../config/schema-v2.js").ApprovalConfig>;
   network?: Partial<import("../config/schema-v2.js").NetworkPermissionConfig>;
   ui?: Partial<import("../config/schema-v2.js").UiConfig>;
+  development?: Partial<import("../config/schema-v2.js").DevelopmentConfig>;
   profileState?: import("../config/schema-v2.js").ProfileState;
 }
 

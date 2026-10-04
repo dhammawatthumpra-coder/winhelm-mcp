@@ -113,6 +113,45 @@ describe("Schema-v2 ConfigManager path bridge", () => {
     }
   });
 
+  it("allows explicit development access to the install root without disabling protection by default", async () => {
+    const repoRoot = path.resolve(process.cwd());
+    const packageFile = path.join(repoRoot, "package.json");
+
+    await withV2Config(
+      {
+        schemaVersion: 2,
+        folders: [{ path: repoRoot, permission: "readwrite" }],
+        terminal: { mode: "off" },
+        toolPolicy: { file_read: "auto", file_write: "auto" },
+      },
+      async (manager) => {
+        const blocked = manager.checkPathAccess(packageFile, "read");
+        assert.strictEqual(blocked.allowed, false);
+        assert.strictEqual(blocked.code, "FOLDER_PROTECTED_PATH");
+      }
+    );
+
+    await withV2Config(
+      {
+        schemaVersion: 2,
+        folders: [{ path: repoRoot, permission: "readwrite" }],
+        terminal: { mode: "off" },
+        toolPolicy: { file_read: "auto", file_write: "auto" },
+        development: { installRootAccess: "readwrite" },
+      },
+      async (manager) => {
+        assert.strictEqual(
+          manager.checkPathAccess(packageFile, "read").allowed,
+          true
+        );
+        assert.strictEqual(
+          manager.checkPathAccess(packageFile, "write").allowed,
+          true
+        );
+      }
+    );
+  });
+
   it("does not apply legacy allowedDirectories to schema-v2 full terminal execution", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-v2-terminal-"));
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-v2-terminal-out-"));
