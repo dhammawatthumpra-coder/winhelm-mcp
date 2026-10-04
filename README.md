@@ -4,13 +4,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-118%2F118%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-580%2F580%20passing-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
-> A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor Dashboard, 38 System Tools with Dynamic Profile Loading, and MCP File Preview Resource.
+> A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor & Approval Dashboard, 41 Canonical System Tools with Schema-v2 Governance & Dynamic Profiles, and MCP File Preview Resource.
 
 [📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [🎯 Threat Model](docs/THREAT_MODEL.md) • [📜 Terms of Use](TERMS_OF_USE.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
+
+---
+
+## Product Status: v1.3 Release Candidate (RC Accepted)
+
+This repository contains the accepted **v1.3 Release Candidate** implementation (`V1_3_RC_ACCEPTED` baseline). Technical RC blockers DEF-01 (Claude Desktop MSIX config discovery) and DEF-02 / DEF-02b (cross-process Dashboard approval routing and multi-instance admin code verification) have been resolved and verified across 580 automated tests and live client smokes.
+
+> ℹ️ **Notice:** Production release, npm publication, and release tagging remain subject to human owner authorization during the release phase.
 
 ---
 
@@ -21,16 +29,23 @@
 - [System Requirements](#system-requirements)
 - [Architecture & Live Dashboard](#architecture--live-dashboard)
 - [Quick Start](#quick-start)
-- [Tool Profiles ("Load Only What You Need")](#tool-profiles-load-only-what-you-need)
-- [Client Configuration](#client-configuration)
-  - [Claude Desktop](#1-claude-desktop-claude_desktop_configjson)
+  - [1. Setup & Configuration Wizard](#1-setup--configuration-wizard)
+  - [2. Starting WinHelm](#2-starting-winhelm)
+  - [3. Client Connection (Claude Desktop & Cursor)](#3-client-connection-claude-desktop--cursor)
+  - [4. Dashboard & Human Approvals](#4-dashboard--human-approvals)
+- [Configuration Modes: Legacy vs. Schema-v2](#configuration-modes-legacy-vs-schema-v2)
+- [Security Profiles & Presets](#security-profiles--presets)
+- [Canonical Tool Registry (41 Tools)](#canonical-tool-registry-41-tools)
+- [Human Approval & Cross-Process Coordination](#human-approval--cross-process-coordination)
+- [Client Configuration Reference](#client-configuration-reference)
+  - [Claude Desktop (Classic & MSIX)](#1-claude-desktop-claude_desktop_configjson)
   - [Cursor IDE](#2-cursor-ide)
   - [ChatGPT & OpenAI MCP Tunnel](#3-chatgpt--openai-mcp-tunnel-tunnel-client)
   - [Remote & Tailscale Connection](#4-remote--tailscale-connection)
-- [Tools Overview (38 Tools)](#tools-overview-38-tools)
 - [MCP Resources & Web Endpoints](#mcp-resources--web-endpoints)
-- [Configuration & Environment Variables](#configuration--environment-variables)
+- [Protected Secrets & Path Isolation](#protected-secrets--path-isolation)
 - [Standalone Executable (`winhelm.exe`)](#standalone-executable-winhelmexe)
+- [Known Limitations & Deferred Items](#known-limitations--deferred-items)
 - [Documentation & Deep Dive](#documentation--deep-dive)
 - [License](#license)
 
@@ -41,8 +56,9 @@
 **WinHelm** bridges the gap between AI assistants (Claude, Cursor, LibreChat, ChatGPT) and the Windows operating system. Unlike generic cross-platform servers, WinHelm is built from the ground up for Windows with:
 
 - **Zero Gateway Overhead:** Native single-process Web Gateway supporting both modern Streamable HTTP (`/mcp`) and standard Server-Sent Events (`/sse`). No external proxy (`supergateway` or reverse proxy) required.
-- **Safety First:** Accidental deletions go to the **Windows Recycle Bin** instead of permanent destruction. Dangerous commands (`format-volume`, `rmdir /s /q c:\`) are strictly blocked by default.
-- **First-class Windows Integrations:** NVIDIA/WMI GPU telemetry, Windows Services management, native UTF-8 PowerShell runner, and headless Microsoft Edge PDF compilation.
+- **Safety & Recoverability:** Accidental deletions go to the **Windows Recycle Bin** instead of permanent destruction. Destructive system commands (`format-volume`, `rmdir /s /q c:\`) are strictly blocked.
+- **Cross-Process Human Approval:** Multi-client stdio processes (Claude, Cursor) publish pending approval jobs to a shared durable mirror, allowing the local Web Dashboard to review and decide jobs while the owning process securely executes them.
+- **First-class Windows Integrations:** NVIDIA/WMI GPU telemetry, Windows Services management, native UTF-8 PowerShell runner, no-shell command runner, and headless Microsoft Edge PDF compilation.
 
 ---
 
@@ -51,19 +67,23 @@
 1. **All-in-One Gateway & Web Monitor:**
    - **Streamable HTTP:** `http://<HOST>:8788/mcp` (Modern MCP standard)
    - **SSE Stream & POST:** `http://<HOST>:8788/sse` and `/message`
-   - **Web Monitor Dashboard:** `http://<HOST>:8788/` (Interactive metrics, sessions, drives, memory, GPU, and live audit logs)
+   - **Web Monitor & Approval Dashboard:** `http://<HOST>:8788/` (Interactive metrics, pending approvals, sessions, drives, memory, GPU, and live audit logs)
    - **Interactive File Viewer:** `http://<HOST>:8788/preview?path=...` (Rich Markdown & code viewer with syntax formatting)
    - **Health Check:** `http://<HOST>:8788/health`
-2. **High-Observability Logging & Secret Masking:**
+2. **Schema-v2 Governance & Human Approvals:**
+   - Granular folder scoping (`read`, `readwrite`) preventing unauthorized filesystem traversal.
+   - Terminal policies (`off`, `ask`, `full`) and risk classifications (R0 to R5).
+   - Durable approval coordination across concurrent stdio instances with exactly-once execution guarantees (`executionCount <= 1`).
+3. **High-Observability Logging & Secret Masking:**
    - Microsecond execution timings with ANSI color-coded tags (`[HTTP]`, `[TOOL-START]`, `[TOOL-DONE]`, `[SECURITY]`).
-   - Automatically sanitizes Bearer tokens, API keys (`sk-***`, `ghp_***`), AWS credentials (`AKIA***`), JSON properties (`"authToken"`, `"password"`, `"x-api-key"`), and sensitive arguments before printing or writing logs.
-3. **Background Daemon Task Engine:**
+   - Automatically sanitizes Bearer tokens, API keys (`sk-***`, `ghp_***`), AWS credentials (`AKIA***`), JSON properties (`"authToken"`, `"password"`, `"x-api-key"`), and sensitive arguments.
+4. **Background Daemon Task Engine:**
    - Execute long-running dev servers (`npm run dev`, `docker compose up`) as background tasks with detached PIDs, non-blocking logs streaming, and interactive stdin support.
-4. **High-Performance Code Search (Ripgrep):**
+5. **High-Performance Code Search (Ripgrep):**
    - Integrates `ripgrep` (`rg.exe`) for fast regex search with streaming pagination (`page`, `pageSize`, `hasMore`) to prevent context window overflow.
-5. **Headless PDF Generation:**
+6. **Headless PDF Generation:**
    - Converts Markdown and HTML into clean PDF documents using pre-installed Microsoft Edge or Chrome without requiring heavy dependencies like Puppeteer.
-6. **Tailscale & Remote Ready:**
+7. **Tailscale & Remote Ready:**
    - Optionally bind to `0.0.0.0` or your Tailscale IP (`100.x.y.z`) for cross-device access. Default is `127.0.0.1` (loopback-only). Non-loopback binding requires Bearer Token verification and is guarded by a startup safety gate.
 
 ---
@@ -81,586 +101,316 @@
 
 ---
 
-## Architecture & Dashboard
+## Architecture & Live Dashboard
 
 ### System Architecture
 
 ```mermaid
 flowchart TD
-    Client["AI Client (Claude / Cursor / Remote)"]
+    Claude["Claude Desktop (stdio)"]
+    Cursor["Cursor Agent (stdio)"]
+    Remote["Remote / HTTP Client"]
 
-    subgraph WinHelm["WinHelm Server (Port 8788)"]
-        subgraph Gateway["Single-Process Unified Gateway"]
-            MCP_HTTP["Streamable HTTP (/mcp)"]
-            MCP_SSE["SSE Gateway (/sse, /message)"]
-            Dashboard["Web Monitor (/ & /dashboard)"]
-            PreviewUI["File Preview (/preview)"]
-            Health["Health & Audit Export (/health, /api/monitor/*)"]
-        end
-
-        subgraph Security["Security & Governance"]
-            AuthGuard["Bearer Token Authentication"]
-            RateLimit["Rate Limiter (120 req/min)"]
-            PathGuard["Allowed Directories Guard"]
-            CmdGuard["Blocked Commands Guard"]
-            Sanitizer["Secret Masking (API Keys / Passwords)"]
-        end
-
-        subgraph Engines["Core Engine Layer"]
-            PSEngine["PowerShell UTF-8 Runner"]
-            TaskEngine["Background Daemon Task Engine"]
-            FSEngine["Filesystem & Safe Delete (Recycle Bin)"]
-            SearchEngine["Ripgrep Streaming Engine"]
-            PDFEngine["Edge / Chrome Headless PDF Engine"]
-            SysEngine["System, GPU & Windows Services Inspector"]
-        end
+    subgraph Coordination["Durable Coordination (~/.winhelm)"]
+        ReqMirror["approval-requests/<jobId>.json (Owner Mirror)"]
+        DecMirror["approval-decisions/<jobId>.json (First-Writer-Wins)"]
+        SecStore["secrets.json (Protected Secret Storage)"]
+        AdminCode["admin-code-store.json (Digest Store)"]
     end
 
-    subgraph Windows["Windows Operating System"]
-        Win32["Win32 Shell / Recycle Bin"]
-        PowerShell["PowerShell CLI / Tasks"]
-        WMI_NVIDIA["WMI & nvidia-smi Telemetry"]
-        SCM["Windows Service Control Manager"]
+    subgraph Gateway["WinHelm Web Gateway & Dashboard (Port 8788)"]
+        Dashboard["Web Dashboard (/admin/approvals, /dashboard)"]
+        HTTPGateway["Streamable HTTP (/mcp) & SSE (/sse)"]
+        DecisionPlane["Decision Plane (Approves / Denies foreign & local jobs)"]
     end
 
-    Client <--> Gateway
-    Gateway --> Security
-    Security --> Engines
-    Engines <--> Windows
+    subgraph Execution["Execution Plane (Owning Process Only)"]
+        Engine["Approval Engine (State CAS: approved -> running)"]
+        ExecGuard["Invariant: executionCount <= 1"]
+        Tools["41 Canonical System Tools"]
+    end
+
+    Claude -->|creates job| ReqMirror
+    Cursor -->|creates job| ReqMirror
+    Remote <--> HTTPGateway
+
+    ReqMirror -->|reads pending jobs| Dashboard
+    Dashboard -->|records decision| DecMirror
+    DecMirror -->|250ms tick consumes| Engine
+    Engine --> ExecGuard --> Tools
 ```
-
-### Web Monitor & Live Dashboard
-
-Access the built-in real-time dashboard in your browser at `http://localhost:8788/`:
-
-![WinHelm Live Dashboard](assets/dashboard.png)
-
-#### Live Task Execution & Telemetry Streaming
-
-![WinHelm Live Demo](assets/demo.gif)
-
-#### Interactive File & Markdown Preview (`preview://file`)
-
-Access syntax-highlighted code and rendered Markdown directly at `http://localhost:8788/preview?path=<filepath>`:
-
-![WinHelm Interactive File Preview](assets/preview.png)
 
 ---
 
 ## Quick Start
 
-### 1. Installation & Setup
+### 1. Setup & Configuration Wizard
 
-#### Option A: Standalone Executable (Recommended for Production)
-Download the portable zero-dependency `winhelm.exe` from [GitHub Releases](https://github.com/dhammawatthumpra-coder/winhelm-mcp/releases) or compile locally with `npm run build:exe`. Requires no Node.js runtime on Windows 10/11.
+Configure WinHelm using the interactive setup command or non-interactive CLI flags:
 
-#### Option B: NPM CLI (Convenient for Dev & Testing)
 ```powershell
-# Install globally
-npm install -g winhelm-mcp
+# Interactive wizard (prompts for profile preset and allowed folders)
+winhelm setup
 
-# Run immediately
-winhelm --profile dev
+# Non-interactive quick start with balanced profile and explicit workspace
+winhelm setup --preset balanced --folder "D:\Workspace" --yes
 
-# Or run on-demand with npx (no global install required)
-npx winhelm-mcp --profile dev
+# Dry-run preview without writing to disk
+winhelm setup --preset safe --folder "C:\Projects" --dry-run
+
+# Migrate an existing v1.2.1 configuration to schema-v2
+winhelm setup --migrate-legacy --folder "D:\Workspace" --yes
 ```
 
-#### Option C: Clone & Build from Source
-```powershell
-git clone https://github.com/dhammawatthumpra-coder/winhelm-mcp.git
-cd winhelm-mcp
-npm install
-npm run build
-```
-
-### 2. Start the Server
+### 2. Starting WinHelm
 
 ```powershell
-# Start standard server on port 8788 (full profile)
+# Start HTTP/SSE gateway and Web Dashboard on port 8788
 npm start
+# or:
+winhelm
 
-# Or start with a lightweight profile for coding agents (dev) or small models (minimal)
-node dist/index.js --profile dev
+# Run directly in standard I/O mode for MCP clients
+winhelm --stdio
 
-# Or customize port and bearer token via CLI flags
-node dist/index.js --port 8788 --auth my-secret-token
-
-# Or run in Read-Only mode (disallows file edits, deletions, and killing processes)
-node dist/index.js --read-only
+# Run in read-only mode (blocks all mutations and shell execution)
+winhelm --read-only
 ```
 
-### 3. Verify Health Check
+### 3. Client Connection (Claude Desktop & Cursor)
 
-Visit `http://localhost:8788/health` in your browser. You should receive:
-```json
-{
-  "status": "ok",
-  "server": "winhelm-mcp",
-  "version": "1.2.1",
-  "activeSessions": {
-    "sse": 0,
-    "streamableHttp": 0
-  },
-  "uptimeSeconds": 12,
-  "timestamp": "2026-09-28T08:00:00.000Z"
-}
-```
-
----
-
-## Tool Profiles ("Load Only What You Need")
-
-AI coding assistants perform much better when their context window isn't bloated with dozens of unneeded tool schemas. WinHelm implements a **Dynamic Profile System** so your agent sees only the tools it actually needs:
+WinHelm provides automatic configuration discovery and connection helpers:
 
 ```powershell
-# 1. Minimal Profile: 6 essential tools for small models (Haiku, Llama 8B, local LLMs)
-winhelm --profile minimal
+# Preview configuration changes for Claude Desktop (dry-run)
+winhelm connect claude --dry-run
 
-# 2. Core Profile: 15 essential tools (terminal, file read/write/edit/search/hash, process list, telemetry)
-winhelm --profile core
+# Apply configuration to Claude Desktop (creates backup, preserves other MCP servers)
+winhelm connect claude --yes
 
-# 3. Developer Profile: 28 tools (Core + background tasks, ripgrep, zip archives, HTTP requests, PDF reports, system open & file preview)
-winhelm --profile dev
+# Apply configuration to Cursor IDE
+winhelm connect cursor --yes
 
-# 4. SysAdmin Profile: 37 tools (All Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop automation & preview — all except pdf_generate)
-winhelm --profile sysadmin
-
-# 5. Full Suite: All 38 tools + interactive preview resource (default)
-winhelm --profile full
+# Configure both Claude and Cursor at once
+winhelm connect all --yes
 ```
 
-### Profile Inclusions
+- **Claude Desktop Support:** Resolves both classic (`%APPDATA%\Claude\claude_desktop_config.json`) and packaged/MSIX installations (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\claude_desktop_config.json`) automatically.
+- **Fail-Closed Safety:** If multiple ambiguous configuration files are discovered, the connector fails closed and requires an explicit `--config <path>` argument.
+- **Secret Protection:** Client configuration files point to `winhelm --stdio` and never store raw auth tokens in client JSON.
 
-| Profile | Active Tools | Key Inclusions | Context Window Savings |
-| :--- | :---: | :--- | :--- |
-| **`minimal`** | **6** | `terminal_run`, `file_read`, `file_write`, `file_list`, `file_search`, `system_info` | 🟢 **~85% token reduction** |
-| **`core`** | **15** | `terminal_run`, `file_read`, `file_write`, `file_edit`, `file_list`, `file_search`, `file_copy`, `file_move`, `file_tail`, `file_hash`, `file_delete_safe`, `system_info`, `gpu_info`, `process_list`, `port_check` | 🟢 **~60% token reduction** |
-| **`dev`** | **28** | All Core + `terminal_task_*` (5 tasks), `file_search_ripgrep`, `archive_zip/unzip`, `http_ping/request`, `pdf_generate`, `system_open`, `preview://file` | 🟡 **~30% token reduction** |
-| **`sysadmin`** | **37** | All tools except `pdf_generate`: Core + tasks, ripgrep, archives, services, event logs, network, process kill, desktop actions & preview | 🟠 Full Windows ops toolkit |
-| **`full`** | **38** | All 38 tools + interactive HTML preview resource (default when omitted) | 🔵 Complete Windows control |
+### 4. Dashboard & Human Approvals
 
-### Token Economics & Model Optimization
+The WinHelm Web Dashboard at `http://127.0.0.1:8788/` allows monitoring system health and reviewing pending tool approval jobs:
 
-| Profile | Tools | Approx Context Tokens | Token Savings | Recommended Target Models & Use Cases |
-| :--- | :---: | :---: | :---: | :--- |
-| **`minimal`** | **6** | **~1,500** | 🟢 **−85%** | **Claude 3.5 Haiku, Llama 3 8B, local LLMs** or token-constrained pipelines |
-| **`core`** | **15** | **~4,000** | 🟢 **−60%** | Everyday coding & file operations without background processes |
-| **`dev`** | **28** | **~6,800** | 🟡 **−32%** | **Claude 3.7 Sonnet, GPT-4o, Cursor** full-stack software development |
-| **`sysadmin`** | **37** | **~9,200** | 🟠 **−8%** | Headless server management, Windows DevOps, diagnostics & audit |
-| **`full`** | **38** | **~10,000** | 🔵 **Baseline** | Complete Windows native desktop suite with PDF & HTML visual previews |
-
-> **Pro Tip:** In `claude_desktop_config.json`, pass `["--profile", "dev"]` under `args` for software development, or `["--profile", "minimal"]` for Claude Haiku!
+1. Request a single-use local admin code from your interactive terminal:
+   ```powershell
+   winhelm admin-code
+   ```
+2. Open `http://127.0.0.1:8788/` in your browser and enter the admin code when prompted.
+3. Review pending cross-process approvals initiated by Claude Desktop or Cursor, inspecting client identity, tool name, risk level, folder access, and parameter diffs.
+4. Click **Approve** or **Deny**. The Dashboard records the decision, and the owning process executes the action.
+5. Alternatively, inspect and decide jobs directly from the terminal:
+   ```powershell
+   winhelm jobs
+   winhelm approve <jobId>
+   winhelm deny <jobId>
+   ```
 
 ---
 
-## Client Configuration
+## Configuration Modes: Legacy vs. Schema-v2
+
+WinHelm supports two distinct configuration operating modes:
+
+### 1. Legacy Mode (v1.2.1 Compatibility)
+- Active when `winhelm.config.json` lacks a `schemaVersion` field.
+- Preserves original v1.2.1 behavior: broad directory access governed solely by `allowedDirectories`, tool registration filtering by profile, and basic command blocklist.
+- **Approval gating is inactive in legacy mode:** calls to approval-gated actions (such as terminating an external process not started by WinHelm) are not gated by human approval in legacy mode.
+- Serves as a compatibility fallback for existing environments.
+
+### 2. Schema-v2 Mode (`schemaVersion: 2`)
+- Explicitly opted in via `winhelm setup` or `"schemaVersion": 2`.
+- Enforces granular **Folder Permissions** (`read`, `readwrite`) with canonical path resolution.
+- Enforces **Terminal Policies** (`off`, `ask`, `full`) and **Risk Classes** (R0 to R5).
+- Enforces **Human Approval Lifecycle** with cross-process visibility and durable journals.
+- Protects internal configuration, logs, journals, and secrets from AI tool modification even if broad folder permissions exist.
+
+---
+
+## Security Profiles & Presets
+
+In schema-v2, profiles represent policy presets that configure folder permissions, terminal modes, and tool authorization policies:
+
+| Profile | Folder Mode | Terminal Mode | Tool Policies | Target Use Case |
+| :--- | :---: | :---: | :--- | :--- |
+| **`safe`** | `read` (read-only) | `off` | R0 tools `auto`; all mutating, network, and desktop tools `off` | Code exploration, audits, small LLMs, zero mutation risk |
+| **`balanced`** (Recommended) | `readwrite` | `ask` (approval required) | R0/R1 `auto`; R2/R3/R4 `ask` (approval); shell execution gated by terminal policy | Daily interactive engineering with human approval for elevated actions |
+| **`power`** | `readwrite` | `full` (autonomous) | R0/R1/R2 `auto`; R3/R4 `ask`; terminal & command execution `auto` | Trusted automated agent pipelines requiring unrestricted shell workflows |
+
+> ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not supported** in v1.3. It is explicitly reserved and deferred to v1.4.  
+> 💡 **Legacy Presets:** Named presets (`minimal`, `core`, `dev`, `sysadmin`, `full`) remain supported in schema-v2 as compatibility presets that map to specific tool policy subsets.
+
+---
+
+## Canonical Tool Registry (41 Tools)
+
+WinHelm defines **41 canonical tools** in its single source of truth registry (`src/tools/registry.ts`), validated via `npm run lint:tools`:
+
+- **38 Legacy Tools:** Original tools across Terminal (6), Filesystem (12), Search/PDF/Preview (3), Desktop (5), System (9), and Network (3).
+- **3 Schema-v2 Additions:**
+  1. `command_run`: Direct command execution without shell wrapping, passing argument vectors cleanly.
+  2. `winhelm_status`: Read-only snapshot of runtime permissions, profile, and server health.
+  3. `winhelm_job_status`: Inspect status or retrieve results of an existing approval job by `jobId` or idempotency key.
+
+### Conditional Runtime Exposure
+
+- **In Legacy Mode:** 40 tools are registered (38 legacy tools + 2 recovery tools `winhelm_status` and `winhelm_job_status`). The `command_run` tool is schema-v2 only.
+- **In Schema-v2 Mode:** All 41 canonical tools are registered on the MCP server. Permissions and approval gating are evaluated at call-time based on active folder rules and risk policy.
+
+---
+
+## Human Approval & Cross-Process Coordination
+
+WinHelm v1.3 introduces a robust cross-process approval architecture (post DEF-02):
+
+1. **Separation of Concerns:**
+   - **Decision Plane:** The local Web Dashboard (`http://127.0.0.1:8788/`) or local CLI (`winhelm approve/deny`).
+   - **Execution Plane:** The **owning WinHelm process** (e.g. the stdio process spawned by Claude Desktop or Cursor). The Dashboard never executes tool actions directly.
+2. **Durable Per-Job Mirroring:**
+   - On approval gating, the owning process durably persists the request to `~/.winhelm/approval-requests/<jobId>.json` along with sanitized display metadata (`clientInfo`, `risk`, `folderAccess`, `expiresAt`).
+   - Decisions are recorded using atomic, first-writer-wins file creation (`~/.winhelm/approval-decisions/<jobId>.json`).
+   - The owning process polls for decisions every 250 ms and applies them through its own engine.
+3. **Atomic Exactly-Once Execution:**
+   - Transition from `approved` to `running` uses a Compare-And-Swap (CAS) guard.
+   - Guarantees `executionCount <= 1`: duplicate approves cannot cause duplicate execution.
+   - Decisions submitted after job expiration (`expired`) or cancellation cannot execute.
+4. **Fail-Closed Crash Recovery:**
+   - If an owning process crashes while a job is running or pending, the recovered job state transitions to `unknown`. WinHelm never auto-replays ambiguous side effects.
+
+---
+
+## Client Configuration Reference
 
 ### 1. Claude Desktop (`claude_desktop_config.json`)
 
-Path: `%APPDATA%\Claude\claude_desktop_config.json`
+Use `winhelm connect claude --yes` for automatic configuration, or configure manually:
 
-#### Option A: Zero-Install via npx (Easiest & Recommended)
-```json
-{
-  "mcpServers": {
-    "winhelm": {
-      "command": "npx",
-      "args": ["-y", "winhelm-mcp", "--stdio", "--profile", "dev"],
-      "env": {
-        "MCP_ALLOWED_DIRECTORIES": "D:\\Workspace,C:\\Projects"
-      }
-    }
-  }
-}
-```
-> **Instant Setup:** Runs the latest official `winhelm-mcp` directly from npm on demand without manual cloning or global installation. Specify permitted workspace paths in `MCP_ALLOWED_DIRECTORIES`.
-
-#### Option B: Remote / Local SSE Gateway
-```json
-{
-  "mcpServers": {
-    "winhelm": {
-      "url": "http://127.0.0.1:8788/sse",
-      "headers": {
-        "Authorization": "Bearer my-secret-token"
-      }
-    }
-  }
-}
-```
-
-#### Option C: Direct Stdio / Node Process (From Source)
 ```json
 {
   "mcpServers": {
     "winhelm": {
       "command": "node",
-      "args": ["<PATH_TO_WINHELM>/dist/index.js", "--stdio", "--profile", "dev"],
-      "env": {
-        "MCP_ALLOWED_DIRECTORIES": "D:\\mcp,C:\\Projects"
-      }
-    }
-  }
-}
-```
-> **Context Optimization:** Supplying `"--profile", "dev"` restricts tools to 28 developer essentials, saving ~32% context tokens while preserving all coding, ripgrep, background task, PDF, archive, and preview capabilities.
-
-#### Option D: Standalone Executable (`winhelm.exe`)
-```json
-{
-  "mcpServers": {
-    "winhelm": {
-      "command": "<PATH_TO_WINHELM>\\dist\\winhelm.exe",
-      "args": ["--stdio", "--profile", "dev"]
+      "args": ["D:\\mcp\\winhelm-mcp\\dist\\index.js", "--stdio"]
     }
   }
 }
 ```
 
-#### Option E: Per-Project Dedicated Config File (Isolated Profiles & Roots)
-```json
-{
-  "mcpServers": {
-    "winhelm-project-a": {
-      "command": "winhelm",
-      "args": ["--stdio", "--config", "D:\\mcp\\configs\\project-a.json"]
-    }
-  }
-}
-```
-> **Multi-Instance Isolation:** Each project config file maintains its own isolated `allowedDirectories`, `profile`, and security rules without modifying the shared default `winhelm.config.json`. CLI overrides are session-only (`--no-persist` by default) to prevent instances from colliding.
-
----
+- **Config Locations:**
+  - Classic: `%APPDATA%\Claude\claude_desktop_config.json`
+  - Packaged (MSIX): `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\claude_desktop_config.json`
+- **Preservation:** WinHelm automatically merges into `mcpServers` and creates a timestamped backup (`.backup-<ISO>`) of the existing configuration.
 
 ### 2. Cursor IDE
 
-In Cursor Settings (`Settings` -> `Features` -> `MCP` -> `Add new MCP server`):
+Use `winhelm connect cursor --yes` for automatic configuration, or add in Cursor Settings (`Features` -> `MCP`):
 
-- **Name:** `winhelm`
-- **Type:** `sse`
-- **URL:** `http://127.0.0.1:8788/sse`
-
-*(If authentication is configured, add `"Authorization": "Bearer <YOUR_TOKEN>"` to the headers section).*
-
----
+- **Type:** `command`
+- **Command:** `node D:\mcp\winhelm-mcp\dist\index.js --stdio`
 
 ### 3. ChatGPT & OpenAI MCP Tunnel (`tunnel-client`)
 
-WinHelm integrates seamlessly with OpenAI's official `tunnel-client` daemon, allowing ChatGPT to execute Windows commands, inspect files, and manage background tasks directly over a secure Cloudflare Tunnel:
-
-#### Profile Configuration (`winhelm-mcp.yaml`)
 ```yaml
 config_version: 1
-
 control_plane:
   base_url: "https://api.openai.com"
   tunnel_id: "your-tunnel-id-here"
   api_key: "env:CONTROL_PLANE_API_KEY"
-
-health:
-  listen_addr: "127.0.0.1:18026"
-
-admin_ui:
-  open_browser: false
-
-log:
-  level: info
-  format: json
-
 mcp:
   commands:
-    # Direct stdio connection with dev profile (~32% token savings for ChatGPT)
     - channel: main
-      command: 'node D:/mcp/winhelm-mcp/dist/index.js --stdio --profile dev'
+      command: 'node D:/mcp/winhelm-mcp/dist/index.js --stdio'
 ```
-
-#### Running the Tunnel
-```powershell
-.\tunnel-client.exe run --profile-file winhelm-mcp.yaml
-```
-> **Purity Guard:** In `--stdio` mode, WinHelm routes all operational logs to `stderr`, leaving `stdout` purely for JSON-RPC messages to guarantee zero parsing errors on ChatGPT.
-
----
 
 ### 4. Remote & Tailscale Connection
 
-WinHelm binds by default to `127.0.0.1` (localhost only). To allow secure cross-device access over private networks like Tailscale or WireGuard, bind to `0.0.0.0` or your Tailscale IP:
+```powershell
+# Bind to 0.0.0.0 or Tailscale IP (Requires auth token)
+winhelm --host 0.0.0.0 --auth my-secret-token
+```
 
-1. Retrieve your machine's Tailscale IP (e.g. `100.80.20.10`) or Tailscale Funnel domain (e.g. `https://your-node.ts.net`).
-2. Start WinHelm with `--host 0.0.0.0` and a strong authentication token:
-   ```powershell
-   node dist/index.js --port 8788 --host 0.0.0.0 --auth super-secure-token-here
-   ```
-   > ⚠️ **Host Safety Gate:** Binding to `--host 0.0.0.0` exposes the server to your local network and Tailscale. You **must** supply an authentication token (`--auth`), otherwise startup will be rejected with exit code 1 by the host safety gate.
-3. Connect your mobile or remote Claude / Cursor / ChatGPT client:
-   - **Streamable HTTP:** `http://100.80.20.10:8788/mcp`
-   - **SSE Stream:** `http://100.80.20.10:8788/sse`
-   - **Web Monitor Dashboard:** `http://100.80.20.10:8788/?token=super-secure-token-here` (or Tailscale Funnel URL)
-   - **Header:** `Authorization: Bearer super-secure-token-here`
-
-#### Claude.ai Custom Connectors (URL Query Token)
-
-Claude.ai Custom Connectors and certain web/mobile clients do not provide a UI field to enter custom HTTP headers (such as `Authorization: Bearer <token>`). WinHelm natively supports passing the authentication token directly via the URL query parameter:
-
-- **Server URL:** `https://<your-tailnet-domain>.ts.net/mcp?token=<YOUR_AUTH_TOKEN>`
-- **Authentication:** Select **`No sign-in`**
-- **Transport (under Advanced):** Streamable HTTP (Default)
-
-> 🔒 **Security Guarantee:** Passing the token in the URL query parameter still triggers full timing-safe cryptographic verification on the server, ensuring your Windows machine remains completely protected from unauthorized internet access without needing a complex OAuth setup.
-
----
-
-## Tools Overview (38 Tools)
-
-WinHelm provides 38 focused Windows native tools grouped across 6 functional categories. Each tool is loaded dynamically based on your active `--profile`:
-
-| Category | Tools | In Profiles | Summary |
-| :--- | :---: | :--- | :--- |
-| **Terminal & Background Tasks** | 6 | `minimal` (run only), `core` (run only), `dev`, `sysadmin`, `full` | Synchronous PowerShell runner and detached daemon processes with live logs & stdin. |
-| **Filesystem, Safe Delete & Archives** | 12 | `minimal` (read, write, list, search), `core` (10 tools), `dev` (all 12), `sysadmin` (all 12), `full` (all 12) | Surgical file edits, streaming tails, SHA-256 hashes, .NET zip archives, and **Recycle Bin safe delete**. |
-| **Codebase Search, PDF & Preview** | 3 | `dev` (all 3), `sysadmin` (search & preview), `full` (all 3) | Streaming paginated `ripgrep` regex search (`query` parameter), headless Chromium PDF printer, and web previewer. |
-| **Desktop, Clipboard & Toast** | 5 | `dev` (`system_open`), `sysadmin` (all 5), `full` (all 5) | Windows clipboard read/write, primary screen capture, system app launcher (`system_open`), and native Toast notifications. |
-| **System, Processes & Services** | 9 | `minimal` (`system_info`), `core` (info, gpu, procs, port), `sysadmin` (all 9), `full` (all 9) | CPU/RAM/Drive telemetry, NVIDIA GPU stats, process list/kill, port inspector, event logs, and service control. |
-| **Network & Connectivity** | 3 | `dev` (ping, req), `sysadmin` (all 3), `full` (all 3) | HTTP latency probe, full REST client (`http_request`), and local/Tailscale adapter inspector. |
-
-📖 **See [docs/TOOLS.md](docs/TOOLS.md) for full parameter specifications, types, returns, and schemas.**
+- **Endpoint:** `http://<TAILSCALE_IP>:8788/mcp`
+- **Header:** `Authorization: Bearer my-secret-token`
+- **Host Safety Gate:** WinHelm enforces a fail-closed startup check that terminates immediately if bound to a non-loopback host without an authentication token.
 
 ---
 
 ## MCP Resources & Web Endpoints
 
 ### MCP Resources
-
-WinHelm exposes 1 dedicated Model Context Protocol resource:
-
 | URI | MIME Type | Description |
 | :--- | :--- | :--- |
-| `preview://file` | `text/html;profile=mcp-app` | Dynamically renders rich HTML preview for Markdown and source code files with line numbers and syntax highlighting. |
+| `preview://file` | `text/html;profile=mcp-app` | Dynamic HTML preview for Markdown and source code files with syntax highlighting. |
 
----
-
-### Gateway Web Endpoints
-
-WinHelm hosts a full web application on a single port (default: `8788`):
-
-- **`/` & `/dashboard`** — Real-time Web Monitor Dashboard (CPU, RAM, GPU, sessions, requests, live logs).
+### Gateway Endpoints
+- **`/` & `/dashboard`** — Web Monitor & Approval Dashboard.
 - **`/mcp`** — Streamable HTTP transport endpoint.
-- **`/sse`** — Server-Sent Events transport endpoint for clients like Claude Desktop and Cursor.
+- **`/sse`** — Server-Sent Events transport endpoint.
 - **`/message`** — POST endpoint for incoming JSON-RPC messages in SSE mode.
 - **`/preview`** — Interactive browser file viewer (`/preview?path=D:\project\README.md`).
-- **`/health`** — JSON health status and server uptime probe.
-- **`/api/monitor/stats`** — JSON hardware and session statistics.
-- **`/api/monitor/export?format=json|csv`** — Audit log export for security compliance.
-
-> 💡 **Browser Dashboard Access with Authentication:**  
-> When authentication is enabled (`--auth <token>` or `authToken`), accessing the Web Monitor Dashboard or Previewer via your browser requires passing the token once in the URL:  
-> - **Dashboard:** `http://<HOST>:8788/?token=<YOUR_AUTH_TOKEN>` (or `https://<your-tailnet-domain>.ts.net/?token=<YOUR_AUTH_TOKEN>`)  
-> - **File Preview:** `http://<HOST>:8788/preview?path=D:\project\README.md&token=<YOUR_AUTH_TOKEN>`  
-> WinHelm validates the token, displays live metrics and real-time logs, and sets a secure `HttpOnly` session cookie so subsequent dashboard navigation stays authenticated without re-entering the token.
+- **`/health`** — Health check probe (`{"status": "ok", "version": "1.2.1"}`).
+- **`/admin/approvals`** — Admin approvals list and decision API.
 
 ---
 
-## Configuration & Environment Variables
+## Protected Secrets & Path Isolation
 
-WinHelm loads configuration in the following order of precedence:
-1. CLI Flags
-2. Environment Variables
-3. `winhelm.config.json`
-4. Default settings
-
-### Reference Table
-
-| CLI Flag | Environment Variable | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--config <path>` | *N/A* | *auto* | Load configuration from a specific JSON file (for per-project multi-agent isolation). |
-| `--stdio` | *N/A* | `false` | Run in standard I/O mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor). |
-| `--profile, -p <name>` | `WINHELM_PROFILE` | `full` | Tool profile to load: `minimal` (6), `core` (15), `dev` (28), `sysadmin` (37), or `full` (38). |
-| `--tools <list>` | *N/A* | *auto* | Explicit comma-separated tools to load or `+tool`/`-tool` modifiers. |
-| `--transport <type>` | `WINHELM_TRANSPORT` | `http` | Transport mode: `http` (Web Gateway + SSE) or `stdio`. |
-| `--port <number>` | `PORT` | `8788` | Port number for the Web Gateway and MCP server. |
-| `--host <string>` | `HOST` | `127.0.0.1` | Network interface to bind (`127.0.0.1` loopback default, `0.0.0.0` for LAN/Tailscale). |
-| `--auth <token>` | `MCP_AUTH_TOKEN` | *none* | Bearer token for authentication. Rejects unauthenticated requests with HTTP 401. |
-| `--read-only` | `MCP_READ_ONLY` | `false` | Enables read-only mode (strictly blocks file writing, shell execution, process killing, service modification, and mutating HTTP requests). |
-| `--allowed-dirs <list>`| `MCP_ALLOWED_DIRECTORIES` | `[]` *(block all)* | Comma-separated directory paths permitted for file access (e.g. `"D:\mcp,C:\Workspace"`). Empty = block all filesystem operations (fail-closed). |
-| `--no-persist` | *N/A* | `true` | Keep CLI overrides session-only without writing to `winhelm.config.json` (default behavior / explicit no-op). |
-| `--persist` | *N/A* | `false` | Persist CLI overrides back to the active configuration file. |
-| *N/A* | `MCP_BLOCKED_COMMANDS` | *(see below)* | Additional comma-separated commands to block from execution. |
-| *N/A* | `MCP_ALLOWED_HOSTS` | `localhost,127.0.0.1,*.ts.net` | Comma-separated allowed hostnames for Host header validation (DNS Rebinding protection). |
-
-### `winhelm.config.json`
-
-Create or modify `winhelm.config.json` in your project root or `%USERPROFILE%\.winhelm\config.json`:
-
-```json
-{
-  "blockedCommands": [
-    "format-volume",
-    "format-disk",
-    "clear-disk",
-    "stop-computer",
-    "restart-computer",
-    "rmdir /s /q c:\\",
-    "del /f /s /q c:\\"
-  ],
-  "allowedDirectories": ["D:\\mcp", "C:\\Workspace"],
-  "allowSystemExecution": true,
-  "profile": "dev",
-  "fileReadLineLimit": 2000,
-  "defaultTimeoutMs": 60000,
-  "telemetryEnabled": false,
-  "authToken": null,
-  "readOnly": false,
-  "rateLimitWindowMs": 60000,
-  "rateLimitMaxRequests": 120
-}
-```
-
-> **Security Boundaries vs. Defense-in-Depth:**  
-> - **True Security Boundaries:** **Authentication Token (`authToken`)**, **Tool Profiles (`minimal`, `core`)**, and **Read-Only Mode (`readOnly`)**. For untrusted or public environments, configure an `authToken` and use `--profile core` to exclude terminal execution completely.  
-> - **Defense-in-Depth:** The command blocklist protects against accidental destructive commands (`format-volume`, `rmdir /s /q c:\`), but is not an impenetrable sandbox. `allowedDirectories` strictly bounds native File Tools (`file_read`, `file_write`, `create_zip`, etc.) and default CWD.  
-> - **DNS Rebinding Defense:** WinHelm validates `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, `*.ts.net`). Requests from unauthorized hostnames are rejected with **HTTP 403 Forbidden**.  
-> - **Remote Tunnel Fail-Closed Gate:** Requests arriving through a reverse proxy or tunnel without an `authToken` configured are rejected immediately with **HTTP 403 Forbidden**.  
-> - **Fail-Closed Filesystem:** `allowedDirectories: []` blocks all filesystem operations by default. Specify target paths (e.g. `["D:\\mcp", "C:\\Workspace"]`). Wildcard `["*"]` is strictly discouraged for unauthenticated or public network exposures.
+1. **Protected Secret Storage:**
+   - Authentication tokens and admin codes are stored in `~/.winhelm/secrets.json` and `admin-code-store.json`, protected by strict filesystem permissions.
+   - Plaintext auth tokens are removed from `winhelm.config.json` upon migration/rotation.
+2. **Protected Internal Paths:**
+   - Internal directories (`~/.winhelm`, logs, journals, config files) are protected from modification by AI filesystem tools (`file_write`, `file_edit`, `file_delete_safe`), even if broad wildcard filesystem permissions exist.
 
 ---
 
-## Windows Background Service (Always-On Daemon)
+## Standalone Executable (`winhelm.exe`)
 
-WinHelm includes a built-in service manager using Windows Task Scheduler to run reliably in the background across system reboots:
-
-```powershell
-# Install as a persistent Windows Service (Run PowerShell as Administrator)
-npm run service:install
-
-# Check service status
-npm run service:status
-
-# Stop / Start the service
-npm run service:stop
-npm run service:start
-
-# Uninstall the service
-npm run service:uninstall
-```
-
----
-
-## Standalone Single-File Executable (`winhelm.exe`)
-
-You can compile WinHelm into a standalone `.exe` (~2.6 MB) that requires **no Node.js installation** on target machines:
+Compile WinHelm into a standalone `.exe` (~2.6 MB) requiring no Node.js runtime:
 
 ```powershell
 npm run build:exe
 ```
 
-The resulting executable will be generated at `dist/winhelm.exe`:
-
+Run standalone executable:
 ```powershell
-# Run standalone executable with custom port
-.\dist\winhelm.exe --port 9000 --auth my-token
+.\dist\winhelm.exe --stdio
 ```
 
 ---
 
-## Security, Rate Limiting & Auditing
+## Known Limitations & Deferred Items
 
-1. **Automatic Secret Redaction:**
-   - Automatically sanitizes sensitive keys (`sk-...`, `ghp_...`, `Bearer ********`, and password values) from terminal output, dashboard UI, and log files.
-2. **Built-in Rate Limiting (Sliding Window):**
-   - Enforces a sliding window ceiling of 120 requests per minute per IP address, preventing runaway client loops.
-3. **Auditing & Log Rotation:**
-   - Logs are stored in `logs/winhelm-YYYY-MM-DD.log` (capped at 10 MB per file, auto-pruning logs older than 7 days).
-   - Export audit logs anytime via browser or API:
-     - `http://localhost:8788/api/monitor/export?format=json`
-     - `http://localhost:8788/api/monitor/export?format=csv`
-4. **Fail-Closed Filesystem Confinement:**
-   - `allowedDirectories: []` blocks all filesystem operations by default for safety.
-   - Symlinks and NTFS directory junctions are resolved via `fs.realpathSync` before boundary evaluation.
-5. **Loopback-First Network Binding:**
-   - Default host is `127.0.0.1` (loopback only).
-   - Non-loopback binding (such as `0.0.0.0`) without `--auth` is blocked at startup with exit code 1.
-   - Bearer tokens are compared using `crypto.timingSafeEqual` with buffer length validation to prevent timing side-channels.
-
----
-
-## Troubleshooting
-
-### 1. Port Conflict (`EADDRINUSE: address already in use :::8788`)
-- **Cause:** Another process or previous instance is using port 8788.
-- **Solution:** Specify a different port using `--port`:
-  ```powershell
-  node dist/index.js --port 8790
-  ```
-  Or check which process is holding port 8788:
-  ```powershell
-  Get-NetTCPConnection -LocalPort 8788 | Select-Object OwningProcess
-  ```
-
-### 2. HTTP 401 Unauthorized
-- **Cause:** WinHelm was started with `--auth <token>` or `MCP_AUTH_TOKEN`, but the MCP client didn't supply matching credentials.
-- **Solution 1 (Clients with Custom Header Support):** Add the Bearer token header to your client configuration:
-  ```json
-  "headers": {
-    "Authorization": "Bearer <YOUR_TOKEN>"
-  }
-  ```
-- **Solution 2 (Claude.ai Custom Connectors without Header UI):** Append the token directly to the Server URL and select **No sign-in**:
-  ```text
-  https://<your-domain>/mcp?token=<YOUR_TOKEN>
-  ```
-- **Solution 3 (Browser Dashboard & File Preview):** Append `?token=<YOUR_TOKEN>` to the URL in your browser:
-  ```text
-  https://<your-domain>/?token=<YOUR_TOKEN>
-  https://<your-domain>/preview?path=...&token=<YOUR_TOKEN>
-  ```
-
-### 3. PowerShell Execution Policy Restriction
-- **Cause:** Windows blocks script execution (`File cannot be loaded because running scripts is disabled on this system`).
-- **Solution:** Run with bypass flag:
-  ```powershell
-  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-  ```
-
-### 4. Windows Service Installation Error (`Access is denied`)
-- **Cause:** `npm run service:install` registers a task in Windows Task Scheduler, which requires elevated privileges.
-- **Solution:** Open PowerShell as **Administrator** and re-run `npm run service:install`.
-
-### 5. Tailscale / Remote Timeout
-- **Cause:** Windows Defender Firewall is blocking inbound connections on port 8788.
-- **Solution:** Allow port 8788 in Windows Firewall:
-  ```powershell
-  New-NetFirewallRule -DisplayName "WinHelm MCP Gateway" -Direction Inbound -LocalPort 8788 -Protocol TCP -Action Allow
-  ```
-
-### 6. PDF Generation Headless Browser Not Found
-- **Cause:** Neither Microsoft Edge nor Google Chrome could be located in default system paths.
-- **Solution:** Ensure Microsoft Edge is installed at its standard location (`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`) or install Google Chrome.
-
-### 7. Host Safety Gate Blocks Startup (`Non-loopback binding requires --auth`)
-- **Cause:** You attempted to bind to a non-loopback address (such as `0.0.0.0`) without specifying an authentication token.
-- **Solution:** Add `--auth <token>` or set the `MCP_AUTH_TOKEN` environment variable. This security gate prevents accidental public exposure of your host system without authentication.
+The following features are intentionally out of scope for v1.3 and deferred to v1.4:
+- **Dangerous Mode:** Unrestricted mode is disabled/reserved.
+- **Full Dashboard i18n:** Partial localization exists; comprehensive Thai/English translation is scheduled for v1.4.
+- **System Tray Application (Tauri):** Scheduled for v1.4; v1.3 uses Web Dashboard and Windows Toast notifications.
+- **`.mcpb` Bundle Packaging:** Scheduled for v1.4.
 
 ---
 
 ## Documentation & Deep Dive
 
-For in-depth guides, architectural references, and developer guidelines, explore the `docs/` folder:
-
-- 📖 **[Comprehensive Tools Reference](docs/TOOLS.md)**: Exhaustive documentation for all 38 tools, including parameter types, options, return formats, and JSON-RPC examples.
-- ⚙️ **[Tool Profiles & Context Optimization](docs/PROFILES.md)**: Deep dive into the 5 built-in profiles (minimal, core, dev, sysadmin, full), custom `--tools` filtering, token economics, and LLM optimization recipes.
-- 🛡️ **[Security Architecture & Model](docs/SECURITY.md)**: Deep dive into the 5-layer security model, path confinement, regex command blacklists, and secret masking.
-- 🎯 **[Threat Model & STRIDE Analysis](docs/THREAT_MODEL.md)**: Comprehensive STRIDE threat analysis, Mermaid trust boundary diagrams, assumptions, and mitigations.
-- 📜 **[Terms of Use & Disclaimer](TERMS_OF_USE.md)**: Bilingual (EN/TH) user agreement, shared responsibility model, and warranty disclaimer.
-- 🔒 **[Security Policy & Disclosure](SECURITY.md)**: Coordinated vulnerability disclosure policy, supported versions, and reporting guidelines.
-- 💡 **[Real-World Agent Examples](docs/EXAMPLES.md)**: End-to-end workflows showing how AI agents build projects, troubleshoot Windows crashes, and generate executive PDFs.
-- 📝 **[Changelog](CHANGELOG.md)**: Release notes and version history following Keep a Changelog.
-- 🤝 **[Contributing Guide](CONTRIBUTING.md)**: Instructions for developing, running tests, and opening Pull Requests.
+- 📖 **[Tools Reference](docs/TOOLS.md)**: Full parameter specifications for all 41 tools.
+- ⚙️ **[Tool Profiles](docs/PROFILES.md)**: Safe, Balanced, Power profiles and legacy preset mapping.
+- 🛡️ **[Security Architecture](docs/SECURITY.md)**: Permissions model, approval lifecycle, and cross-process architecture.
+- 🎯 **[Threat Model](docs/THREAT_MODEL.md)**: STRIDE analysis and trust boundary diagrams.
+- 📜 **[Terms of Use](TERMS_OF_USE.md)**: User agreement and shared responsibility model.
+- 📝 **[Changelog](CHANGELOG.md)**: Release notes and version history.
+- 🤝 **[Contributing Guide](CONTRIBUTING.md)**: Development guidelines and test commands.
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE) — see the [LICENSE](LICENSE) file for details.  
-Built cleanly from the ground up for the Windows Model Context Protocol developer community.
-
+This project is licensed under the [MIT License](LICENSE) — see the [LICENSE](LICENSE) file for details.
