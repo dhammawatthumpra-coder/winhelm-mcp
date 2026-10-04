@@ -521,25 +521,33 @@ function resolveZipEntryDestination(
   return candidate;
 }
 
+export interface ZipExtractionSecurityPlan {
+  resolvedZip: string;
+  resolvedTarget: string;
+  entryNames: string[];
+}
+
 /**
- * Extract a .zip archive to a target directory using native PowerShell Expand-Archive
+ * Side-effect-free security inspection for archive extraction.
+ *
+ * This may execute a read-only archive listing, but it never creates the target
+ * directory or extracts an entry. The same function is called again immediately
+ * before extraction so a changed archive cannot rely on stale pre-approval state.
  */
-export async function extractZip(
+export async function preflightZipExtractionSecurity(
   zipPath: string,
-  targetDir: string,
-  overwrite = true
-): Promise<ArchiveResult> {
+  targetDir: string
+): Promise<ZipExtractionSecurityPlan> {
   const configManager = ConfigManager.getInstance();
-  if (configManager.isReadOnly()) {
-    throw new Error("Operation blocked: Server is running in read-only mode.");
-  }
 
   const zipCheck = configManager.checkPathAccess(zipPath, "read");
   if (!zipCheck.allowed) {
     throw new Error(zipCheck.reason);
   }
 
-  const dstCheck = configManager.checkPathAccess(targetDir, "write", { denyRootMutation: false });
+  const dstCheck = configManager.checkPathAccess(targetDir, "write", {
+    denyRootMutation: false,
+  });
   if (!dstCheck.allowed) {
     throw new Error(dstCheck.reason);
   }
@@ -568,6 +576,25 @@ export async function extractZip(
       );
     }
   }
+
+  return { resolvedZip, resolvedTarget, entryNames };
+}
+
+/**
+ * Extract a .zip archive to a target directory using native PowerShell Expand-Archive
+ */
+export async function extractZip(
+  zipPath: string,
+  targetDir: string,
+  overwrite = true
+): Promise<ArchiveResult> {
+  const configManager = ConfigManager.getInstance();
+  if (configManager.isReadOnly()) {
+    throw new Error("Operation blocked: Server is running in read-only mode.");
+  }
+
+  const { resolvedZip, resolvedTarget } =
+    await preflightZipExtractionSecurity(zipPath, targetDir);
 
   await fs.mkdir(resolvedTarget, { recursive: true });
 

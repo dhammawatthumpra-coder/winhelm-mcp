@@ -442,6 +442,10 @@ describe("ConfigManager schema-v2 runtime mode", () => {
           jobTtlMs: 30000,
           maxPending: 5,
         },
+        // This fixture exercises ask/off tool gating, not the network
+        // Absolute-Deny floor. Permit its synthetic loopback target so the
+        // request can reach the approval layer under the R2 ordering.
+        network: { allowLoopback: true },
       },
       async () => {
         resetApprovalEngine();

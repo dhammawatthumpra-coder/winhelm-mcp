@@ -44,6 +44,31 @@ export interface ResolutionOptions {
   platform?: NodeJS.Platform;
 }
 
+export type CommandRunPolicyCode =
+  | "COMMAND_RUN_REJECTED"
+  | "COMMAND_SECURITY_BLOCKED"
+  | "SAFE_COMMAND_PLAN_DENIED"
+  | "TERMINAL_MODE_REQUIRED"
+  | string;
+
+export class CommandRunPolicyError extends Error {
+  constructor(
+    public readonly code: CommandRunPolicyCode,
+    message: string
+  ) {
+    super(message);
+    this.name = "CommandRunPolicyError";
+  }
+}
+
+export interface PreparedCommandRun {
+  plan: ResolvedCommandPlan;
+  finalArgs: string[];
+  cwd: string;
+  timeoutMs: number;
+  displayCommand: string;
+}
+
 const SAFE_PACKAGE_MANAGERS = new Set<SafePackageManager>([
   "npm",
   "pnpm",
@@ -453,18 +478,22 @@ async function terminateProcessTree(pid: number): Promise<void> {
   });
 }
 
-export async function runCommandNoShell(
+export function preflightCommandRun(
   input: CommandRunInput
-): Promise<CommandRunResult> {
+): PreparedCommandRun {
   const manager = ConfigManager.getInstance();
   const config = manager.getConfig();
   const mode = config.terminal?.mode ?? "off";
   const cwd = path.resolve(input.cwd ?? process.cwd());
   const args = input.args ?? [];
   const timeoutMs = input.timeoutMs ?? 60_000;
+  const displayCommand = [input.command, ...args].join(" ");
 
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 600_000) {
-    throw new Error("timeoutMs must be an integer between 100 and 600000.");
+    throw new CommandRunPolicyError(
+      "COMMAND_RUN_REJECTED",
+      "timeoutMs must be an integer between 100 and 600000."
+    );
   }
 
   let plan: ResolvedCommandPlan;
@@ -475,34 +504,75 @@ export async function runCommandNoShell(
       denyRootMutation: false,
     });
     if (!cwdCheck.allowed) {
-      throw new Error(
-        cwdCheck.reason || "Safe command_run cwd must be a readwrite WinHelm folder."
+      throw new CommandRunPolicyError(
+        cwdCheck.code || "SAFE_COMMAND_PLAN_DENIED",
+        cwdCheck.reason ||
+          "Safe command_run cwd must be a readwrite WinHelm folder."
       );
     }
 
-    const safePlan = buildSafePackageManagerPlan(
-      input.command,
-      args,
-      cwd
-    );
-    plan = safePlan;
-    finalArgs = safePlan.args;
+    try {
+      const safePlan = buildSafePackageManagerPlan(
+        input.command,
+        args,
+        cwd
+      );
+      plan = safePlan;
+      finalArgs = safePlan.args;
+    } catch (err) {
+      if (err instanceof CommandRunPolicyError) throw err;
+      throw new CommandRunPolicyError(
+        "SAFE_COMMAND_PLAN_DENIED",
+        (err as Error).message || String(err)
+      );
+    }
   } else if (mode === "ask" || mode === "full") {
-    plan = resolveDirectExecutable(input.command, cwd);
+    try {
+      plan = resolveDirectExecutable(input.command, cwd);
+    } catch (err) {
+      throw new CommandRunPolicyError(
+        "COMMAND_RUN_REJECTED",
+        (err as Error).message || String(err)
+      );
+    }
     finalArgs = [...plan.argsPrefix, ...args];
 
-    const displayCommand = [input.command, ...args].join(" ");
     const allowed = manager.isCommandAllowed(displayCommand);
     if (!allowed.allowed) {
-      throw new Error(allowed.reason || "Command blocked by WinHelm security policy.");
+      throw new CommandRunPolicyError(
+        "COMMAND_SECURITY_BLOCKED",
+        allowed.reason || "Command blocked by WinHelm security policy."
+      );
     }
   } else if (mode === "dangerous") {
-    throw new Error(
+    throw new CommandRunPolicyError(
+      "TERMINAL_MODE_REQUIRED",
       "Dangerous terminal mode is reserved for WinHelm v1.4 and is blocked by the v1.3 runtime."
     );
   } else {
-    throw new Error("Terminal mode does not permit command_run.");
+    throw new CommandRunPolicyError(
+      "TERMINAL_MODE_REQUIRED",
+      "Terminal mode does not permit command_run."
+    );
   }
+
+  return {
+    plan,
+    finalArgs,
+    cwd,
+    timeoutMs,
+    displayCommand,
+  };
+}
+
+export async function runCommandNoShell(
+  input: CommandRunInput
+): Promise<CommandRunResult> {
+  // Re-run the exact same deterministic planning/security checks at execution
+  // time. Pre-approval callers use preflightCommandRun(), while this second
+  // evaluation protects against config/path/executable changes before spawn.
+  const prepared = preflightCommandRun(input);
+  const { plan, finalArgs, cwd, timeoutMs } = prepared;
 
   const startedAt = Date.now();
   const stdoutChunks: Buffer[] = [];
