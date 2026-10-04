@@ -16,6 +16,7 @@ import { getServerRuntimeContext } from "../gateway/session-context.js";
 import { taskManager } from "../engine/task-manager.js";
 import { inspectProcessTargets } from "../engine/system.js";
 import { classifyToolMandatoryConfirmation } from "../permissions/mandatory-confirmation.js";
+import { preflightAbsoluteDeny } from "../permissions/preapproval-absolute-deny.js";
 import { normalizeSchemaV2ToolErrorResult } from "../errors/tool-error.js";
 import { translate as t } from "../i18n/messages.js";
 
@@ -137,30 +138,9 @@ export function registerTracedTool(
       let access = evaluateSchemaV2ToolAccess(
         name,
         args ?? {},
-        liveConfig
+        liveConfig,
+        { deferApprovalDecision: true }
       );
-
-      if (access.decision === "allow") {
-        const mandatory = classifyToolMandatoryConfirmation(
-          name,
-          args ?? {},
-          taskManager,
-          liveConfig.approval.mode
-        );
-        if (mandatory.required) {
-          access = {
-            decision: "ask",
-            code: "APPROVAL_REQUIRED",
-            reason:
-              mandatory.reason ??
-              "This action requires explicit human confirmation.",
-            userAction: t("action.approve.generic"),
-            details: mandatory.code
-              ? { mandatoryConfirmation: mandatory.code }
-              : undefined,
-          };
-        }
-      }
 
       if (access.decision === "deny") {
         return logAndReturnPolicyError(
@@ -187,6 +167,83 @@ export function registerTracedTool(
               }
             : undefined
         );
+      }
+
+      // Dynamic/security-sensitive Absolute Deny checks must complete before
+      // Mandatory Confirmation or ApprovalEngine.request(). Execution-time
+      // handlers retain the same checks for TOCTOU-sensitive revalidation.
+      const absoluteDeny = await preflightAbsoluteDeny(
+        name,
+        args ?? {},
+        liveConfig,
+        liveConfigManager
+      );
+      if (absoluteDeny) {
+        return logAndReturnPolicyError(
+          name,
+          startTime,
+          absoluteDeny.code,
+          absoluteDeny.reason,
+          absoluteDeny.userAction,
+          absoluteDeny.details
+        );
+      }
+
+      // Only after Absolute-Deny preflight may the explicit confirmation floor
+      // and Approval Mode evaluator turn an otherwise permitted call into ASK
+      // or AUTO. This second pass reuses the same static/path rules.
+      access = evaluateSchemaV2ToolAccess(
+        name,
+        args ?? {},
+        liveConfig
+      );
+      if (access.decision === "deny") {
+        return logAndReturnPolicyError(
+          name,
+          startTime,
+          access.code,
+          access.reason,
+          access.userAction,
+          access.pathChecks || access.details
+            ? {
+                ...(access.pathChecks
+                  ? {
+                      pathChecks: access.pathChecks.map((check) => ({
+                        code: check.code,
+                        reason: check.reason,
+                        canonicalPath: check.canonicalPath,
+                        matchedFolder:
+                          check.matchedFolder?.alias ??
+                          check.matchedFolder?.path,
+                      })),
+                    }
+                  : {}),
+                ...(access.details ?? {}),
+              }
+            : undefined
+        );
+      }
+
+      if (access.decision === "allow") {
+        const mandatory = classifyToolMandatoryConfirmation(
+          name,
+          args ?? {},
+          taskManager,
+          liveConfig.approval.mode
+        );
+        if (mandatory.required) {
+          access = {
+            decision: "ask",
+            code: "APPROVAL_REQUIRED",
+            reason:
+              mandatory.reason ??
+              "This action requires explicit human confirmation.",
+            userAction: t("action.approve.generic"),
+            details: mandatory.code
+              ? { mandatoryConfirmation: mandatory.code }
+              : undefined,
+          };
+        }
       }
 
       if (access.decision === "ask") {

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { runCommandNoShell } from "../engine/command-runner.js";
+import {
+  CommandRunPolicyError,
+  runCommandNoShell,
+} from "../engine/command-runner.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 import { SCHEMA_V2_TOOL_NAMES } from "./registry.js";
 import { translate as t } from "../i18n/messages.js";
@@ -81,7 +84,10 @@ export function registerCommandTools(server: McpServer): void {
               type: "text",
               text: JSON.stringify({
                 error: {
-                  code: "COMMAND_RUN_REJECTED",
+                  code:
+                    err instanceof CommandRunPolicyError
+                      ? err.code
+                      : "COMMAND_RUN_REJECTED",
                   message: (err as Error).message || String(err),
                   userAction: t("action.command.allowed"),
                 },

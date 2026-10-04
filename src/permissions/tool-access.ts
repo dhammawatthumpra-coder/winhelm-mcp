@@ -26,6 +26,12 @@ export interface ToolAccessResult {
 
 export interface ToolAccessOptions {
   protectedPaths?: ProtectedPathRule[];
+  /**
+   * Run only the capability/static/path security gate. Approval Mode and
+   * explicit-confirmation-floor decisions are deliberately deferred until
+   * after asynchronous Absolute-Deny preflight.
+   */
+  deferApprovalDecision?: boolean;
 }
 
 const TERMINAL_EXECUTION_TOOLS = new Set([
@@ -37,7 +43,7 @@ const TERMINAL_EXECUTION_TOOLS = new Set([
 
 const COMMAND_RUN_TOOL = "command_run";
 
-interface PathRequirement {
+export interface PathRequirement {
   /** Argument name to write the resolved path back into, when it is a field. */
   field?: string;
   value: unknown;
@@ -45,7 +51,7 @@ interface PathRequirement {
   denyRootMutation?: boolean;
 }
 
-function pathRequirements(toolName: string, args: Record<string, any>): PathRequirement[] {
+export function pathRequirements(toolName: string, args: Record<string, any>): PathRequirement[] {
   switch (toolName) {
     case "file_read":
     case "file_preview":
@@ -298,12 +304,12 @@ export function evaluateSchemaV2ToolAccess(
         };
       }
 
-      if (!approvalMode) {
+      if (options.deferApprovalDecision || !approvalMode) {
         return {
           decision: "allow",
           code: "TERMINAL_SAFE",
           reason:
-            "Safe command_run is permitted; the package-manager adapter performs the command allowlist and trusted executable checks.",
+            "Safe command_run is permitted at the static capability/path gate; approval semantics are evaluated after Absolute-Deny preflight.",
           pathChecks: [cwdCheck],
         };
       }
@@ -331,6 +337,15 @@ export function evaluateSchemaV2ToolAccess(
         code: "TERMINAL_MODE_REQUIRED",
         reason: terminal.reason,
         userAction: t("action.terminal.change"),
+      };
+    }
+
+    if (options.deferApprovalDecision) {
+      return {
+        decision: "allow",
+        code: terminal.code,
+        reason:
+          "Direct command_run passed the static terminal capability gate; approval semantics are evaluated after Absolute-Deny preflight.",
       };
     }
 
@@ -387,6 +402,15 @@ export function evaluateSchemaV2ToolAccess(
         code: "TERMINAL_MODE_REQUIRED",
         reason: terminal.reason,
         userAction: t("action.terminal.change"),
+      };
+    }
+
+    if (options.deferApprovalDecision) {
+      return {
+        decision: "allow",
+        code: terminal.code,
+        reason:
+          "Terminal execution passed the static capability gate; approval semantics are evaluated after Absolute-Deny preflight.",
       };
     }
 
@@ -505,6 +529,16 @@ export function evaluateSchemaV2ToolAccess(
       denied.pathChecks = pathChecks;
       return denied;
     }
+  }
+
+  if (options.deferApprovalDecision) {
+    return {
+      decision: "allow",
+      code: "STATIC_ACCESS_ALLOWED",
+      reason:
+        "Tool passed capability, policy-disable, risk, and path security gates; approval semantics are evaluated after Absolute-Deny preflight.",
+      pathChecks,
+    };
   }
 
   const approvalMode = config.approval?.mode;
