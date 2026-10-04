@@ -1,168 +1,212 @@
 # WinHelm MCP — Security Model & Architecture
 
-Security is a foundational design pillar of WinHelm. Giving an AI agent access to terminal execution, filesystem writes, and system processes requires robust, multi-layered safeguards.
+Security is a foundational design pillar of WinHelm. Giving an AI agent access to terminal execution, filesystem writes, and system processes requires robust, multi-layered safeguards and clear boundaries between autonomous execution and human authorization.
 
 ---
 
 ## 1. Multi-Layer Security Architecture
 
 ```
-[ MCP Client / AI Agent ]
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│  Layer 1: Network & Authentication Gate      │
-│  - Token Authentication (Bearer Header)     │
-│  - Rate Limiting (120 req/min Sliding Window)│
-└──────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│  Layer 2: Operation & Read-Only Guard        │
-│  - Enforce Read-Only Mode (--read-only)      │
-│  - Mutating Tools Blocked at Dispatcher      │
-└──────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│  Layer 3: Filesystem Confinement             │
-│  - Allowed Directories Whitelist             │
-│  - Drive Letter Isolation (e.g. D:\ only)    │
-│  - Path Traversal (..\) Sanitization         │
-└──────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│  Layer 4: Command Filter & Execution Shield  │
-│  - Blacklist Pattern Regex Filtering         │
-│  - Destructive Command Interception          │
-│  - NonInteractive / NoProfile PowerShell     │
-└──────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────┐
-│  Layer 5: Secret Masking & Audit Logging     │
-│  - Auto Redaction of API Keys & Passwords    │
-│  - Daily Rotating Log Files with Hashing     │
-└──────────────────────────────────────────────┘
+[ MCP Clients: Claude Desktop / Cursor / Remote ]
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────┐
+│  Layer 1: Network & Authentication Gate                  │
+│  - Loopback-First Binding (127.0.0.1 default)            │
+│  - Bearer Token Authentication & Protected Secret Store  │
+│  - Host Header Validation (DNS Rebinding Defense)        │
+│  - Rate Limiting (120 req/min Sliding Window)            │
+└──────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────┐
+│  Layer 2: Schema-v2 Governance & Policy Engine           │
+│  - Profile Presets: Safe / Balanced / Power              │
+│  - Terminal Execution Policy (off / ask / full)          │
+│  - Tool Risk Classification (R0 to R5)                   │
+│  - External Process Kill Approval Gate                   │
+└──────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────┐
+│  Layer 3: Filesystem Confinement & Protected Paths       │
+│  - Folder-Scoped Permissions (read / readwrite)          │
+│  - Protected Internal Paths Isolation (~/.winhelm, logs) │
+│  - Path Traversal & Symlink Canonicalization             │
+│  - Recycle Bin Safe Deletion (file_delete_safe)          │
+└──────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────┐
+│  Layer 4: Cross-Process Human Approval Plane             │
+│  - Per-Job Durable Mirroring (approval-requests)         │
+│  - Atomic First-Writer Decisions (approval-decisions)    │
+│  - Web Dashboard Decision Plane (Port 8788)              │
+│  - Exactly-Once Execution Invariant (executionCount <= 1)│
+│  - Fail-Closed Crash Recovery (unknown state)            │
+└──────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────┐
+│  Layer 5: Execution Shield, Sanitization & Audit         │
+│  - Direct Argument Vector Execution (command_run)        │
+│  - Dangerous Command Regex Interception                  │
+│  - Automated Secret Redaction (API Keys, Passwords)      │
+│  - Structured JSONL Audit Logging with Session Hashing   │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Authentication & Access Control
+## 2. Configuration Modes: Legacy vs. Schema-v2
 
-By default, WinHelm binds strictly to **`127.0.0.1` (localhost loopback)**, preventing external machines on your local network (LAN) or public internet from reaching the server.
+WinHelm provides two distinct configuration modes:
 
-If you attempt to bind WinHelm to an external interface (`--host 0.0.0.0` or a LAN IP) without configuring an authentication token, WinHelm activates a **Fail-Closed Startup Gate** (`validateNetworkExposure`) and immediately terminates with exit code 1 to prevent accidental open remote code execution. In any shared, multi-user, LAN, or remote setup, you must enforce Bearer Token authentication:
+### Legacy Mode (v1.2.1 Compatibility)
+- Active when `winhelm.config.json` lacks a `schemaVersion` attribute.
+- Governed by `allowedDirectories` whitelist and tool profile filtering (`PROFILES`).
+- **Approval gating is inactive in legacy mode:** tool calls are not intercepted for human approval, and external process termination is not gated by human approval.
+- Exists solely to maintain backward compatibility with v1.2.1 deployments.
 
-### CLI Flag
-```powershell
-winhelm --auth "my-secure-random-token-here"
+### Schema-v2 Mode (`schemaVersion: 2`)
+- Explicitly opted in via `winhelm setup` or setting `"schemaVersion": 2`.
+- Enforces folder-scoped permissions, terminal modes, risk-based tool authorization policies, and cross-process human approval workflows.
+- Internal directories are strictly protected from modification regardless of folder configuration.
+
+---
+
+## 3. Schema-v2 Permission Model & Risk Classes
+
+### Folder Permissions
+In schema-v2, filesystem access is declared per-folder:
+- `read`: Read-only operations (`file_read`, `file_list`, `file_search`, `file_hash`, `file_tail`, `file_preview`). Mutating file operations are strictly rejected.
+- `readwrite`: Read and write operations allowed within the folder subtree.
+
+Every path is resolved to its real canonical path (`fs.realpathSync`) before boundary evaluation, neutralizing path traversal attacks (`..\..\`) and directory junction bypasses.
+
+### Terminal Modes
+Terminal execution (`terminal_run`, `terminal_task_start`, `command_run`) is governed by three distinct modes:
+- `off`: Terminal tools are disabled completely.
+- `ask`: Every terminal command requires explicit human approval before execution.
+- `full`: Terminal execution is permitted without per-command approval within allowed folders.
+
+### Tool Risk Classification (R0 to R5)
+
+| Risk Class | Classification | Tools | Default Balanced Policy |
+| :---: | :--- | :--- | :---: |
+| **R0** | Read-Only & Inspection | `file_read`, `file_list`, `file_search`, `file_search_ripgrep`, `file_tail`, `file_hash`, `file_preview`, `system_info`, `gpu_info`, `network_info`, `port_check`, `process_list`, `service_list`, `service_status`, `eventlog_query`, `terminal_task_list`, `terminal_task_logs` | `auto` |
+| **R1** | Local Mutation | `file_write`, `file_edit`, `file_copy`, `file_move`, `file_delete_safe`, `archive_zip`, `archive_unzip`, `pdf_generate`, `notification_send` | `auto` (inside `readwrite` folders) |
+| **R2** | Network Outbound | `http_ping`, `http_request` | `ask` |
+| **R3** | Desktop & Clipboard | `clipboard_get`, `clipboard_set`, `screen_capture`, `system_open` | `ask` |
+| **R4** | System Mutation | `process_kill`, `service_control` | `ask` |
+| **R5** | Shell & Execution | `terminal_run`, `terminal_task_start`, `terminal_task_send`, `terminal_task_kill`, `command_run` | Gated by Terminal Mode (`ask`) |
+
+### External `process_kill` Governance
+Under schema-v2, `process_kill` inspects the target process:
+- Processes spawned by WinHelm as background daemon tasks can be managed according to profile policy.
+- Processes **not** started by WinHelm (external OS processes) strictly require human approval before termination, preventing agents from terminating host applications or background services autonomously.
+
+---
+
+## 4. Human Approval Workflow & Cross-Process Architecture
+
+WinHelm v1.3 implements a distributed, file-based approval coordination architecture (post DEF-02) inside the protected `~/.winhelm` directory:
+
+```
+~/.winhelm/
+  ├── approval-requests/       <-- Written exclusively by owning process
+  │   └── <jobId>.json
+  ├── approval-decisions/      <-- Written first-writer-wins by decider
+  │   └── <jobId>.json
+  ├── secrets.json             <-- Protected auth token storage
+  └── admin-code-store.json    <-- Single-use admin code SHA-256 digests
 ```
 
-### Environment Variable
-```powershell
-$env:MCP_AUTH_TOKEN = "my-secure-random-token-here"
-winhelm
+### Separation of Planes
+- **Decision Plane:** The Web Dashboard (`http://127.0.0.1:8788/admin/approvals`) or local CLI (`winhelm approve <jobId>`, `winhelm deny <jobId>`). The decision plane records human intent; it **never** invokes tool callbacks directly.
+- **Execution Plane:** The **owning WinHelm process** that received the MCP call (e.g. Claude Desktop or Cursor stdio instance). Only the owning process holds the execution callback and executes the approved action.
+
+### Approval Lifecycle
+
+```
+[Tool Invocation] ──(policy = 'ask')──> awaiting_approval
+                                              │
+                    ┌─────────────────────────┼─────────────────────────┐
+                    ▼                         ▼                         ▼
+                approved                    denied                   expired
+                    │                         │                         │
+                    ▼                         ▼                         ▼
+                 running               (Exec Count = 0)          (Exec Count = 0)
+                    │
+            ┌───────┴───────┐
+            ▼               ▼
+        completed        failed
 ```
 
-When enabled:
-- All protocol endpoints (`/mcp`, `/sse`, `/message`), file previews (`/preview`), and administrative telemetry APIs (`/api/monitor/*`) require an `Authorization: Bearer <token>` header.
-- For clients without custom header support (such as Claude.ai Custom Connectors) or convenient browser access to the Web Monitor Dashboard and Previewer, the token can also be supplied via URL query parameter (`?token=<token>` or `?auth=<token>`) or browser cookie.
-- Unauthenticated access is strictly confined to public health checks (`/health`) and the basic dashboard HTML shell (`/`, `/dashboard`).
+If an owning process terminates while a job is in-flight or unconfirmed, recovery marks the job state as **`unknown`**. Ambiguous side effects are never automatically replayed.
 
-### Disabling Authentication (`"authToken": null`)
-
-If `"authToken"` is explicitly set to `null` in `winhelm.config.json` (or `--auth` / `MCP_AUTH_TOKEN` is omitted):
-- The server operates in **No-Auth Mode** (`Public network mode active (No auth token set)`).
-- Incoming MCP requests and tools are executed without verifying any Bearer token or query token.
-- **Fail-Closed Startup Gate:** This mode is strictly confined to local loopback development (`127.0.0.1`, `localhost`). WinHelm will refuse to start on non-loopback addresses (`0.0.0.0` or LAN interfaces) without an authentication token. Safety gates in `start-funnel.ps1` also guard Tailscale Funnels.
+### Invariants & Exactly-Once Guarantees
+1. **Durable Journaling Before Notification:** The approval request is mirrored to disk only after durable journal persistence succeeds.
+2. **First-Writer-Wins Decisions:** Decision records (`approval-decisions/<jobId>.json`) are created with exclusive file creation flags (`open wx`). Any duplicate or competing decision attempt is rejected (`ALREADY_DECIDED`).
+3. **Compare-And-Swap (CAS) Execution Claim:** When applying an approval, the owning engine atomically transitions state from `approved` to `running`. This guarantees:
+   $$\text{executionCount} \le 1$$
+4. **Post-Expiry Invalidation:** Decisions recorded after job TTL expiration (`expired`) are rejected fail-closed.
+5. **Denial Invariance:** A denied job immediately transitions to `denied`, cancels waiting callbacks with `executionCount = 0`, and cannot subsequently be approved or executed.
 
 ---
 
-## 3. Read-Only Enforcement Mode
+## 5. Protected Paths & Secret Isolation
 
-If you wish to allow an AI agent to read code, query event logs, and inspect system telemetry without modifying anything, start WinHelm in **Read-Only Mode**:
+### Protected Internal Paths
+To prevent AI coding assistants from tampering with security configurations, auth secrets, or approval journals, WinHelm enforces **Protected Internal Paths**:
+- Filesystem mutation tools (`file_write`, `file_edit`, `file_delete_safe`, `file_copy`, `file_move`, `archive_unzip`) strictly reject any path targeting or residing within:
+  - `%USERPROFILE%\.winhelm`
+  - WinHelm installation directory and configuration files (`winhelm.config.json`, `winhelm.local.json`)
+  - Active log directories (`logs/`)
+- This protection applies **even if broad wildcard access (`["*"]`) is configured in legacy mode**.
 
-```powershell
-winhelm --read-only
-```
+### Protected Secret Storage (`secrets.json`)
+- The MCP authentication token (`authToken`) is stored in `%USERPROFILE%\.winhelm\secrets.json` with user-only filesystem ACLs.
+- During migration and token rotation, raw tokens are removed from `winhelm.config.json`.
+- Client configuration files generated via `winhelm connect` invoke `winhelm --stdio` and never store auth tokens in client configuration JSON.
 
-When active, any call to mutating tools (e.g. `file_write`, `file_edit`, `file_delete_safe`, `terminal_run`, `process_kill`, `service_control`) is rejected before reaching the execution engine.
-
----
-
-## 4. Path Confinement (`allowedDirectories`) & Fail-Closed Design
-
-WinHelm follows a **fail-closed by default** security principle:
-- **Default (`allowedDirectories: []` or empty)**: If no allowed directories are configured, **all filesystem operations are strictly blocked**. This prevents accidental full-machine exposure when running an unconfigured instance.
-- **Specific Directory Whitelist**: Specify target directories or drives to restrict access:
-  ```json
-  {
-    "allowedDirectories": [
-      "D:\\mcp",
-      "C:\\Projects"
-    ],
-    "allowSystemExecution": false
-  }
-  ```
-- **System Execution Isolation (`allowSystemExecution`)**:
-  - **Default: `false` (Fail-Closed)**. Commands referencing drives outside `allowedDirectories` (such as `C:\`) or invoking system binaries outside the whitelist are blocked by default.
-  - To allow invoking runtime binaries on `C:\` (such as `python.exe`, `node.exe`, `git.exe`) while keeping file tools restricted to your project drive, explicitly enable `"allowSystemExecution": true`, pass the `--system-exec` CLI flag, or set `WINHELM_ALLOW_SYSTEM_EXEC=true`.
-  - When enabled, WinHelm logs a security warning: `[SECURITY] System execution enabled - Runtime binaries on C: are now accessible`.
-- **Whole-Volume Whitelist**: You can whitelist an entire volume by specifying `"D:\\"`, `"D:"`, or `"D"`.
-- **Wildcard Full-Drive Access (`["*"]` or `["all"]`)**: You can explicitly opt-in to unrestricted machine access by configuring `["*"]` or `["all"]`.
-  > ⚠️ **Warning:** Wildcard access (`["*"]`) should only be used for trusted, local single-user development with authentication enabled. Never expose an unauthenticated server with wildcard access to a public network or reverse proxy.
-- Any attempt to access paths outside the whitelist is rejected with a descriptive security error.
-- Path traversal tricks (`..\..\Windows\System32`) and NTFS directory junctions/symlinks are resolved to canonical real paths via `fs.realpathSync` before boundary checks.
+### Shared Admin Code Store (`admin-code-store.json`)
+- Admin codes for Dashboard unlocking (`winhelm admin-code`) are generated exclusively via interactive local terminal sessions.
+- To allow an admin code to unlock a Dashboard served by a separate background instance (DEF-02b), only the **SHA-256 digest** and expiration timestamp are mirrored into `~/.winhelm/admin-code-store.json`.
+- Codes are single-use: consuming the code deletes the stored digest. Raw code strings are never persisted to disk.
 
 ---
 
----
+## 6. Authentication & Network Hardening
 
-## 5. Security Model & Trust Boundaries (Important Clarification)
+### Loopback-First Binding
+- By default, WinHelm binds strictly to **`127.0.0.1` (localhost)**.
+- **Fail-Closed Startup Gate (`validateNetworkExposure`):** If configured to bind to a non-loopback address (`0.0.0.0` or LAN interface) without an authentication token, WinHelm terminates immediately with exit code 1.
 
-To configure WinHelm safely, understand the distinction between hard security boundaries and defense-in-depth safeguards:
+### Bearer Token Verification
+- All HTTP/SSE endpoints (`/mcp`, `/sse`, `/message`, `/preview`, `/admin/*`) require `Authorization: Bearer <token>`.
+- Token comparisons use cryptographically secure timing-safe equality (`crypto.timingSafeEqual`) to prevent timing side-channel attacks.
 
-### 🛡️ Hard Security Boundaries
-1. **Authentication Token (`authToken` / `--auth`)**:
-   - The primary security perimeter. When enabled, all MCP protocol interactions, tool dispatches, file previews, and monitoring APIs require token verification via timing-safe comparison (`crypto.timingSafeEqual`).
-2. **Tool Profiles (`--profile minimal` or `--profile core`)**:
-   - The most effective containment strategy. Profiles strictly exclude tools at registration time. Using `core` provides 15 file inspection and reading tools while completely excluding `terminal_run`, `terminal_task_start`, and system mutation tools.
-3. **Read-Only Mode (`--read-only`)**:
-   - Enforces an immutable environment. Blocks all filesystem modifications, archive creations, service controls, process terminations, mutating HTTP methods (POST/PUT/DELETE), and shell executions (`terminal_run` / `terminal_task_start`).
+### Host Header Validation (DNS Rebinding Defense)
+- WinHelm validates incoming `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, and configured `allowedHosts` such as `*.ts.net`).
+- Unauthorized host headers are rejected with **HTTP 403 Forbidden**.
+- `Host: 0.0.0.0` is explicitly blocked.
 
-### ⚠️ Defense-in-Depth Safeguards (Not Hard Security Boundaries)
-1. **Command Blocklist Patterns**:
-   - Regex-based command filtering is designed to prevent accidental destructive operations (e.g. `format-volume`, `rmdir /s /q C:\`). It is **not** an impregnable security sandbox against intentional evasion, as PowerShell syntax supports aliases, string concatenation, and encoded commands (`-EncodedCommand`, `iex`).
-2. **Filesystem Confinement (`allowedDirectories`)**:
-   - Strictly confines native **File Tools** (`file_read`, `file_write`, `file_edit`, `file_delete_safe`, `copy_file`, `create_zip`, `extract_zip`). It also sets the working directory for terminal execution. However, if `terminal_run` is enabled (under `dev`, `sysadmin`, or `full` profiles) with `allowSystemExecution: true`, processes run with the full operating system permissions of the Windows user account running WinHelm.
-
----
-
-## 6. Network Hardening & Web Protections
-
-1. **Host Header Validation (DNS Rebinding Defense)**:
-   - WinHelm validates incoming `Host` headers against an allowlist (`localhost`, `127.0.0.1`, `[::1]`, and configured `allowedHosts` such as `*.ts.net`). Requests with unauthorized host headers are rejected with **HTTP 403 Forbidden**, preventing malicious websites from exploiting browser same-origin policies via DNS rebinding.
-   - `Host: 0.0.0.0` is explicitly rejected in all configurations, as `0.0.0.0` is a network bind address rather than a valid request host.
-2. **Unauthenticated Remote Proxy / Tunnel Guard**:
-   - If WinHelm is started without an authentication token (`authToken: null`), any request detected arriving through a reverse proxy or tunnel (containing `X-Forwarded-For` or `Forwarded` headers) is immediately blocked with **HTTP 403 Forbidden** (Fail-Closed). This prevents accidental exposure of a local shell to the internet.
-3. **Content Security Policy & Security Headers**:
-   - Web Monitor Dashboard routes (`/`, `/dashboard`) enforce a strict Content Security Policy (`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'self';`).
-   - File previews (`/preview`) enforce an isolated CSP (`default-src 'none'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'`) preventing previewed files from executing network requests against the local API.
-   - Global HTTP responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
-4. **Robustness Caps & Resource Protection**:
-   - **Terminal Buffer Cap**: Standard output and standard error in `runPowerShell()` and background tasks are capped at 1 MB per stream to prevent process memory exhaustion.
-   - **Windows Process Tree Cleanup**: When commands exceed their timeout, WinHelm terminates the entire child process tree via native Windows `taskkill /PID <pid> /T /F` prior to SIGKILL.
-   - **File Preview Size Cap**: The `/preview` endpoint rejects files exceeding 5 MB before reading into memory.
-5. **Token Security Notice**:
-   - While `?token=...` query parameters are supported for browser dashboards and Claude.ai custom connectors, automated tools and production integrations should prefer `Authorization: Bearer <token>` headers to avoid token retention in intermediate proxy logs or browser history. Protocol endpoints (`/mcp`, `/sse`, `/message`) do not establish browser cookies or sessions when authenticated via query token.
+### Content Security Policy & Security Headers
+- Web Dashboard routes (`/`, `/dashboard`, `/admin/*`) enforce a strict Content Security Policy (`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none';`).
+- File previews (`/preview`) enforce an isolated CSP (`default-src 'none'; connect-src 'none'; form-action 'none'; frame-ancestors 'none'`).
+- Global HTTP responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`.
 
 ---
 
-## 7. Dangerous Command Blacklist
+## 7. Execution Defense & Dangerous Command Interception
 
-WinHelm inspects command lines executed via `terminal_run` or `terminal_task_start` against regex patterns targeting destructive or risky actions:
+### Direct Argument Execution (`command_run`)
+- In schema-v2, `command_run` executes commands directly via `child_process.spawn` passing arguments as a string array (`args`).
+- Eliminates PowerShell command-line string interpolation and shell quote-escaping vulnerabilities.
+
+### Dangerous Command Blocklist
+PowerShell execution (`terminal_run`, `terminal_task_start`) inspects command lines against regex blocklists targeting catastrophic operations:
 
 | Category | Blocked Patterns |
 | :--- | :--- |
@@ -174,49 +218,17 @@ WinHelm inspects command lines executed via `terminal_run` or `terminal_task_sta
 
 ---
 
-## 8. Secret Redaction & Log Sanitization
+## 8. Secret Redaction & Audit Logging
 
-Before log entries are displayed on the Web Monitor Dashboard or written to disk, all text is piped through [sanitizer.ts](../src/utils/sanitizer.ts):
+### Automated Redaction ([sanitizer.ts](../src/utils/sanitizer.ts))
+Before logging to terminal or disk, text is stripped of credentials:
+- Bearer Tokens: `Bearer ************`
+- Anthropic / OpenAI API Keys: `sk-ant-************`, `sk-************`
+- GitHub Tokens: `ghp_************`, `gho_************`
+- AWS Keys: `AKIA************`
+- JSON Credential Properties: `"authToken": "************"`, `"password": "************"`, `"x-api-key": "************"`
 
-- **Bearer Tokens**: `Bearer ************`
-- **OpenAI & Claude API Keys**: `sk-ant-************`, `sk-************`
-- **GitHub Tokens**: `ghp_************`, `gho_************`
-- **AWS Access Keys**: `AKIA************`
-- **JSON Fields & Credentials**: `"authToken": "************"`, `"password": "************"`, `"x-api-key": "************"`
-- **Password Objects**: `{ "password": "************" }`
-
----
-
-## 9. Audit Logging & Export
-
-All executed commands, exit codes, durations, and tool errors are sequentially logged to daily audit logs in `logs/winhelm-YYYY-MM-DD.log`.
-
-In addition, security-relevant events (blocked requests, authentication attempts, path traversal blocks, and tool executions) are permanently appended to a dedicated structured JSONL file in `logs/audit.log` via [audit-logger.ts](../src/utils/audit-logger.ts) with automatic 10MB file rotation and backup management.
-
-You can export audit logs at any time via the Web Monitor Dashboard buttons ("📥 Export JSON" / "📥 Export CSV") or programmatically via the HTTP endpoint:
-```
-GET /api/monitor/export?format=json
-GET /api/monitor/export?format=csv
-```
-
-Logs older than 7 days are automatically pruned to prevent disk consumption.
-
----
-
-## 10. Ephemeral Session Authentication
-
-To eliminate persistent credential exposure in browser URLs, history, and bookmarks:
-- The master `authToken` can be exchanged via `POST /auth/exchange` (or single-use `?exchange=<token>`) for an ephemeral `winhelm_session` cookie. Exchange tokens are immediately destroyed upon consumption to prevent replay attacks.
-- Ephemeral sessions use cryptographically secure 64-character hex identifiers (`crypto.randomBytes(32)`).
-- Sessions are subject to a **15-minute sliding expiration window** (`Max-Age=900; SameSite=Lax; HttpOnly`). Each valid request refreshes the 15-minute window. Cookie refreshes are throttled until 50% of the sliding window has elapsed.
-- In addition to sliding expiry, sessions enforce a **12-hour absolute maximum lifetime cap** (`maxLifetimeMs`), guaranteeing that continuous activity cannot extend a session indefinitely.
-- When navigating to the Web Monitor Dashboard with a URL query token, WinHelm automatically exchanges the token for a session cookie and issues a clean 302 redirect to strip the token from the browser address bar.
-- Protocol endpoints (`/mcp`, `/sse`, `/message`) authenticated via query token do not set session cookies. Remote MCP connectors (such as Claude.ai) continue to support standard `Authorization: Bearer <token>` and URL query parameters with zero breaking changes.
-
----
-
-## 11. Threat Model & Legal Disclaimers
-
-- 🎯 **[Threat Model & STRIDE Analysis](THREAT_MODEL.md)**: Exhaustive threat enumeration, trust boundary diagrams, assumptions, and mitigations.
-- 📜 **[Terms of Use & Security Disclaimer](../TERMS_OF_USE.md)**: Bilingual (English & Thai) terms detailing the Shared Responsibility Model and warranty disclaimer.
-- 🔒 **[Vulnerability Disclosure Policy](../SECURITY.md)**: Coordinated disclosure instructions and response commitments.
+### Structured JSONL Audit Logger
+- Security events (blocked paths, failed authentications, approval decisions, executed tools) are appended to `logs/audit.log`.
+- Session identifiers are hashed using SHA-256 before writing to log entries.
+- Audit logs automatically rotate at 10 MB with 5 backup files, and logs older than 7 days are automatically pruned.
