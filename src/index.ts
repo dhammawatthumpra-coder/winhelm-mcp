@@ -15,6 +15,7 @@ import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js
 import { initializeApprovalPersistence } from "./approval/runtime.js";
 import { defaultApprovalJournalPath } from "./approval/journal.js";
 import { getProvenanceTracker } from "./approval/provenance.js";
+import { resetAdminAuthManager } from "./admin/runtime.js";
 import {
   getSessionClientInfo,
   normalizeClientInfo,
@@ -114,6 +115,12 @@ async function main() {
   const NO_PERSIST = args.includes("--no-persist");
   const configManager = ConfigManager.getInstance(CONFIG_ARG);
   await configManager.init(CONFIG_ARG);
+
+  // DEF-02b: admin codes are issued through the local control pipe, which any
+  // instance may own, but the Dashboard may be served by a different one. A
+  // shared digest store lets the Dashboard verify a code issued elsewhere
+  // (digest only, inside the protected ~/.winhelm tree).
+  resetAdminAuthManager({ sharedCodeStore: true });
 
   const approvalPersistence = initializeApprovalPersistence(
     defaultApprovalJournalPath(),

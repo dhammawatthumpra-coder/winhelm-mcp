@@ -1,10 +1,24 @@
 import crypto from "node:crypto";
+import {
+  clearAdminCode,
+  consumeAdminCode,
+  defaultAdminCodeStorePath,
+  writeAdminCode,
+} from "./admin-code-store.js";
 
 export interface AdminAuthOptions {
   now?: () => number;
   codeTtlMs?: number;
   idleTimeoutMs?: number;
   absoluteLifetimeMs?: number;
+  /**
+   * When true (production), an issued code's digest is mirrored into the
+   * protected shared store so a Dashboard process other than the one that
+   * issued the code can exchange it (DEF-02b). Off in unit tests unless a
+   * codeStorePath is supplied.
+   */
+  sharedCodeStore?: boolean;
+  codeStorePath?: string;
 }
 
 export interface AdminSession {
@@ -52,6 +66,8 @@ export class AdminAuthManager {
   private readonly absoluteLifetimeMs: number;
   private pendingCode?: PendingCode;
   private readonly sessions = new Map<string, AdminSession>();
+  private readonly sharedCodeStore: boolean;
+  private readonly codeStorePath: string;
 
   constructor(options: AdminAuthOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -59,40 +75,63 @@ export class AdminAuthManager {
     this.idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
     this.absoluteLifetimeMs =
       options.absoluteLifetimeMs ?? DEFAULT_ABSOLUTE_LIFETIME_MS;
+    this.codeStorePath = options.codeStorePath ?? defaultAdminCodeStorePath();
+    this.sharedCodeStore =
+      options.sharedCodeStore ?? options.codeStorePath !== undefined;
   }
 
   issueCode(): { code: string; expiresAt: number } {
     const now = this.now();
     const code = randomSecret(12);
+    const expiresAt = now + this.codeTtlMs;
     this.pendingCode = {
       digest: digest(code),
       createdAt: now,
-      expiresAt: now + this.codeTtlMs,
+      expiresAt,
       consumed: false,
     };
-    return { code, expiresAt: now + this.codeTtlMs };
+    if (this.sharedCodeStore) {
+      // Digest only; never the code itself.
+      writeAdminCode(code, expiresAt, this.codeStorePath);
+    }
+    return { code, expiresAt };
   }
 
   refreshCode(): { code: string; expiresAt: number } {
     this.pendingCode = undefined;
+    if (this.sharedCodeStore) {
+      clearAdminCode(this.codeStorePath);
+    }
     return this.issueCode();
   }
 
   exchangeCode(code: string): AdminSession | undefined {
     const pending = this.pendingCode;
-    if (!pending || pending.consumed || this.now() >= pending.expiresAt) {
-      this.pendingCode = undefined;
+    if (pending && !pending.consumed && this.now() < pending.expiresAt) {
+      const supplied = digest(code);
+      if (safeDigestEqual(pending.digest, supplied)) {
+        pending.consumed = true;
+        this.pendingCode = undefined;
+        return this.createSession();
+      }
+      // Wrong attempt against our own code: do not consume it.
       return undefined;
     }
 
-    const supplied = digest(code);
-    if (!safeDigestEqual(pending.digest, supplied)) {
-      return undefined;
-    }
-
-    pending.consumed = true;
     this.pendingCode = undefined;
+    // DEF-02b: the code may have been issued by a different WinHelm instance
+    // (the one owning the local control pipe). Verify against the protected
+    // shared digest store; consumption there is the single-use transition.
+    if (
+      this.sharedCodeStore &&
+      consumeAdminCode(code, this.now(), this.codeStorePath)
+    ) {
+      return this.createSession();
+    }
+    return undefined;
+  }
 
+  private createSession(): AdminSession {
     const now = this.now();
     const session: AdminSession = {
       id: randomSecret(32),
