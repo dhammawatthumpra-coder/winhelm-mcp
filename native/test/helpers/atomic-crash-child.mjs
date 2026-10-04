@@ -1,0 +1,10 @@
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const addonPath = process.env.WINHELM_NATIVE_TEST_ADDON;
+if (!addonPath) throw new Error("WINHELM_NATIVE_TEST_ADDON is required");
+const addon = require(addonPath);
+const target = process.argv[2];
+const token = process.argv[3] ?? "000";
+const content = "NEW-COMPLETE-" + token + "-" + "D".repeat(131072);
+addon.atomicReplaceTest(target, Buffer.from(content, "utf8"), "crash_after_flush");
+throw new Error("crash_after_flush unexpectedly returned");
