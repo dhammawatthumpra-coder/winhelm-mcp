@@ -99,7 +99,12 @@ describe("Admin profile/permissions API", () => {
       const previewBody = await preview.json() as any;
       assert.strictEqual(
         previewBody.preview.terminalMode,
-        "ask"
+        "full"
+      );
+      assert.strictEqual(previewBody.preview.approvalMode, "smart");
+      assert.strictEqual(
+        previewBody.preview.requiresTypedConfirmation,
+        true
       );
       assert.deepStrictEqual(
         previewBody.preview.changedFields,
@@ -123,6 +128,30 @@ describe("Admin profile/permissions API", () => {
       );
       assert.strictEqual(missingCsrf.status, 403);
 
+      const balancedWithoutConfirm = await fetch(
+        `${base}/admin/profiles/apply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: adminCookie,
+            Origin: base,
+            "x-winhelm-csrf": csrf,
+          },
+          body: JSON.stringify({
+            preset: "balanced",
+            folders: [
+              { path: workspace, alias: "workspace" },
+            ],
+          }),
+        }
+      );
+      assert.strictEqual(balancedWithoutConfirm.status, 409);
+      assert.strictEqual(
+        ((await balancedWithoutConfirm.json()) as any).error.code,
+        "TYPED_CONFIRMATION_REQUIRED"
+      );
+
       const applied = await fetch(
         `${base}/admin/profiles/apply`,
         {
@@ -138,6 +167,7 @@ describe("Admin profile/permissions API", () => {
             folders: [
               { path: workspace, alias: "workspace" },
             ],
+            confirmation: "confirm",
           }),
         }
       );
@@ -156,6 +186,9 @@ describe("Admin profile/permissions API", () => {
         appliedBody.profile.modified,
         false
       );
+      assert.strictEqual(appliedBody.profile.terminalMode, "full");
+      assert.strictEqual(appliedBody.profile.approvalMode, "smart");
+      assert.strictEqual(appliedBody.profile.approvalBehavior, "explicit");
       assert.ok(appliedBody.backupPath);
 
       const persisted = JSON.parse(
@@ -163,6 +196,86 @@ describe("Admin profile/permissions API", () => {
       );
       assert.strictEqual(persisted.schemaVersion, 2);
       assert.strictEqual(persisted.profilePreset, "balanced");
+
+      const trustedPreview = await fetch(
+        `${base}/admin/approval-mode/preview`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: adminCookie,
+            Origin: base,
+            "x-winhelm-csrf": csrf,
+          },
+          body: JSON.stringify({ mode: "trusted" }),
+        }
+      );
+      assert.strictEqual(trustedPreview.status, 200);
+      const trustedPreviewBody = await trustedPreview.json() as any;
+      assert.strictEqual(trustedPreviewBody.preview.currentMode, "smart");
+      assert.strictEqual(trustedPreviewBody.preview.targetMode, "trusted");
+      assert.strictEqual(
+        trustedPreviewBody.preview.requiresTypedConfirmation,
+        true
+      );
+
+      const trustedWithoutConfirm = await fetch(
+        `${base}/admin/approval-mode/apply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: adminCookie,
+            Origin: base,
+            "x-winhelm-csrf": csrf,
+          },
+          body: JSON.stringify({ mode: "trusted" }),
+        }
+      );
+      assert.strictEqual(trustedWithoutConfirm.status, 409);
+      assert.strictEqual(
+        ((await trustedWithoutConfirm.json()) as any).error.code,
+        "TYPED_CONFIRMATION_REQUIRED"
+      );
+
+      const trusted = await fetch(
+        `${base}/admin/approval-mode/apply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: adminCookie,
+            Origin: base,
+            "x-winhelm-csrf": csrf,
+          },
+          body: JSON.stringify({
+            mode: "trusted",
+            confirmation: "confirm",
+          }),
+        }
+      );
+      assert.strictEqual(trusted.status, 200);
+      const trustedBody = await trusted.json() as any;
+      assert.strictEqual(trustedBody.profile.approvalMode, "trusted");
+      assert.strictEqual(trustedBody.profile.modified, false);
+
+      const smart = await fetch(
+        `${base}/admin/approval-mode/apply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: adminCookie,
+            Origin: base,
+            "x-winhelm-csrf": csrf,
+          },
+          body: JSON.stringify({ mode: "smart" }),
+        }
+      );
+      assert.strictEqual(smart.status, 200);
+      const smartBody = await smart.json() as any;
+      assert.strictEqual(smartBody.profile.approvalMode, "smart");
+      assert.strictEqual(smartBody.profile.modified, false);
 
       const powerWithoutConfirm = await fetch(
         `${base}/admin/profiles/apply`,
@@ -220,6 +333,8 @@ describe("Admin profile/permissions API", () => {
       const finalBody = await finalStatus.json() as any;
       assert.strictEqual(finalBody.profile.schemaMode, "v2");
       assert.strictEqual(finalBody.profile.modified, false);
+      assert.strictEqual(finalBody.profile.approvalMode, "smart");
+      assert.strictEqual(finalBody.profile.approvalBehavior, "explicit");
       assert.strictEqual(finalBody.legacy, null);
     } finally {
       await instance.stop(server);

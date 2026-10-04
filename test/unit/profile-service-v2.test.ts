@@ -69,16 +69,18 @@ describe("Schema-v2 profile service", () => {
             "terminal.mode",
             "toolPolicy",
           ]);
-          assert.strictEqual(preview.terminalMode, "ask");
+          assert.strictEqual(preview.terminalMode, "full");
+          assert.strictEqual(preview.approvalMode, "smart");
           assert.strictEqual(
             preview.requiresTypedConfirmation,
-            false
+            true
           );
 
           const result = await applyProfilePreset(
             {
               preset: "balanced",
               folders: [{ path: workspace, alias: "workspace" }],
+              confirmation: "confirm",
             },
             manager
           );
@@ -88,7 +90,8 @@ describe("Schema-v2 profile service", () => {
           assert.strictEqual(manager.getConfigMode(), "v2");
           assert.strictEqual(result.status.preset, "balanced");
           assert.strictEqual(result.status.modified, false);
-          assert.strictEqual(result.status.terminalMode, "ask");
+          assert.strictEqual(result.status.terminalMode, "full");
+          assert.strictEqual(result.status.approvalMode, "smart");
           assert.deepStrictEqual(result.status.folders, [
             {
               path: path.resolve(workspace),
@@ -138,6 +141,7 @@ describe("Schema-v2 profile service", () => {
             {
               preset: "balanced",
               folders: [{ path: workspace, alias: "workspace" }],
+              confirmation: "confirm",
             },
             manager
           );
@@ -173,6 +177,7 @@ describe("Schema-v2 profile service", () => {
 
           const effective = manager.getConfig();
           assert.deepStrictEqual(effective.approval, {
+            mode: "smart",
             channels: ["dashboard", "cli"],
             blockHoldMs: 45_000,
             jobTtlMs: 120_000,
@@ -193,6 +198,7 @@ describe("Schema-v2 profile service", () => {
             await fs.readFile(configFile, "utf8")
           );
           assert.deepStrictEqual(persisted.approval, {
+            mode: "smart",
             channels: ["dashboard", "cli"],
             blockHoldMs: 45_000,
             jobTtlMs: 120_000,
@@ -235,6 +241,7 @@ describe("Schema-v2 profile service", () => {
             {
               preset: "balanced",
               folders: [{ path: workspace }],
+              confirmation: "confirm",
             },
             manager
           );
@@ -357,6 +364,7 @@ describe("Schema-v2 profile service", () => {
             {
               preset: "balanced",
               folders: [{ path: workspace }],
+              confirmation: "confirm",
             },
             manager
           );
@@ -598,6 +606,7 @@ describe("Schema-v2 profile service", () => {
             {
               preset: "balanced",
               folders: [{ path: workspace }],
+              confirmation: "confirm",
             },
             manager
           ),

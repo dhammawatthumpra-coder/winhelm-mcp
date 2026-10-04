@@ -2,6 +2,7 @@ import { PROFILES, type ToolProfile } from "../config/profiles.js";
 import {
   DEFAULT_APPROVAL_CONFIG,
   DEFAULT_NETWORK_CONFIG,
+  type ApprovalMode,
   type FolderPermission,
   type FolderPermissionMode,
   type ProfilePreset,
@@ -65,6 +66,7 @@ const POLICY_CONTROLLED_CURRENT_TOOLS = ALL_TOOL_NAMES.filter(
 export interface PresetBuildOptions {
   folders?: string[];
   now?: string;
+  approvalMode?: ApprovalMode;
 }
 
 function folderModeForPreset(preset: ProfilePreset): FolderPermissionMode {
@@ -75,8 +77,37 @@ function terminalModeForPreset(
   preset: ProfilePreset
 ): SchemaV2PermissionConfig["terminal"]["mode"] {
   if (preset === "safe") return "off";
-  if (preset === "power" || preset === "full") return "full";
+  if (preset === "balanced" || preset === "power" || preset === "full") return "full";
   return "ask";
+}
+
+export function productProfileAllowsTool(
+  preset: ProfilePreset | null | undefined,
+  toolName: string
+): boolean | undefined {
+  if (preset !== "safe" && preset !== "balanced" && preset !== "power") {
+    return undefined;
+  }
+
+  const recovery =
+    toolName === "winhelm_status" || toolName === "winhelm_job_status";
+  if (recovery || R0_TOOLS.has(toolName)) return true;
+  if (preset === "safe") return false;
+
+  if (
+    R1_TOOLS.has(toolName) ||
+    R2_TOOLS.has(toolName) ||
+    R3_TOOLS.has(toolName) ||
+    R5_TOOLS.has(toolName)
+  ) {
+    return true;
+  }
+
+  if (R4_TOOLS.has(toolName)) {
+    return preset === "power";
+  }
+
+  return false;
 }
 
 function productPolicy(preset: "safe" | "balanced" | "power"): Record<string, ToolPolicy> {
@@ -84,22 +115,19 @@ function productPolicy(preset: "safe" | "balanced" | "power"): Record<string, To
 
   for (const tool of POLICY_CONTROLLED_CURRENT_TOOLS) {
     if (preset === "safe") {
-      // Safe excludes background task introspection per Appendix A even though
-      // those tools are read-only.
-      if (tool === "terminal_task_list" || tool === "terminal_task_logs") {
-        result[tool] = "off";
-      } else {
-        result[tool] = R0_TOOLS.has(tool) ? "auto" : "off";
-      }
+      result[tool] = R0_TOOLS.has(tool) ? "auto" : "off";
       continue;
     }
 
-    if (R0_TOOLS.has(tool) || R1_TOOLS.has(tool)) {
+    if (
+      R0_TOOLS.has(tool) ||
+      R1_TOOLS.has(tool) ||
+      R2_TOOLS.has(tool) ||
+      R3_TOOLS.has(tool)
+    ) {
       result[tool] = "auto";
-    } else if (R2_TOOLS.has(tool)) {
-      result[tool] = preset === "power" ? "auto" : "ask";
-    } else if (R3_TOOLS.has(tool) || R4_TOOLS.has(tool)) {
-      result[tool] = "ask";
+    } else if (R4_TOOLS.has(tool)) {
+      result[tool] = preset === "power" ? "auto" : "off";
     } else {
       result[tool] = "off";
     }
@@ -166,6 +194,10 @@ export function buildPresetConfig(
   const terminal = { mode: terminalModeForPreset(preset) };
   const toolPolicy = buildToolPolicyForPreset(preset);
   const appliedAt = options.now ?? new Date().toISOString();
+  const productPreset =
+    preset === "safe" || preset === "balanced" || preset === "power";
+  const approvalMode =
+    options.approvalMode ?? (productPreset ? "smart" : undefined);
 
   return {
     schemaVersion: 2,
@@ -174,6 +206,7 @@ export function buildPresetConfig(
     terminal,
     toolPolicy,
     approval: {
+      ...(approvalMode ? { mode: approvalMode } : {}),
       channels: [...DEFAULT_APPROVAL_CONFIG.channels],
       blockHoldMs: DEFAULT_APPROVAL_CONFIG.blockHoldMs,
       jobTtlMs: DEFAULT_APPROVAL_CONFIG.jobTtlMs,

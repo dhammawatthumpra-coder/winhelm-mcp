@@ -65,6 +65,18 @@ const DESKTOP_DISCLOSURES: Partial<Record<string, string>> = {
     "Windows will open the requested target; this tool does not automatically return the opened file contents to the AI.",
 };
 
+export function isToolRiskClassified(toolName: string): boolean {
+  return (
+    isRecoveryToolName(toolName) ||
+    R0_TOOLS.has(toolName) ||
+    R1_TOOLS.has(toolName) ||
+    R2_TOOLS.has(toolName) ||
+    R3_TOOLS.has(toolName) ||
+    R4_TOOLS.has(toolName) ||
+    R5_TOOLS.has(toolName)
+  );
+}
+
 export function getToolRiskClass(toolName: string): ToolRiskClass {
   if (isRecoveryToolName(toolName) || R0_TOOLS.has(toolName)) return "R0";
   if (R1_TOOLS.has(toolName)) return "R1";
@@ -73,8 +85,9 @@ export function getToolRiskClass(toolName: string): ToolRiskClass {
   if (R4_TOOLS.has(toolName)) return "R4";
   if (R5_TOOLS.has(toolName)) return "R5";
 
-  // Unknown tools fail toward the command-execution presentation rather than
-  // being rendered as low-risk. This is UI metadata only, never authorization.
+  // Unknown tools fail toward the command-execution presentation for UI/risk
+  // display. Authorization under explicit Approval Model v2 separately denies
+  // an unclassified tool rather than trusting this presentation fallback.
   return "R5";
 }
 

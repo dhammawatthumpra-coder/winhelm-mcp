@@ -5,6 +5,7 @@ export type FolderPermissionMode = "read" | "readwrite";
 export type TerminalMode = "off" | "safe" | "ask" | "full" | "dangerous";
 export type ToolPolicy = "auto" | "ask" | "off";
 export type ApprovalChannel = "dashboard" | "toast" | "cli";
+export type ApprovalMode = "manual" | "smart" | "trusted";
 export type UiLanguage = "en" | "th";
 export type ProfilePreset =
   | "safe"
@@ -29,6 +30,11 @@ export interface TerminalPermissionConfig {
 }
 
 export interface ApprovalConfig {
+  /**
+   * Absent means the v1.3 legacy approval evaluator remains authoritative.
+   * Fresh v1.4 product setup writes "smart" explicitly.
+   */
+  mode?: ApprovalMode;
   channels: ApprovalChannel[];
   blockHoldMs: number;
   jobTtlMs: number;
@@ -119,6 +125,7 @@ const TERMINAL_MODES = new Set<TerminalMode>([
 
 const TOOL_POLICIES = new Set<ToolPolicy>(["auto", "ask", "off"]);
 const APPROVAL_CHANNELS = new Set<ApprovalChannel>(["dashboard", "toast", "cli"]);
+const APPROVAL_MODES = new Set<ApprovalMode>(["manual", "smart", "trusted"]);
 const INSTALL_ROOT_ACCESS = new Set<InstallRootAccess>([
   "none",
   "read",
@@ -143,7 +150,14 @@ export function isSchemaV2Config(config: { schemaVersion?: unknown }): boolean {
 export function normalizeApprovalConfig(
   approval?: Partial<ApprovalConfig> | null
 ): ApprovalConfig {
+  const rawMode = approval?.mode as unknown;
+  const mode =
+    typeof rawMode === "string" && APPROVAL_MODES.has(rawMode as ApprovalMode)
+      ? (rawMode as ApprovalMode)
+      : undefined;
+
   return {
+    ...(mode ? { mode } : {}),
     channels: approval?.channels
       ? [...approval.channels]
       : [...DEFAULT_APPROVAL_CONFIG.channels],
@@ -158,6 +172,14 @@ export function validateApprovalConfig(
 ): ApprovalValidationResult {
   const value = normalizeApprovalConfig(approval);
   const errors: string[] = [];
+  const rawMode = approval?.mode as unknown;
+
+  if (
+    rawMode !== undefined &&
+    (typeof rawMode !== "string" || !APPROVAL_MODES.has(rawMode as ApprovalMode))
+  ) {
+    errors.push("approval.mode must be manual, smart, or trusted");
+  }
 
   if (
     !Array.isArray(value.channels) ||

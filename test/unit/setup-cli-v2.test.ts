@@ -131,6 +131,8 @@ describe("winhelm setup CLI", () => {
         f.configFile,
         "--answers",
         f.answersFile,
+        "--confirm",
+        "confirm",
         "--yes",
       ]);
 
@@ -144,7 +146,8 @@ describe("winhelm setup CLI", () => {
       );
       assert.strictEqual(persisted.schemaVersion, 2);
       assert.strictEqual(persisted.profilePreset, "balanced");
-      assert.strictEqual(persisted.terminal.mode, "ask");
+      assert.strictEqual(persisted.terminal.mode, "full");
+      assert.strictEqual(persisted.approval.mode, "smart");
       assert.strictEqual(persisted.folders[0].alias, "workspace");
     } finally {
       ConfigManager.resetInstance();
@@ -366,6 +369,8 @@ describe("winhelm setup CLI", () => {
         "balanced",
         "--folder",
         second + "::second",
+        "--confirm",
+        "confirm",
         "--yes",
       ]);
       assert.strictEqual(result.exitCode, 0);

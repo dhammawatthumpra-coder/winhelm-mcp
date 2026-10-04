@@ -267,13 +267,36 @@ describe("Auth token rotation", () => {
         );
         assert.strictEqual(missingCsrf.status, 403);
 
+        const missingConfirmation = await fetch(
+          `${base}/admin/auth/token/rotate`,
+          {
+            method: "POST",
+            headers: {
+              Cookie: adminCookie,
+              Origin: base,
+              "x-winhelm-csrf": csrf,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+          }
+        );
+        assert.strictEqual(missingConfirmation.status, 409);
+        const missingConfirmationBody =
+          (await missingConfirmation.json()) as any;
+        assert.strictEqual(
+          missingConfirmationBody.error.code,
+          "MANDATORY_CONFIRMATION_REQUIRED"
+        );
+
         const rotated = await fetch(`${base}/admin/auth/token/rotate`, {
           method: "POST",
           headers: {
             Cookie: adminCookie,
             Origin: base,
             "x-winhelm-csrf": csrf,
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({ confirmation: "confirm" }),
         });
         assert.strictEqual(rotated.status, 200);
         const body = (await rotated.json()) as any;

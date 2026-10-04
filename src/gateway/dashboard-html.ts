@@ -1267,7 +1267,9 @@ export function getDashboardHtml(
       target.textContent = DASHBOARD_MESSAGES.tokenLoading;
       try {
         const body = await adminRequest('/admin/auth/token/rotate', {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ confirmation: 'confirm' })
         });
         target.textContent = '';
         addTextElement(target, 'div', DASHBOARD_MESSAGES.tokenNew);

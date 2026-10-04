@@ -6,6 +6,9 @@ import {
   type ProtectedPathRule,
 } from "./folder-access.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "./policy.js";
+import { evaluateApprovalMode } from "./approval-model.js";
+import { isToolRiskClassified } from "./risk.js";
+import { productProfileAllowsTool } from "./presets.js";
 import { resolveRequestPath, isFolderListingRequest, type FolderDescriptor } from "./request-paths.js";
 import { translate as t } from "../i18n/messages.js";
 
@@ -240,8 +243,33 @@ export function evaluateSchemaV2ToolAccess(
   config: SchemaV2PermissionConfig,
   options: ToolAccessOptions = {}
 ): ToolAccessResult {
+  if (config.approval?.mode && !isToolRiskClassified(toolName)) {
+    return {
+      decision: "deny",
+      code: "RISK_CLASSIFICATION_REQUIRED",
+      reason:
+        "This tool has no accepted Approval Model risk classification; execution is fail-closed.",
+      userAction: t("action.tool.enable"),
+    };
+  }
+
+  const profileAllows = productProfileAllowsTool(
+    config.profilePreset ?? null,
+    toolName
+  );
+  if (profileAllows === false) {
+    return {
+      decision: "deny",
+      code: "PROFILE_CAPABILITY_DENIED",
+      reason:
+        "The active Capability Profile does not include this tool capability.",
+      userAction: t("action.tool.enable"),
+    };
+  }
+
   if (toolName === COMMAND_RUN_TOOL) {
     const terminal = evaluateTerminalMode(config.terminal.mode);
+    const approvalMode = config.approval?.mode;
 
     if (config.terminal.mode === "safe") {
       const cwdCheck = checkFolderAccess(
@@ -270,11 +298,29 @@ export function evaluateSchemaV2ToolAccess(
         };
       }
 
+      if (!approvalMode) {
+        return {
+          decision: "allow",
+          code: "TERMINAL_SAFE",
+          reason:
+            "Safe command_run is permitted; the package-manager adapter performs the command allowlist and trusted executable checks.",
+          pathChecks: [cwdCheck],
+        };
+      }
+
+      const approval = evaluateApprovalMode(toolName, approvalMode, {
+        terminalExecution: "safe-adapter",
+      });
       return {
-        decision: "allow",
-        code: "TERMINAL_SAFE",
-        reason:
-          "Safe command_run is permitted; the package-manager adapter performs the command allowlist and trusted executable checks.",
+        decision: approval.decision,
+        code:
+          approval.decision === "ask"
+            ? "APPROVAL_REQUIRED"
+            : approval.code,
+        reason: approval.reason,
+        ...(approval.decision === "ask"
+          ? { userAction: t("action.approve.command") }
+          : {}),
         pathChecks: [cwdCheck],
       };
     }
@@ -288,24 +334,43 @@ export function evaluateSchemaV2ToolAccess(
       };
     }
 
-    if (terminal.decision === "ask") {
+    if (!approvalMode) {
+      if (terminal.decision === "ask") {
+        return {
+          decision: "ask",
+          code: "APPROVAL_REQUIRED",
+          reason: terminal.reason,
+          userAction: t("action.approve.command"),
+        };
+      }
+
       return {
-        decision: "ask",
-        code: "APPROVAL_REQUIRED",
+        decision: "allow",
+        code: terminal.code,
         reason: terminal.reason,
-        userAction: t("action.approve.command"),
       };
     }
 
+    const approval = evaluateApprovalMode(toolName, approvalMode, {
+      terminalExecution: "direct",
+      explicitConfirmationFloor: config.terminal.mode === "ask",
+    });
     return {
-      decision: "allow",
-      code: terminal.code,
-      reason: terminal.reason,
+      decision: approval.decision,
+      code:
+        approval.decision === "ask"
+          ? "APPROVAL_REQUIRED"
+          : approval.code,
+      reason: approval.reason,
+      ...(approval.decision === "ask"
+        ? { userAction: t("action.approve.command") }
+        : {}),
     };
   }
 
   if (TERMINAL_EXECUTION_TOOLS.has(toolName)) {
     const terminal = evaluateTerminalMode(config.terminal.mode);
+    const approvalMode = config.approval?.mode;
 
     if (config.terminal.mode === "safe") {
       return {
@@ -325,19 +390,37 @@ export function evaluateSchemaV2ToolAccess(
       };
     }
 
-    if (terminal.decision === "ask") {
+    if (!approvalMode) {
+      if (terminal.decision === "ask") {
+        return {
+          decision: "ask",
+          code: "APPROVAL_REQUIRED",
+          reason: terminal.reason,
+          userAction: t("action.approve.terminal"),
+        };
+      }
+
       return {
-        decision: "ask",
-        code: "APPROVAL_REQUIRED",
+        decision: "allow",
+        code: terminal.code,
         reason: terminal.reason,
-        userAction: t("action.approve.terminal"),
       };
     }
 
+    const approval = evaluateApprovalMode(toolName, approvalMode, {
+      terminalExecution: "direct",
+      explicitConfirmationFloor: config.terminal.mode === "ask",
+    });
     return {
-      decision: "allow",
-      code: terminal.code,
-      reason: terminal.reason,
+      decision: approval.decision,
+      code:
+        approval.decision === "ask"
+          ? "APPROVAL_REQUIRED"
+          : approval.code,
+      reason: approval.reason,
+      ...(approval.decision === "ask"
+        ? { userAction: t("action.approve.terminal") }
+        : {}),
     };
   }
 
@@ -347,6 +430,16 @@ export function evaluateSchemaV2ToolAccess(
       decision: "deny",
       code: policy.code,
       reason: policy.reason,
+      userAction: t("action.tool.enable"),
+    };
+  }
+
+  if (config.approval?.mode && !isToolRiskClassified(toolName)) {
+    return {
+      decision: "deny",
+      code: "RISK_CLASSIFICATION_REQUIRED",
+      reason:
+        "This tool has no accepted Approval Model risk classification; execution is fail-closed.",
       userAction: t("action.tool.enable"),
     };
   }
@@ -414,20 +507,47 @@ export function evaluateSchemaV2ToolAccess(
     }
   }
 
-  if (policy.decision === "ask") {
+  const approvalMode = config.approval?.mode;
+  if (!approvalMode) {
+    if (policy.decision === "ask") {
+      return {
+        decision: "ask",
+        code: "APPROVAL_REQUIRED",
+        reason: policy.reason,
+        userAction: t("action.approve.generic"),
+        pathChecks,
+      };
+    }
+
     return {
-      decision: "ask",
-      code: "APPROVAL_REQUIRED",
+      decision: "allow",
+      code: "POLICY_AUTO",
       reason: policy.reason,
-      userAction: t("action.approve.generic"),
       pathChecks,
     };
   }
 
+  const approval = evaluateApprovalMode(toolName, approvalMode, {
+    explicitConfirmationFloor: policy.decision === "ask",
+    mandatoryConfirmation: toolName === "service_control",
+    // A concrete WinHelm-owned process kill is bounded and follows ordinary
+    // Approval Mode behavior. The wrapper escalates external/name-based
+    // targets through the runtime Mandatory Confirmation classifier.
+    ...(toolName === "process_kill"
+      ? { riskClassOverride: "R1" as const }
+      : {}),
+  });
+
   return {
-    decision: "allow",
-    code: "POLICY_AUTO",
-    reason: policy.reason,
+    decision: approval.decision,
+    code:
+      approval.decision === "ask"
+        ? "APPROVAL_REQUIRED"
+        : approval.code,
+    reason: approval.reason,
+    ...(approval.decision === "ask"
+      ? { userAction: t("action.approve.generic") }
+      : {}),
     pathChecks,
   };
 }

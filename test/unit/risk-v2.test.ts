@@ -81,10 +81,10 @@ describe("Approval risk presentation", () => {
     const balanced = summarizeRuntimeRisk(
       buildPresetConfig("balanced", { folders: ["D:\\Workspace"] })
     );
-    assert.strictEqual(balanced.maxAutoPolicyRisk, "R1");
+    assert.strictEqual(balanced.maxAutoPolicyRisk, "R3");
     assert.strictEqual(
       balanced.terminalExecution,
-      "approval-required"
+      "unrestricted-auto"
     );
     assert.strictEqual(
       balanced.protectedPathBoundary,
@@ -102,7 +102,7 @@ describe("Approval risk presentation", () => {
     const power = summarizeRuntimeRisk(
       buildPresetConfig("power", { folders: ["D:\\Workspace"] })
     );
-    assert.strictEqual(power.maxAutoPolicyRisk, "R2");
+    assert.strictEqual(power.maxAutoPolicyRisk, "R4");
     assert.strictEqual(
       power.terminalExecution,
       "unrestricted-auto"
@@ -111,8 +111,8 @@ describe("Approval risk presentation", () => {
       power.protectedPathBoundary,
       "terminal-command-outside-boundary"
     );
-    assert.ok(power.policyByRisk.R3.ask > 0);
-    assert.ok(power.policyByRisk.R4.ask > 0);
+    assert.ok(power.policyByRisk.R3.auto > 0);
+    assert.ok(power.policyByRisk.R4.auto > 0);
 
     const dangerous = summarizeRuntimeRisk({
       ...buildPresetConfig("power", { folders: ["D:\\Workspace"] }),

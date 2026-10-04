@@ -22,7 +22,7 @@ describe("Dashboard MCP token rotation control", () => {
   it("rotates through the CSRF-aware helper with confirmation", () => {
     assert.match(
       html,
-      /adminRequest\('\/admin\/auth\/token\/rotate',\s*\{\s*method: 'POST'\s*\}\)/
+      /adminRequest\('\/admin\/auth\/token\/rotate',\s*\{[\s\S]*method: 'POST'[\s\S]*confirmation: 'confirm'[\s\S]*\}\)/
     );
     assert.match(
       html,

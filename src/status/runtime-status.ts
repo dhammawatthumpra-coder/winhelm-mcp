@@ -69,6 +69,11 @@ export function buildRuntimeStatusSnapshot(
                 : "schema-v2 permissions are not active",
           },
     approval: {
+      mode: profile.approvalMode,
+      behavior: profile.approvalBehavior,
+      explicitConfirmationFloors: {
+        ...profile.explicitConfirmationFloors,
+      },
       blockHoldMs: config.approval?.blockHoldMs ?? null,
       jobTtlMs: config.approval?.jobTtlMs ?? null,
       maxPending: config.approval?.maxPending ?? null,
