@@ -7,13 +7,16 @@ import { spawn } from "node:child_process";
 import { LocalControlServer } from "../../src/cli/control-server.js";
 import {
   getApprovalEngine,
+  initializeApprovalPersistence,
   resetApprovalEngine,
 } from "../../src/approval/runtime.js";
+import { resetCrossProcessInstanceId } from "../../src/approval/cross-process.js";
 import { resetAdminAuthManager } from "../../src/admin/runtime.js";
 
 async function runCli(
   args: string[],
-  metadataPath: string
+  metadataPath: string,
+  extraEnv: NodeJS.ProcessEnv = {}
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -24,6 +27,7 @@ async function runCli(
         env: {
           ...process.env,
           WINHELM_CONTROL_METADATA_PATH: metadataPath,
+          ...extraEnv,
         },
         stdio: ["pipe", "pipe", "pipe"],
       }
@@ -102,15 +106,18 @@ describe("WinHelm control CLI entrypoint", () => {
     }
   });
 
-  it("connects to the running process for jobs without starting another MCP server", async () => {
+  it("lists jobs from the shared approval state without starting another MCP server", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-entry-"));
     const metadataPath = path.join(dir, "control.json");
-    const control = new LocalControlServer({ metadataPath });
-    resetApprovalEngine();
+    const journalPath = path.join(dir, "approval-jobs.json");
+    resetCrossProcessInstanceId();
+    // DEF-02a: `winhelm jobs` reads the shared cross-process state, so the
+    // creating process must have cross-process coordination enabled (owning
+    // process mirrors). No control pipe is involved in listing.
+    initializeApprovalPersistence(journalPath, { crossProcess: true });
     resetAdminAuthManager();
 
     try {
-      await control.start();
       const created = getApprovalEngine().request({
         tool: "fixture_action",
         args: { value: 1 },
@@ -120,14 +127,15 @@ describe("WinHelm control CLI entrypoint", () => {
         execute: async () => "done",
       });
 
-      const result = await runCli(["jobs"], metadataPath);
+      const result = await runCli(["jobs"], metadataPath, {
+        WINHELM_APPROVAL_JOURNAL_PATH: journalPath,
+      });
       assert.strictEqual(result.code, 0);
       assert.match(result.stdout, new RegExp(created.job.id));
       assert.match(result.stdout, /awaiting_approval/);
       assert.doesNotMatch(result.stdout, /MCP Server is running/i);
       assert.doesNotMatch(result.stderr, /MCP Server is running/i);
     } finally {
-      await control.close();
       resetApprovalEngine();
       resetAdminAuthManager();
       await fs.rm(dir, { recursive: true, force: true });
@@ -137,6 +145,7 @@ describe("WinHelm control CLI entrypoint", () => {
   it("starts the local control channel in stdio server mode", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-stdio-"));
     const metadataPath = path.join(dir, "control.json");
+    const journalPath = path.join(dir, "approval-jobs.json");
     const configPath = path.join(dir, "config.json");
     await fs.writeFile(
       configPath,
@@ -159,6 +168,9 @@ describe("WinHelm control CLI entrypoint", () => {
         env: {
           ...process.env,
           WINHELM_CONTROL_METADATA_PATH: metadataPath,
+          // Isolate the shared approval state so this test never observes
+          // jobs created by other processes on the machine.
+          WINHELM_APPROVAL_JOURNAL_PATH: journalPath,
         },
         stdio: ["pipe", "pipe", "pipe"],
       }
@@ -172,7 +184,9 @@ describe("WinHelm control CLI entrypoint", () => {
 
     try {
       await waitForFile(metadataPath);
-      const jobs = await runCli(["jobs"], metadataPath);
+      const jobs = await runCli(["jobs"], metadataPath, {
+        WINHELM_APPROVAL_JOURNAL_PATH: journalPath,
+      });
       assert.strictEqual(jobs.code, 0);
       assert.match(jobs.stdout, /No approval jobs\./);
       assert.match(stderr, /Local approval control ready/i);

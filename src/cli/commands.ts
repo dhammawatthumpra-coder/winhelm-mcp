@@ -1,7 +1,12 @@
+import { hasInteractiveTerminal } from "./control-client.js";
 import {
   sendControlCommand,
   type ControlCommand,
 } from "./control-client.js";
+import {
+  decideSharedApprovalJob,
+  listSharedApprovalJobs,
+} from "./decision-cli.js";
 
 export const CONTROL_CLI_COMMANDS = new Set([
   "status",
@@ -44,6 +49,61 @@ export async function runControlCliCommand(
   }
 
   try {
+    // DEF-02a: approval listing and decisions no longer route through the
+    // single-slot control pipe. Jobs are listed from the shared durable
+    // state and decisions are recorded as per-job files that the owning
+    // process consumes, so every active WinHelm instance is reachable.
+    if (command === "jobs") {
+      const listing = listSharedApprovalJobs();
+      return {
+        handled: true,
+        exitCode: 0,
+        output: formatJobs(listing),
+      };
+    }
+
+    if (command === "approve" || command === "deny") {
+      const jobId = args[1];
+      if (!jobId) {
+        return {
+          handled: true,
+          exitCode: 2,
+          error: `Usage: winhelm ${command} <jobId>`,
+        };
+      }
+      // Human-in-the-loop gate stays: decisions require an interactive
+      // local terminal.
+      if (!hasInteractiveTerminal()) {
+        return {
+          handled: true,
+          exitCode: 1,
+          error: "This WinHelm command requires an interactive local terminal.",
+        };
+      }
+      const outcome = await decideSharedApprovalJob(
+        jobId,
+        command === "approve" ? "approved" : "denied",
+        "cli"
+      );
+      if (!outcome.ok) {
+        return {
+          handled: true,
+          exitCode: 1,
+          error: outcome.message,
+        };
+      }
+      return {
+        handled: true,
+        exitCode: 0,
+        output:
+          (command === "approve" ? "Approved " : "Denied ") +
+          jobId +
+          " (" +
+          outcome.state +
+          ")",
+      };
+    }
+
     let request: ControlCommand;
     let requireInteractive = false;
 
@@ -51,38 +111,6 @@ export async function runControlCliCommand(
       case "status":
         request = { command: "status" };
         break;
-
-      case "jobs":
-        request = { command: "jobs" };
-        break;
-
-      case "approve": {
-        const jobId = args[1];
-        if (!jobId) {
-          return {
-            handled: true,
-            exitCode: 2,
-            error: "Usage: winhelm approve <jobId>",
-          };
-        }
-        requireInteractive = true;
-        request = { command: "approve", jobId };
-        break;
-      }
-
-      case "deny": {
-        const jobId = args[1];
-        if (!jobId) {
-          return {
-            handled: true,
-            exitCode: 2,
-            error: "Usage: winhelm deny <jobId>",
-          };
-        }
-        requireInteractive = true;
-        request = { command: "deny", jobId };
-        break;
-      }
 
       case "admin-code":
         requireInteractive = true;
@@ -119,14 +147,6 @@ export async function runControlCliCommand(
       };
     }
 
-    if (command === "jobs") {
-      return {
-        handled: true,
-        exitCode: 0,
-        output: formatJobs(Array.isArray(response.jobs) ? response.jobs : []),
-      };
-    }
-
     if (command === "admin-code") {
       return {
         handled: true,
@@ -142,12 +162,7 @@ export async function runControlCliCommand(
     return {
       handled: true,
       exitCode: 0,
-      output:
-        (command === "approve" ? "Approved " : "Denied ") +
-        response.job.id +
-        " (" +
-        response.job.state +
-        ")",
+      output: "OK",
     };
   } catch (err) {
     return {

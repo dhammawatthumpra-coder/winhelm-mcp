@@ -7,12 +7,16 @@ export interface ApprovalNotifierOptions {
 }
 
 /**
- * Deep link the toast opens. The effective listener port is only known once the
- * gateway is listening, so a missing port yields a notification without a link
- * rather than a wrong URL.
+ * Deep link the toast opens. The effective listener port is only known once
+ * the gateway is listening. Stdio instances (Claude Desktop / Cursor) never
+ * listen; for those the default local Dashboard port is used so the toast
+ * points at a usable decision surface — since DEF-02 the Dashboard lists and
+ * decides jobs owned by every WinHelm instance. Loopback only; no public
+ * listener is ever invented.
  */
 export function approvalJobUrl(jobId: string): string | undefined {
-  const port = ConfigManager.getInstance().getRuntimeEffectivePort();
+  const port =
+    ConfigManager.getInstance().getRuntimeEffectivePort() ?? 8788;
   if (typeof port !== "number" || !Number.isInteger(port) || port <= 0) {
     return undefined;
   }

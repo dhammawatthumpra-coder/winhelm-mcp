@@ -58,10 +58,16 @@ describe("Approval pending notification", () => {
     assert.strictEqual(engine.list().length, 1);
   });
 
-  it("deep links to the approvals page of the listening port", () => {
+  it("deep links to the approvals page, defaulting to the local Dashboard port", () => {
     const manager = ConfigManager.resetInstance();
     try {
-      assert.strictEqual(approvalJobUrl("job_1"), undefined);
+      // DEF-02: stdio instances never listen, so an unresolvable effective
+      // port falls back to the default local Dashboard port instead of
+      // dropping the link. A decision surface always stays reachable.
+      assert.strictEqual(
+        approvalJobUrl("job_1"),
+        "http://127.0.0.1:8788/approvals/job_1"
+      );
 
       manager.setRuntimeEffectivePort(18801);
       assert.strictEqual(
