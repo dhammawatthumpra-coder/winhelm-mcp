@@ -68,6 +68,34 @@ function processAlive(pid) {
   }
 }
 
+const malformedUint32Inputs = [
+  ["negative integer", -1],
+  ["negative fractional", -0.5],
+  ["NaN", Number.NaN],
+  ["positive Infinity", Number.POSITIVE_INFINITY],
+  ["negative Infinity", Number.NEGATIVE_INFINITY],
+  ["positive fraction", 1.5],
+  ["UINT32_MAX + 1", 0x1_0000_0000],
+  ["large finite out-of-range", Number.MAX_VALUE],
+  ["numeric string", "1"],
+  ["bigint", 1n],
+  ["null", null],
+  ["object", { value: 1 }],
+  ["boolean", true],
+];
+
+function assertInvalidUint32(call, label) {
+  assert.throws(
+    call,
+    (error) => {
+      assert.equal(error.code, "INVALID_ARGUMENT", label);
+      assert.equal(error.nativeCode, 87, label);
+      return true;
+    },
+    label,
+  );
+}
+
 function tempArtifactsFor(target) {
   const dir = dirname(target);
   const prefix = "." + target.split(/[\\/]/).at(-1) + ".winhelm.tmp.";
@@ -91,6 +119,10 @@ test("production addon exports only the narrow native capability surface", () =>
   assert.equal("atomicReplaceTest" in prod, false);
   assert.equal("spawnContainedTest" in prod, false);
   assert.equal("getCurrentProcessHandleCount" in prod, false);
+  const cmd = join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+  const run = prod.spawnContained(cmd, ["/d", "/s", "/c", "exit 0"]);
+  assert.equal("testWin32CallCounts" in run, false);
+  run.close();
 });
 
 test("NB-FILE-1 retained stable-read handle hashes through the retained handle and denies writers", () => {
@@ -301,6 +333,76 @@ test("NB-PROC-1 production sequence is suspended -> configured -> assigned -> re
   const waited = run.wait(5000);
   assert.deepEqual(waited, { status: "exited", exitCode: 7 });
   run.close();
+});
+
+test("NB-PROC-1 wait rejects malformed uint32 inputs before WaitForSingleObject and accepts the full uint32 boundary", () => {
+  const cmd = join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+  const run = native.spawnContained(cmd, ["/d", "/s", "/c", "exit 0"]);
+  try {
+    assert.deepEqual(run.wait(5000), { status: "exited", exitCode: 0 });
+
+    for (const [label, value] of malformedUint32Inputs) {
+      const before = run.testWin32CallCounts();
+      assertInvalidUint32(() => run.wait(value), `wait: ${label}`);
+      const after = run.testWin32CallCounts();
+      assert.equal(after.waitForSingleObject, before.waitForSingleObject, label);
+      assert.equal(after.terminateJobObject, before.terminateJobObject, label);
+    }
+
+    // UINT32_MAX is intentionally accepted here; Win32 interprets 0xFFFFFFFF as INFINITE.
+    // The process is already exited so this boundary case cannot create an unbounded test hang.
+    for (const value of [0, 1, 123456, 0xffff_ffff]) {
+      const before = run.testWin32CallCounts();
+      assert.deepEqual(run.wait(value), { status: "exited", exitCode: 0 });
+      const after = run.testWin32CallCounts();
+      assert.equal(after.waitForSingleObject, before.waitForSingleObject + 1);
+    }
+  } finally {
+    run.close();
+  }
+});
+
+test("NB-PROC-1 terminate rejects malformed uint32 inputs before TerminateJobObject and preserves valid exit codes", () => {
+  const exited = native.spawnContained(process.execPath, ["-e", "process.exit(0)"]);
+  try {
+    assert.equal(exited.wait(5000).status, "exited");
+    for (const [label, value] of malformedUint32Inputs) {
+      const before = exited.testWin32CallCounts();
+      assertInvalidUint32(() => exited.terminate(value), `terminate: ${label}`);
+      const after = exited.testWin32CallCounts();
+      assert.equal(after.terminateJobObject, before.terminateJobObject, label);
+      assert.equal(after.waitForSingleObject, before.waitForSingleObject, label);
+    }
+  } finally {
+    exited.close();
+  }
+
+  for (const exitCode of [0, 1, 123456, 0xffff_ffff]) {
+    const run = native.spawnContained(process.execPath, ["-e", "setTimeout(() => {}, 30000)"]);
+    try {
+      const before = run.testWin32CallCounts();
+      run.terminate(exitCode);
+      const afterTerminate = run.testWin32CallCounts();
+      assert.equal(afterTerminate.terminateJobObject, before.terminateJobObject + 1);
+      const waited = run.wait(5000);
+      assert.deepEqual(waited, { status: "exited", exitCode });
+    } finally {
+      run.close();
+    }
+  }
+});
+
+test("NB-PROC-1 test-only PID path uses the same strict uint32 boundary", () => {
+  const cmd = join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+  const run = native.spawnContained(cmd, ["/d", "/s", "/c", "exit 0"]);
+  try {
+    assert.equal(run.wait(5000).status, "exited");
+    for (const [label, value] of malformedUint32Inputs) {
+      assertInvalidUint32(() => run.testIsPidInJob(value), `testIsPidInJob: ${label}`);
+    }
+  } finally {
+    run.close();
+  }
 });
 
 test("NB-PROC-1 Job Object contains immediate descendants and kill-on-job-close terminates the tree", async () => {

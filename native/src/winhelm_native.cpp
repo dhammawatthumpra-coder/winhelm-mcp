@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cwchar>
 #include <iomanip>
@@ -34,6 +35,8 @@ struct ProcessState {
   bool closed = false;
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   std::vector<std::string> steps;
+  uint32_t wait_for_single_object_calls = 0;
+  uint32_t terminate_job_object_calls = 0;
 #endif
 };
 
@@ -223,11 +226,28 @@ bool GetUint32(
                     std::string(field_name) + " must be a number");
     return false;
   }
-  if (napi_get_value_uint32(env, value, &out) != napi_ok) {
+
+  double numeric_value = 0.0;
+  if (napi_get_value_double(env, value, &numeric_value) != napi_ok) {
     ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
                     std::string("Unable to read ") + field_name);
     return false;
   }
+
+  constexpr double kUint32Max =
+      static_cast<double>(std::numeric_limits<uint32_t>::max());
+  if (!std::isfinite(numeric_value) ||
+      std::trunc(numeric_value) != numeric_value ||
+      numeric_value < 0.0 || numeric_value > kUint32Max) {
+    ThrowStructured(
+        env,
+        "INVALID_ARGUMENT",
+        ERROR_INVALID_PARAMETER,
+        std::string(field_name) + " must be an integer in the uint32 range");
+    return false;
+  }
+
+  out = static_cast<uint32_t>(numeric_value);
   return true;
 }
 
@@ -979,6 +999,9 @@ napi_value ProcessWait(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  ++state->wait_for_single_object_calls;
+#endif
   const DWORD wait_result = WaitForSingleObject(state->process, timeout_ms);
   if (wait_result == WAIT_TIMEOUT) {
     napi_value out;
@@ -1022,6 +1045,9 @@ napi_value ProcessTerminate(napi_env env, napi_callback_info info) {
                            "Job Object handle is unavailable");
   }
 
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  ++state->terminate_job_object_calls;
+#endif
   if (!TerminateJobObject(state->job, exit_code)) {
     const DWORD error = GetLastError();
     return ThrowWin32(env, "JOB_TERMINATE_FAILED", error, "TerminateJobObject");
@@ -1094,6 +1120,23 @@ napi_value ProcessTestSteps(napi_env env, napi_callback_info info) {
                      MakeString(env, state->steps[i]));
   }
   return array;
+}
+
+napi_value ProcessTestWin32CallCounts(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 0;
+  napi_value this_value;
+  ProcessState* state =
+      UnwrapProcess(env, info, 0, argc, argv, this_value);
+  if (!state) return nullptr;
+
+  napi_value out;
+  napi_create_object(env, &out);
+  SetProp(env, out, "waitForSingleObject",
+          MakeUint32(env, state->wait_for_single_object_calls));
+  SetProp(env, out, "terminateJobObject",
+          MakeUint32(env, state->terminate_job_object_calls));
+  return out;
 }
 
 napi_value ProcessTestCloseJob(napi_env env, napi_callback_info info) {
@@ -1316,6 +1359,7 @@ napi_value SpawnContainedImpl(
   };
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   props.push_back({"testSteps", nullptr, ProcessTestSteps, nullptr, nullptr, nullptr, napi_default, nullptr});
+  props.push_back({"testWin32CallCounts", nullptr, ProcessTestWin32CallCounts, nullptr, nullptr, nullptr, napi_default, nullptr});
   props.push_back({"testCloseJob", nullptr, ProcessTestCloseJob, nullptr, nullptr, nullptr, napi_default, nullptr});
   props.push_back({"testIsPidInJob", nullptr, ProcessTestIsPidInJob, nullptr, nullptr, nullptr, napi_default, nullptr});
 #endif
