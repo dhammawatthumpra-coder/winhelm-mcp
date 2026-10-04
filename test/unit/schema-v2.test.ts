@@ -61,6 +61,36 @@ describe("Schema-v2 configuration primitives", () => {
     assert.deepStrictEqual(result.errors, []);
   });
 
+  it("accepts explicit development install-root access and rejects invalid values", () => {
+    const allowed = validateSchemaV2Config({
+      schemaVersion: 2,
+      folders: [],
+      terminal: { mode: "off" },
+      toolPolicy: {},
+      development: { installRootAccess: "readwrite" },
+    });
+
+    assert.strictEqual(allowed.valid, true);
+    assert.deepStrictEqual(allowed.value.development, {
+      installRootAccess: "readwrite",
+    });
+
+    const rejected = validateSchemaV2Config({
+      schemaVersion: 2,
+      folders: [],
+      terminal: { mode: "off" },
+      toolPolicy: {},
+      development: { installRootAccess: "all" },
+    });
+
+    assert.strictEqual(rejected.valid, false);
+    assert.ok(
+      rejected.errors.some((error) =>
+        error.includes("development.installRootAccess")
+      )
+    );
+  });
+
   it("normalizes ui.language to English when the configured locale is unsupported", () => {
     const result = validateSchemaV2Config({
       schemaVersion: 2,
