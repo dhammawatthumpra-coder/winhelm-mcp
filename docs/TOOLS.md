@@ -1,6 +1,10 @@
 # WinHelm MCP — Comprehensive Tools Reference
 
-WinHelm provides **38 native Windows tools** and **1 MCP Resource** designed for AI coding agents and desktop automation.
+WinHelm provides **41 canonical native Windows tools** (38 legacy system tools + 3 schema-v2 execution and recovery tools) and **1 MCP Resource** designed for AI coding agents and desktop automation.
+
+### Runtime Exposure by Configuration Mode
+- **Legacy Mode (v1.2.1 compatibility):** 40 tools are registered (38 legacy tools + 2 recovery tools `winhelm_status` and `winhelm_job_status`). The `command_run` tool is schema-v2 only.
+- **Schema-v2 Mode (`schemaVersion: 2`):** All 41 canonical tools are registered on the MCP server surface. Execution and approval gating are evaluated dynamically at runtime based on active folder permissions, terminal policies, and risk levels.
 
 ---
 
@@ -48,6 +52,9 @@ WinHelm supports loading subset profiles to prevent prompt context bloat:
 | `http_ping` | ❌ | ❌ | ✅ | ✅ | ✅ | Network | Fast HTTP latency and health probe |
 | `http_request` | ❌ | ❌ | ✅ | ✅ | ✅ | Network | Dispatches HTTP requests (GET/POST/etc.) |
 | `network_info` | ❌ | ❌ | ❌ | ✅ | ✅ | Network | Network adapters, IPs, DNS, and Tailscale |
+| `command_run` *(v1.3)* | ❌ | ❌ | ❌ | ❌ | ❌ | Execution | No-shell direct argument vector command runner (Schema-v2 only) |
+| `winhelm_status` *(v1.3)* | ✅ | ✅ | ✅ | ✅ | ✅ | Recovery | Server governance, profile, and runtime health status |
+| `winhelm_job_status` *(v1.3)* | ✅ | ✅ | ✅ | ✅ | ✅ | Recovery | Approval job status check and result recovery |
 | `preview://file` *(Resource)* | ❌ | ❌ | ✅ | ✅ | ✅ | MCP Resource | Dynamic interactive HTML preview resource |
 
 ---
@@ -61,6 +68,7 @@ WinHelm supports loading subset profiles to prevent prompt context bloat:
 5. [System, Processes & Windows Services](#5-system-processes--windows-services) (9 tools)
 6. [Network & Web Diagnostics](#6-network--web-diagnostics) (3 tools)
 7. [MCP Resources](#7-mcp-resources) (1 resource)
+8. [Schema-v2 Execution & Recovery Tools](#8-schema-v2-execution--recovery-tools) (3 tools)
 
 ---
 
@@ -364,3 +372,30 @@ Retrieves local IP addresses, network adapters, Default Gateway, DNS servers, an
 
 ### `preview://file`
 Interactive file preview resource registered on the MCP Server (`text/html;profile=mcp-app`). Allows MCP client apps and web browsers to view syntax-highlighted code and rendered Markdown at `http://localhost:8788/preview?path=<filepath>`.
+
+---
+
+## 8. Schema-v2 Execution & Recovery Tools
+
+### `command_run`
+Executes an external command or package manager executable directly without a shell interpreter, passing argument vectors cleanly. In Safe mode, only permitted package managers (`npm`, `pnpm`, `yarn`, `bun`) inside readwrite folders are allowed.
+- **Parameters:**
+  - `command` *(string, required)*: Executable/package-manager command. Safe mode permits only npm, pnpm, yarn, or bun.
+  - `args` *(array of strings, optional, default: `[]`)*: Argument vector passed directly without a shell.
+  - `cwd` *(string, optional)*: Working directory (must be a readwrite folder in Safe mode).
+  - `idempotencyKey` *(string, optional)*: Optional hint binding this request to an existing approval job after a dropped connection.
+  - `timeoutMs` *(number, optional)*: Execution timeout in milliseconds (100–600,000).
+- **Returns:** JSON string containing `exitCode`, stdout, stderr, and execution duration.
+
+### `winhelm_status`
+Retrieves a read-only snapshot of the WinHelm server runtime status, active schema version, profile preset, folder permissions, terminal policy, and system health.
+- **Parameters:** None.
+- **Returns:** Formatted JSON runtime status snapshot.
+
+### `winhelm_job_status`
+Queries the current status and execution result of an existing WinHelm human approval job. Allows AI clients to recover job results after network interruptions without re-executing side effects.
+- **Parameters:**
+  - `jobId` *(string, optional)*: Unique approval job ID returned when an action was approval-gated.
+  - `idempotencyKey` *(string, optional)*: Client idempotency key from the original request.
+- **Returns:** JSON object containing job state (`awaiting_approval`, `approved`, `denied`, `expired`, `running`, `completed`, `failed`, `unknown`) and execution output.
+
