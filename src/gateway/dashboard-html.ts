@@ -937,7 +937,7 @@ export function getDashboardHtml(
     function parseFolderEditor() {
       const raw = document.getElementById('profileFoldersInput').value;
       return raw
-        .split(/\r?\n/)
+        .split(/\\r?\\n/)
         .map(line => line.trim())
         .filter(Boolean)
         .map(line => {
@@ -1033,7 +1033,7 @@ export function getDashboardHtml(
             ? String(folder.path) + '::' + String(folder.alias)
             : String(folder.path)
         )
-        .join('\n');
+        .join('\\n');
 
       const counts = policyCounts(profile.toolPolicy);
       const modified =
@@ -1056,7 +1056,7 @@ export function getDashboardHtml(
         lines.push('Validation: ' + profile.validationErrors.join(' | '));
       }
 
-      document.getElementById('profilePreview').textContent = lines.join('\n');
+      document.getElementById('profilePreview').textContent = lines.join('\\n');
       updateRuntimeRisk(profile);
     }
 
@@ -1098,7 +1098,7 @@ export function getDashboardHtml(
         );
       });
 
-      document.getElementById('profilePreview').textContent = lines.join('\n');
+      document.getElementById('profilePreview').textContent = lines.join('\\n');
     }
 
     async function previewProfile() {
@@ -1125,12 +1125,12 @@ export function getDashboardHtml(
         document.getElementById('profileConfirmInput').value = '';
         renderProfileState(body.profile, null);
         const backupLine = body.backupPath
-          ? '\nBackup created: ' + body.backupPath
+          ? '\\nBackup created: ' + body.backupPath
           : '';
         document.getElementById('profilePreview').textContent +=
-          '\nApplied successfully.' +
+          '\\nApplied successfully.' +
           backupLine +
-          '\nReconnect the MCP client if it cached the previous tool list.';
+          '\\nReconnect the MCP client if it cached the previous tool list.';
       } catch (err) {
         document.getElementById('profilePreview').textContent =
           (err.code ? err.code + ': ' : '') + (err.message || String(err));
@@ -1173,7 +1173,7 @@ export function getDashboardHtml(
           '/admin/clients/' + client + '/preview',
           { method: 'POST' }
         );
-        setClientPreview(clientPreviewLines(body.preview, false).join('\n'));
+        setClientPreview(clientPreviewLines(body.preview, false).join('\\n'));
       } catch (err) {
         const errorLines = [
           (err.code ? err.code + ': ' : '') + (err.message || String(err))
@@ -1185,7 +1185,7 @@ export function getDashboardHtml(
         candidates.forEach(candidate => {
           errorLines.push('  candidate: ' + String(candidate));
         });
-        setClientPreview(errorLines.join('\n'));
+        setClientPreview(errorLines.join('\\n'));
       }
     }
 
@@ -1202,7 +1202,7 @@ export function getDashboardHtml(
             ? 'Backup: ' + String(body.backupPath)
             : 'No previous client config to back up.'
         );
-        setClientPreview(lines.join('\n'));
+        setClientPreview(lines.join('\\n'));
       } catch (err) {
         const errorLines = [
           (err.code ? err.code + ': ' : '') + (err.message || String(err))
@@ -1214,7 +1214,7 @@ export function getDashboardHtml(
         candidates.forEach(candidate => {
           errorLines.push('  candidate: ' + String(candidate));
         });
-        setClientPreview(errorLines.join('\n'));
+        setClientPreview(errorLines.join('\\n'));
       }
     }
 
@@ -1463,7 +1463,7 @@ export function getDashboardHtml(
             addTextElement(
               row,
               'div',
-              DASHBOARD_MESSAGES.approvalsFolders + '\n' + lines.join('\n'),
+              DASHBOARD_MESSAGES.approvalsFolders + '\\n' + lines.join('\\n'),
               'approval-args'
             );
           }
