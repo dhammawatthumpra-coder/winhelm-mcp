@@ -32,15 +32,25 @@ WinHelm is built with **Node.js 20+** and **TypeScript 5.8+** on Windows.
 
 4. **Run the automated test suite:**
    ```bash
+   # Standard test runner
    npm test
+
+   # Canonical serialized verification checkpoint (avoids fixed-port race conditions on loaded environments)
+   npx tsx --test --test-concurrency 1 "test/**/*.test.ts"
    ```
 
-5. **Build TypeScript:**
+5. **Run static type checking & tool metadata linting:**
+   ```bash
+   npm run type-check
+   npm run lint:tools
+   ```
+
+6. **Build TypeScript:**
    ```bash
    npm run build
    ```
 
-6. **Build Standalone Windows Executable (`winhelm.exe`):**
+7. **Build Standalone Windows Executable (`winhelm.exe`):**
    ```bash
    npm run build:exe
    ```
