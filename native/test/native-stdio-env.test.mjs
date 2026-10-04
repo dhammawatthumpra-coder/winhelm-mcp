@@ -658,6 +658,15 @@ test("NB-WAIT-1 overlapping async waits, sync waits, and close are deterministic
     a4Options(),
   );
   try {
+    for (const [label, value] of [
+      ["negative", -1],
+      ["fractional", 1.5],
+      ["NaN", Number.NaN],
+      ["overflow", 0x1_0000_0000],
+      ["string", "1"],
+    ]) {
+      assertInvalid(() => run.waitAsync(value), "INVALID_ARGUMENT", `waitAsync: ${label}`);
+    }
     const pending = run.waitAsync(15000);
     assertInvalid(() => run.waitAsync(15000), "ASYNC_WAIT_PENDING", "overlapping async wait");
     assertInvalid(() => run.wait(15000), "ASYNC_WAIT_PENDING", "sync wait during async wait");
