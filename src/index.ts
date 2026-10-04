@@ -15,7 +15,11 @@ import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js
 import { initializeApprovalPersistence } from "./approval/runtime.js";
 import { defaultApprovalJournalPath } from "./approval/journal.js";
 import { getProvenanceTracker } from "./approval/provenance.js";
-import { getSessionClientInfo } from "./gateway/session-context.js";
+import {
+  getSessionClientInfo,
+  normalizeClientInfo,
+  setSessionClientInfo,
+} from "./gateway/session-context.js";
 import { describeRequestFolderAccess } from "./permissions/tool-access.js";
 import {
   getDesktopDataDisclosure,
@@ -303,10 +307,24 @@ async function main() {
   console.error("[WinHelm] Local approval control ready. Run 'winhelm jobs' or 'winhelm admin-code' from a local terminal.");
 
   if (IS_STDIO) {
+    // DEF-02: a stdio client (Claude Desktop, Cursor) uses one implicit
+    // session for the whole process. Publish that session and its announced
+    // clientInfo to the shared session context so approval surfaces (and the
+    // owner-computed mirror metadata) can name the requesting client instead
+    // of reporting null. This matches the session the tool wrapper derives
+    // (`local-process-<pid>`).
+    const stdioSessionId = `local-process-${process.pid}`;
     const mcpServer = new McpServer({
       name: "winhelm-mcp",
       version: SERVER_VERSION,
     });
+    mcpServer.server.oninitialized = () => {
+      const client = mcpServer.server.getClientVersion();
+      const clientInfo = normalizeClientInfo(client);
+      if (clientInfo) {
+        setSessionClientInfo(stdioSessionId, clientInfo);
+      }
+    };
     registerAllTools(mcpServer);
 
     const transport = new StdioServerTransport();

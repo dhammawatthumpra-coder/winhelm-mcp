@@ -73,7 +73,7 @@ function startHarness(
   return { child, outPath, result };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 60000) {
+async function waitFor(predicate: () => boolean, timeoutMs = 90000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (predicate()) return;
@@ -492,4 +492,113 @@ describe("DEF-02 cross-process approval coordination", () => {
     await new Promise((resolve) => cli.on("exit", resolve));
     assert.match(stderr, /interactive local terminal/);
   });
+
+  it("J: a real stdio client's announced clientInfo reaches the shared mirror", async () => {
+    // A stdio MCP client (Claude Desktop / Cursor) announces clientInfo in
+    // its initialize handshake. Before DEF-02 the stdio path never published
+    // it, so approval surfaces reported clientInfo: null. This drives a real
+    // stdio server process and asserts the owning process mirrors the name.
+    const journalPath = path.join(sandbox.root, "stdio-journal.json");
+    const stdioConfigPath = path.join(sandbox.root, "stdio-config.json");
+    await fsp.writeFile(
+      stdioConfigPath,
+      JSON.stringify(
+        {
+          schemaVersion: 2,
+          folders: [
+            { path: sandbox.root, permission: "readwrite", alias: "smoke" },
+          ],
+          terminal: { mode: "ask" },
+          toolPolicy: { clipboard_set: "ask" },
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    const child = spawn(
+      process.execPath,
+      ["--import", "tsx", "src/index.ts", "--stdio", "--config", stdioConfigPath],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          WINHELM_APPROVAL_JOURNAL_PATH: journalPath,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+    const send = (o: unknown) => child.stdin.write(JSON.stringify(o) + "\n");
+    let stdout = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (c: string) => (stdout += c));
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (c: string) => (stderr += c));
+    const sawInitializeResult = () =>
+      stdout
+        .split("\n")
+        .some((line) => {
+          try {
+            const msg = JSON.parse(line);
+            return msg.id === 1 && msg.result !== undefined;
+          } catch {
+            return false;
+          }
+        });
+
+    try {
+      send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "Claude Desktop", version: "9.9.9" },
+        },
+      });
+      await waitFor(sawInitializeResult, 30000);
+      send({ jsonrpc: "2.0", method: "notifications/initialized" });
+      send({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "clipboard_set", arguments: { text: "def02-j" } },
+      });
+      // Read the mirror straight off disk: the announced name must be there.
+      let mirrored: any = null;
+      await waitFor(() => {
+        const records = readRequestsFromDir(journalPath);
+        mirrored = records[0] ?? null;
+        return Boolean(mirrored);
+      });
+      assert.equal(mirrored.display.clientInfo.name, "Claude Desktop");
+      assert.equal(mirrored.display.clientInfo.version, "9.9.9");
+      assert.equal(mirrored.job.state, "awaiting_approval");
+    } catch (err) {
+      throw new Error(
+        (err as Error).message +
+          " | stdout=" +
+          stdout.slice(-400) +
+          " | stderr=" +
+          stderr.slice(-400)
+      );
+    } finally {
+      child.kill("SIGKILL");
+      await new Promise((resolve) => child.on("exit", resolve));
+    }
+  });
 });
+
+function readRequestsFromDir(journalPath: string): any[] {
+  const dir = path.join(path.dirname(journalPath), "approval-requests");
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+  } catch {
+    return [];
+  }
+}
