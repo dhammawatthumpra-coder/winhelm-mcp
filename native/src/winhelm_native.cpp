@@ -1,16 +1,20 @@
 #include <windows.h>
 #include <bcrypt.h>
+#include <psapi.h>
 #include <node_api.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cwchar>
 #include <iomanip>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -20,12 +24,103 @@ namespace {
 
 constexpr size_t kMaxStringChars = 32768;
 constexpr size_t kMaxBufferBytes = 128ull * 1024ull * 1024ull;
+constexpr size_t kMaxEnvEntries = 1024;
+constexpr size_t kMaxEnvBlockChars = 32767;
+constexpr size_t kMaxCaptureBytes = kMaxBufferBytes;
+constexpr size_t kCollectorChunkBytes = 64 * 1024;
 std::atomic<unsigned long long> g_temp_counter{0};
+
+// Output stream index convention shared by collectors and JS-facing methods.
+constexpr int kStreamStdout = 0;
+constexpr int kStreamStderr = 1;
+
+// Local NTSTATUS stand-ins used only as stable native error codes; ntstatus.h
+// is intentionally not included.
+constexpr NTSTATUS kNapiStatusInvalidParameter = static_cast<NTSTATUS>(0xC000000Dul);
+constexpr NTSTATUS kNapiStatusUnsuccessful = static_cast<NTSTATUS>(0xC0000001ul);
 
 struct StableReadState {
   HANDLE handle = INVALID_HANDLE_VALUE;
   bool closed = false;
 };
+
+enum class SinkMode {
+  CreateNew,
+  Overwrite,
+  Append,
+};
+
+struct StreamState {
+  HANDLE read_end = nullptr;
+  HANDLE sink = nullptr;
+  uint32_t capture_limit = 0;
+
+  std::mutex mutex;
+  std::string capture;
+  uint64_t total = 0;
+  bool truncated = false;
+  bool done = false;
+  bool has_error = false;
+  uint32_t error_code = 0;
+
+  BCRYPT_ALG_HANDLE alg = nullptr;
+  BCRYPT_HASH_HANDLE hash = nullptr;
+  std::vector<uint8_t> hash_object;
+  uint8_t digest[32] = {};
+  bool digest_ready = false;
+
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  uint64_t test_sink_fail_after_bytes = 0;
+  uint64_t sink_bytes_written = 0;
+  bool test_sink_failed = false;
+#endif
+};
+
+void DestroyStreamHash(StreamState& stream) {
+  if (stream.hash) {
+    BCryptDestroyHash(stream.hash);
+    stream.hash = nullptr;
+  }
+  if (stream.alg) {
+    BCryptCloseAlgorithmProvider(stream.alg, 0);
+    stream.alg = nullptr;
+  }
+  stream.hash_object.clear();
+  stream.hash_object.shrink_to_fit();
+}
+
+bool CreateStreamHash(StreamState& stream) {
+  DWORD object_length = 0;
+  DWORD result_length = 0;
+  NTSTATUS status = BCryptOpenAlgorithmProvider(
+      &stream.alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+  if (status < 0) return false;
+  status = BCryptGetProperty(
+      stream.alg,
+      BCRYPT_OBJECT_LENGTH,
+      reinterpret_cast<PUCHAR>(&object_length),
+      sizeof(object_length),
+      &result_length,
+      0);
+  if (status < 0) {
+    DestroyStreamHash(stream);
+    return false;
+  }
+  stream.hash_object.assign(object_length, 0);
+  status = BCryptCreateHash(
+      stream.alg,
+      &stream.hash,
+      stream.hash_object.data(),
+      static_cast<ULONG>(stream.hash_object.size()),
+      nullptr,
+      0,
+      0);
+  if (status < 0) {
+    DestroyStreamHash(stream);
+    return false;
+  }
+  return true;
+}
 
 struct ProcessState {
   HANDLE process = nullptr;
@@ -33,6 +128,24 @@ struct ProcessState {
   HANDLE job = nullptr;
   DWORD pid = 0;
   bool closed = false;
+
+  bool a4 = false;
+  StreamState streams[2];
+  std::thread collectors[2];
+  bool collectors_started = false;
+  bool collectors_joined = false;
+
+  std::mutex wait_mutex;
+  bool wait_pending = false;
+  napi_async_work wait_work = nullptr;
+  napi_deferred wait_deferred = nullptr;
+  napi_ref wait_keepalive = nullptr;
+  uint32_t async_timeout_ms = 0;
+  bool async_wait_failed = false;
+  uint32_t async_wait_error = 0;
+  bool async_exited = false;
+  uint32_t async_exit_code = 0;
+
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   std::vector<std::string> steps;
   uint32_t wait_for_single_object_calls = 0;
@@ -40,17 +153,55 @@ struct ProcessState {
 #endif
 };
 
-void CloseStable(StableReadState* state) {
-  if (!state || state->closed) return;
-  if (state->handle != INVALID_HANDLE_VALUE) {
-    CloseHandle(state->handle);
-    state->handle = INVALID_HANDLE_VALUE;
+void JoinCollectors(ProcessState* state) {
+  if (!state || !state->collectors_started || state->collectors_joined) return;
+  for (auto& worker : state->collectors) {
+    if (worker.joinable()) worker.join();
   }
-  state->closed = true;
+  state->collectors_joined = true;
+  // Deterministic sink closure: once the collectors have finished mirroring,
+  // the server-owned sink handles are released and the final stream state is
+  // safe to journal/return.
+  for (int index = 0; index < 2; ++index) {
+    StreamState& stream = state->streams[index];
+    if (stream.sink) {
+      CloseHandle(stream.sink);
+      stream.sink = nullptr;
+    }
+  }
+}
+
+void CloseStreamHandles(ProcessState* state) {
+  for (int index = 0; index < 2; ++index) {
+    StreamState& stream = state->streams[index];
+    if (stream.read_end) {
+      CloseHandle(stream.read_end);
+      stream.read_end = nullptr;
+    }
+    if (stream.sink) {
+      CloseHandle(stream.sink);
+      stream.sink = nullptr;
+    }
+    DestroyStreamHash(stream);
+  }
 }
 
 void CloseProcessState(ProcessState* state) {
   if (!state || state->closed) return;
+  if (state->a4) {
+    if (state->process) {
+      if (WaitForSingleObject(state->process, 0) != WAIT_OBJECT_0) {
+        if (state->job) {
+          TerminateJobObject(state->job, ERROR_PROCESS_ABORTED);
+        } else {
+          TerminateProcess(state->process, ERROR_PROCESS_ABORTED);
+        }
+      }
+      WaitForSingleObject(state->process, 5000);
+    }
+    JoinCollectors(state);
+    CloseStreamHandles(state);
+  }
   if (state->job) {
     CloseHandle(state->job);
     state->job = nullptr;
@@ -62,6 +213,15 @@ void CloseProcessState(ProcessState* state) {
   if (state->process) {
     CloseHandle(state->process);
     state->process = nullptr;
+  }
+  state->closed = true;
+}
+
+void CloseStable(StableReadState* state) {
+  if (!state || state->closed) return;
+  if (state->handle != INVALID_HANDLE_VALUE) {
+    CloseHandle(state->handle);
+    state->handle = INVALID_HANDLE_VALUE;
   }
   state->closed = true;
 }
@@ -512,6 +672,212 @@ std::wstring BuildCommandLine(
     out += QuoteWindowsArg(arg);
   }
   return out;
+}
+
+struct EnvEntry {
+  std::wstring name;
+  std::wstring value;
+};
+
+wchar_t EnvCiLower(wchar_t ch) {
+  return (ch >= L'A' && ch <= L'Z')
+      ? static_cast<wchar_t>(ch + (L'a' - L'A'))
+      : ch;
+}
+
+// Deterministic, locale-free, case-insensitive wide ordering used for both
+// duplicate detection and Windows environment block construction.
+bool EnvNameCiLess(const std::wstring& a, const std::wstring& b) {
+  const size_t common = std::min(a.size(), b.size());
+  for (size_t i = 0; i < common; ++i) {
+    const wchar_t ca = EnvCiLower(a[i]);
+    const wchar_t cb = EnvCiLower(b[i]);
+    if (ca != cb) return ca < cb;
+  }
+  return a.size() < b.size();
+}
+
+bool EnvNameCiEqual(const std::wstring& a, const std::wstring& b) {
+  return !EnvNameCiLess(a, b) && !EnvNameCiLess(b, a);
+}
+
+bool BuildEnvironmentBlock(
+    const std::vector<EnvEntry>& entries,
+    std::vector<wchar_t>& block) {
+  // The block is a sequence of name=value strings each NUL-terminated, closed
+  // by an empty string (double NUL). An explicitly empty environment is
+  // therefore two NULs.
+  size_t total_chars = entries.empty() ? 2 : 1;
+  for (const auto& entry : entries) {
+    total_chars += entry.name.size() + 1 + entry.value.size() + 1;
+  }
+  if (total_chars > kMaxEnvBlockChars) return false;
+
+  block.clear();
+  block.reserve(total_chars);
+  for (const auto& entry : entries) {
+    block.insert(block.end(), entry.name.begin(), entry.name.end());
+    block.push_back(L'=');
+    block.insert(block.end(), entry.value.begin(), entry.value.end());
+    block.push_back(L'\0');
+  }
+  block.push_back(L'\0');
+  if (block.size() < 2) {
+    block.push_back(L'\0');
+  }
+  return true;
+}
+
+bool OpenSinkHandle(
+    const std::wstring& path,
+    SinkMode mode,
+    HANDLE& out_handle,
+    DWORD& native_error) {
+  const DWORD creation = mode == SinkMode::CreateNew ? CREATE_NEW
+                       : mode == SinkMode::Overwrite ? CREATE_ALWAYS
+                                                     : OPEN_ALWAYS;
+  HANDLE file = CreateFileW(
+      path.c_str(),
+      GENERIC_WRITE,
+      0,
+      nullptr,
+      creation,
+      FILE_ATTRIBUTE_NORMAL,
+      nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    native_error = GetLastError();
+    return false;
+  }
+  if (mode == SinkMode::Append) {
+    LARGE_INTEGER zero{};
+    if (!SetFilePointerEx(file, zero, nullptr, FILE_END)) {
+      native_error = GetLastError();
+      CloseHandle(file);
+      return false;
+    }
+  }
+  out_handle = file;
+  native_error = ERROR_SUCCESS;
+  return true;
+}
+
+// Continuous native drain loop: every drained byte is hashed exactly once and
+// counted, only the bounded prefix is retained, and an optional physical sink
+// receives a mirror of the full stream. Any governed fatal error fails closed
+// by terminating the contained Job tree instead of silently losing evidence.
+void CollectorMain(ProcessState* state, int index) {
+  StreamState& stream = state->streams[index];
+  std::vector<uint8_t> buffer(kCollectorChunkBytes);
+  bool fatal_error = false;
+
+  for (;;) {
+    DWORD bytes_read = 0;
+    if (!ReadFile(
+            stream.read_end,
+            buffer.data(),
+            static_cast<DWORD>(buffer.size()),
+            &bytes_read,
+            nullptr)) {
+      const DWORD error = GetLastError();
+      std::lock_guard<std::mutex> lock(stream.mutex);
+      if (error != ERROR_BROKEN_PIPE && error != ERROR_NO_DATA) {
+        stream.has_error = true;
+        stream.error_code = error;
+        fatal_error = true;
+      }
+      break;
+    }
+    if (bytes_read == 0) break;
+
+    const NTSTATUS hash_status = stream.hash
+        ? BCryptHashData(stream.hash, buffer.data(), bytes_read, 0)
+        : kNapiStatusInvalidParameter;
+
+    {
+      std::lock_guard<std::mutex> lock(stream.mutex);
+      stream.total += bytes_read;
+      if (stream.capture.size() < stream.capture_limit) {
+        const size_t take = std::min<size_t>(
+            bytes_read, stream.capture_limit - stream.capture.size());
+        stream.capture.append(
+            reinterpret_cast<const char*>(buffer.data()), take);
+      }
+      if (stream.total > stream.capture.size()) {
+        stream.truncated = true;
+      }
+      if (hash_status < 0) {
+        stream.has_error = true;
+        stream.error_code = static_cast<uint32_t>(hash_status);
+        fatal_error = true;
+      }
+    }
+    if (fatal_error) break;
+
+    if (stream.sink) {
+      const uint8_t* data = buffer.data();
+      size_t remaining = bytes_read;
+      while (remaining > 0) {
+        size_t chunk = remaining;
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+        if (stream.test_sink_fail_after_bytes > 0 && !stream.test_sink_failed) {
+          const uint64_t allowed =
+              stream.test_sink_fail_after_bytes > stream.sink_bytes_written
+                  ? stream.test_sink_fail_after_bytes -
+                        stream.sink_bytes_written
+                  : 0;
+          if (allowed == 0) {
+            std::lock_guard<std::mutex> lock(stream.mutex);
+            stream.has_error = true;
+            stream.error_code = ERROR_WRITE_FAULT;
+            stream.test_sink_failed = true;
+            fatal_error = true;
+            break;
+          }
+          chunk = std::min<size_t>(chunk, static_cast<size_t>(allowed));
+        }
+#endif
+        DWORD written = 0;
+        if (!WriteFile(
+                stream.sink,
+                data,
+                static_cast<DWORD>(chunk),
+                &written,
+                nullptr) ||
+            written == 0) {
+          std::lock_guard<std::mutex> lock(stream.mutex);
+          stream.has_error = true;
+          stream.error_code = written == 0 ? ERROR_WRITE_FAULT
+                                           : GetLastError();
+          fatal_error = true;
+          break;
+        }
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+        stream.sink_bytes_written += written;
+#endif
+        data += written;
+        remaining -= written;
+      }
+      if (fatal_error) break;
+    }
+  }
+
+  if (fatal_error && state->job) {
+    TerminateJobObject(state->job, ERROR_PROCESS_ABORTED);
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(stream.mutex);
+    if (!stream.has_error && stream.hash && !stream.digest_ready) {
+      if (BCryptFinishHash(
+              stream.hash, stream.digest, sizeof(stream.digest), 0) >= 0) {
+        stream.digest_ready = true;
+      } else {
+        stream.has_error = true;
+        stream.error_code = static_cast<uint32_t>(kNapiStatusUnsuccessful);
+      }
+    }
+    stream.done = true;
+  }
 }
 
 bool IsAbsoluteWindowsPath(const std::wstring& path) {
@@ -999,6 +1365,15 @@ napi_value ProcessWait(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
+  {
+    std::lock_guard<std::mutex> lock(state->wait_mutex);
+    if (state->wait_pending) {
+      return ThrowStructured(
+          env, "ASYNC_WAIT_PENDING", ERROR_BUSY,
+          "An asynchronous wait is already pending on this process");
+    }
+  }
+
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   ++state->wait_for_single_object_calls;
 #endif
@@ -1012,6 +1387,13 @@ napi_value ProcessWait(napi_env env, napi_callback_info info) {
   if (wait_result != WAIT_OBJECT_0) {
     const DWORD error = GetLastError();
     return ThrowWin32(env, "PROCESS_WAIT_FAILED", error, "WaitForSingleObject");
+  }
+
+  // Deterministic finalization: when the process has exited, drain/collect
+  // completion is awaited so the caller never sees a final result while
+  // collector threads are still mutating stream state.
+  if (state->a4) {
+    JoinCollectors(state);
   }
 
   DWORD exit_code = 0;
@@ -1099,10 +1481,277 @@ napi_value ProcessClose(napi_env env, napi_callback_info info) {
     return ThrowStructured(env, "INVALID_NATIVE_STATE", ERROR_INVALID_HANDLE,
                            "Process state is unavailable");
   }
+  if (state->closed) {
+    return ThrowStructured(env, "HANDLE_CLOSED", ERROR_INVALID_HANDLE,
+                           "Contained-process state is already closed");
+  }
+  {
+    std::lock_guard<std::mutex> lock(state->wait_mutex);
+    if (state->wait_pending) {
+      return ThrowStructured(
+          env, "ASYNC_WAIT_PENDING", ERROR_BUSY,
+          "Cannot close while an asynchronous wait is pending");
+    }
+  }
   CloseProcessState(state);
   napi_value undefined_value;
   napi_get_undefined(env, &undefined_value);
   return undefined_value;
+}
+
+napi_value MakeNull(napi_env env) {
+  napi_value out;
+  napi_get_null(env, &out);
+  return out;
+}
+
+bool ParseStreamName(napi_env env, napi_value value, int& index) {
+  std::wstring name;
+  if (!GetWideString(env, value, name, "stream")) return false;
+  if (name == L"stdout") {
+    index = kStreamStdout;
+    return true;
+  }
+  if (name == L"stderr") {
+    index = kStreamStderr;
+    return true;
+  }
+  ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                  "stream must be \"stdout\" or \"stderr\"");
+  return false;
+}
+
+napi_value ProcessStreamState(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 1;
+  napi_value this_value;
+  ProcessState* state = UnwrapProcess(env, info, 1, argc, argv, this_value);
+  if (!state) return nullptr;
+  if (!state->a4) {
+    return ThrowStructured(
+        env, "STREAMS_UNAVAILABLE", ERROR_INVALID_PARAMETER,
+        "Stream state requires the governed A4 options form");
+  }
+  int index = 0;
+  if (!ParseStreamName(env, argv[0], index)) return nullptr;
+
+  StreamState& stream = state->streams[index];
+  std::lock_guard<std::mutex> lock(stream.mutex);
+
+  napi_value out;
+  napi_create_object(env, &out);
+  SetProp(env, out, "retainedBytes",
+          MakeUint32(env, static_cast<uint32_t>(stream.capture.size())));
+  SetProp(env, out, "totalBytes",
+          MakeDouble(env, static_cast<double>(stream.total)));
+  SetProp(env, out, "truncated", MakeBool(env, stream.truncated));
+  SetProp(env, out, "complete", MakeBool(env, stream.done));
+  if (stream.digest_ready) {
+    SetProp(env, out, "sha256", MakeString(env, Hex(stream.digest, sizeof(stream.digest))));
+  } else {
+    SetProp(env, out, "sha256", MakeNull(env));
+  }
+  if (stream.has_error) {
+    napi_value error;
+    napi_create_object(env, &error);
+    SetProp(env, error, "code", MakeString(env, "STREAM_IO_FAILED"));
+    SetProp(env, error, "nativeCode", MakeUint32(env, stream.error_code));
+    SetProp(env, out, "error", error);
+  } else {
+    SetProp(env, out, "error", MakeNull(env));
+  }
+  return out;
+}
+
+napi_value ProcessStreamCapture(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 1;
+  napi_value this_value;
+  ProcessState* state = UnwrapProcess(env, info, 1, argc, argv, this_value);
+  if (!state) return nullptr;
+  if (!state->a4) {
+    return ThrowStructured(
+        env, "STREAMS_UNAVAILABLE", ERROR_INVALID_PARAMETER,
+        "Stream capture requires the governed A4 options form");
+  }
+  int index = 0;
+  if (!ParseStreamName(env, argv[0], index)) return nullptr;
+
+  std::string copy;
+  {
+    StreamState& stream = state->streams[index];
+    std::lock_guard<std::mutex> lock(stream.mutex);
+    copy = stream.capture;
+  }
+
+  napi_value buffer;
+  if (napi_create_buffer_copy(
+          env, copy.size(), copy.data(), nullptr, &buffer) != napi_ok) {
+    return ThrowStructured(env, "NATIVE_BUFFER_FAILED", ERROR_INVALID_DATA,
+                           "Unable to copy retained stream capture");
+  }
+  return buffer;
+}
+
+napi_value ProcessPeakRss(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 0;
+  napi_value this_value;
+  ProcessState* state = UnwrapProcess(env, info, 0, argc, argv, this_value);
+  if (!state) return nullptr;
+
+  PROCESS_MEMORY_COUNTERS counters{};
+  counters.cb = sizeof(counters);
+  if (!GetProcessMemoryInfo(state->process, &counters, sizeof(counters))) {
+    const DWORD error = GetLastError();
+    return ThrowWin32(
+        env, "PEAK_RSS_UNAVAILABLE", error, "GetProcessMemoryInfo");
+  }
+  return MakeDouble(env, static_cast<double>(counters.PeakWorkingSetSize));
+}
+
+void WaitAsyncExecute(napi_env, void* data) {
+  auto* state = static_cast<ProcessState*>(data);
+  const DWORD wait_result =
+      WaitForSingleObject(state->process, state->async_timeout_ms);
+  if (wait_result == WAIT_OBJECT_0) {
+    DWORD exit_code = 0;
+    if (GetExitCodeProcess(state->process, &exit_code)) {
+      state->async_exited = true;
+      state->async_exit_code = exit_code;
+    } else {
+      state->async_wait_failed = true;
+      state->async_wait_error = GetLastError();
+    }
+    JoinCollectors(state);
+  } else if (wait_result == WAIT_TIMEOUT) {
+    state->async_exited = false;
+  } else {
+    state->async_wait_failed = true;
+    state->async_wait_error = GetLastError();
+  }
+}
+
+void WaitAsyncComplete(napi_env env, napi_status status, void* data) {
+  auto* state = static_cast<ProcessState*>(data);
+  napi_async_work work = state->wait_work;
+  napi_deferred deferred = state->wait_deferred;
+  napi_ref keepalive = state->wait_keepalive;
+  const bool failed = state->async_wait_failed;
+  const uint32_t wait_error = state->async_wait_error;
+  const bool exited = state->async_exited;
+  const uint32_t exit_code = state->async_exit_code;
+  {
+    std::lock_guard<std::mutex> lock(state->wait_mutex);
+    state->wait_pending = false;
+    state->wait_work = nullptr;
+    state->wait_deferred = nullptr;
+    state->wait_keepalive = nullptr;
+  }
+
+  if (work) {
+    napi_delete_async_work(env, work);
+  }
+  if (deferred && status == napi_ok) {
+    if (failed) {
+      napi_value message = MakeString(
+          env,
+          "Asynchronous contained-process wait failed with Win32 error " +
+              std::to_string(wait_error));
+      napi_value error;
+      napi_create_error(env, nullptr, message, &error);
+      SetProp(env, error, "code", MakeString(env, "PROCESS_WAIT_FAILED"));
+      SetProp(env, error, "nativeCode", MakeUint32(env, wait_error));
+      napi_reject_deferred(env, deferred, error);
+    } else {
+      napi_value out;
+      napi_create_object(env, &out);
+      SetProp(env, out, "status",
+              MakeString(env, exited ? "exited" : "timeout"));
+      if (exited) {
+        SetProp(env, out, "exitCode", MakeUint32(env, exit_code));
+      }
+      napi_resolve_deferred(env, deferred, out);
+    }
+  }
+  if (keepalive) {
+    napi_delete_reference(env, keepalive);
+  }
+}
+
+napi_value ProcessWaitAsync(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 1;
+  napi_value this_value;
+  ProcessState* state = UnwrapProcess(env, info, 1, argc, argv, this_value);
+  if (!state) return nullptr;
+  if (!state->a4) {
+    return ThrowStructured(
+        env, "ASYNC_WAIT_UNAVAILABLE", ERROR_INVALID_PARAMETER,
+        "Asynchronous wait requires the governed A4 options form");
+  }
+  uint32_t timeout_ms = 5000;
+  if (argc == 1 && !GetUint32(env, argv[0], timeout_ms, "timeoutMs")) {
+    return nullptr;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(state->wait_mutex);
+    if (state->wait_pending) {
+      return ThrowStructured(
+          env, "ASYNC_WAIT_PENDING", ERROR_BUSY,
+          "An asynchronous wait is already pending on this process");
+    }
+    state->wait_pending = true;
+    state->async_wait_failed = false;
+    state->async_exited = false;
+    state->async_exit_code = 0;
+    state->async_timeout_ms = timeout_ms;
+  }
+
+  napi_value resource_name;
+  napi_create_string_utf8(
+      env, "winhelm:contained-wait", NAPI_AUTO_LENGTH, &resource_name);
+  napi_value promise;
+  const napi_status created =
+      napi_create_promise(env, &state->wait_deferred, &promise);
+  const napi_status referenced =
+      created == napi_ok
+          ? napi_create_reference(env, this_value, 1, &state->wait_keepalive)
+          : napi_generic_failure;
+  const napi_status work_created =
+      created == napi_ok && referenced == napi_ok
+          ? napi_create_async_work(
+                env,
+                nullptr,
+                resource_name,
+                WaitAsyncExecute,
+                WaitAsyncComplete,
+                state,
+                &state->wait_work)
+          : napi_generic_failure;
+  const napi_status queued =
+      work_created == napi_ok
+          ? napi_queue_async_work(env, state->wait_work)
+          : napi_generic_failure;
+  if (created != napi_ok || referenced != napi_ok ||
+      work_created != napi_ok || queued != napi_ok) {
+    napi_async_work work = state->wait_work;
+    napi_ref keepalive = state->wait_keepalive;
+    state->wait_work = nullptr;
+    state->wait_keepalive = nullptr;
+    state->wait_deferred = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(state->wait_mutex);
+      state->wait_pending = false;
+    }
+    if (work) napi_delete_async_work(env, work);
+    if (keepalive) napi_delete_reference(env, keepalive);
+    return ThrowStructured(
+        env, "ASYNC_WAIT_FAILED", ERROR_INVALID_DATA,
+        "Unable to enqueue the asynchronous contained-process wait");
+  }
+  return promise;
 }
 
 #ifdef WINHELM_NATIVE_TEST_HOOKS
@@ -1189,6 +1838,620 @@ napi_value ProcessTestIsPidInJob(napi_env env, napi_callback_info info) {
   return MakeBool(env, result == TRUE);
 }
 #endif
+
+struct SinkSpec {
+  bool present = false;
+  std::wstring path;
+  SinkMode mode = SinkMode::CreateNew;
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  uint32_t test_fail_after_bytes = 0;
+#endif
+};
+
+struct A4Options {
+  std::vector<EnvEntry> environment;
+  uint32_t capture_limit = 0;
+  SinkSpec stdout_sink;
+  SinkSpec stderr_sink;
+};
+
+bool CheckObjectKeys(
+    napi_env env,
+    napi_value object,
+    const std::vector<std::wstring>& allowed,
+    const char* field) {
+  napi_value names;
+  if (napi_get_property_names(env, object, &names) != napi_ok) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    std::string("Unable to enumerate properties of ") + field);
+    return false;
+  }
+  uint32_t length = 0;
+  napi_get_array_length(env, names, &length);
+  for (uint32_t i = 0; i < length; ++i) {
+    napi_value key;
+    napi_get_element(env, names, i, &key);
+    std::wstring key_text;
+    if (!GetWideString(env, key, key_text, "property key")) return false;
+    bool known = false;
+    for (const auto& candidate : allowed) {
+      if (key_text == candidate) {
+        known = true;
+        break;
+      }
+    }
+    if (!known) {
+      ThrowStructured(
+          env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+          std::string(field) + " contains an unexpected property");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool IsPropertyDefined(napi_env env, napi_value object, const char* name) {
+  napi_value property;
+  if (napi_get_named_property(env, object, name, &property) != napi_ok) {
+    return false;
+  }
+  napi_valuetype type;
+  return napi_typeof(env, property, &type) == napi_ok &&
+         type != napi_undefined && type != napi_null;
+}
+
+bool ParseSinkMode(napi_env env, napi_value value, SinkMode& mode) {
+  std::wstring text;
+  if (!GetWideString(env, value, text, "sink mode")) return false;
+  if (text == L"create_new") {
+    mode = SinkMode::CreateNew;
+    return true;
+  }
+  if (text == L"overwrite") {
+    mode = SinkMode::Overwrite;
+    return true;
+  }
+  if (text == L"append") {
+    mode = SinkMode::Append;
+    return true;
+  }
+  ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                  "sink mode must be create_new, overwrite, or append");
+  return false;
+}
+
+bool ParseSinkDescriptor(napi_env env, napi_value value, SinkSpec& sink) {
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok || type != napi_object) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "sink descriptor must be an object");
+    return false;
+  }
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  if (!CheckObjectKeys(
+          env, value, {L"path", L"mode", L"testFailAfterBytes"},
+          "sink descriptor")) {
+    return false;
+  }
+#else
+  if (!CheckObjectKeys(env, value, {L"path", L"mode"}, "sink descriptor")) {
+    return false;
+  }
+#endif
+  napi_value path_value;
+  napi_get_named_property(env, value, "path", &path_value);
+  if (!GetWideString(env, path_value, sink.path, "sink path")) return false;
+  if (!IsAbsoluteWindowsPath(sink.path)) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "sink path must be an absolute Windows path");
+    return false;
+  }
+  napi_value mode_value;
+  napi_get_named_property(env, value, "mode", &mode_value);
+  if (!ParseSinkMode(env, mode_value, sink.mode)) return false;
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  if (IsPropertyDefined(env, value, "testFailAfterBytes")) {
+    napi_value fail_value;
+    napi_get_named_property(env, value, "testFailAfterBytes", &fail_value);
+    if (!GetUint32(env, fail_value, sink.test_fail_after_bytes,
+                   "testFailAfterBytes")) {
+      return false;
+    }
+  }
+#endif
+  sink.present = true;
+  return true;
+}
+
+bool ParseEnvironmentEntries(
+    napi_env env,
+    napi_value value,
+    std::vector<EnvEntry>& out) {
+  bool is_array = false;
+  if (napi_is_array(env, value, &is_array) != napi_ok || !is_array) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "environment must be an array of {name, value} entries");
+    return false;
+  }
+  uint32_t length = 0;
+  napi_get_array_length(env, value, &length);
+  if (length > kMaxEnvEntries) {
+    ThrowStructured(env, "INPUT_TOO_LARGE", ERROR_BUFFER_OVERFLOW,
+                    "environment has too many entries");
+    return false;
+  }
+  out.resize(length);
+  for (uint32_t i = 0; i < length; ++i) {
+    napi_value item;
+    napi_get_element(env, value, i, &item);
+    napi_valuetype type;
+    if (napi_typeof(env, item, &type) != napi_ok || type != napi_object) {
+      ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                      "environment entry must be an object");
+      return false;
+    }
+    if (!CheckObjectKeys(env, item, {L"name", L"value"},
+                         "environment entry")) {
+      return false;
+    }
+    napi_value name_value;
+    napi_get_named_property(env, item, "name", &name_value);
+    if (!GetWideString(env, name_value, out[i].name, "environment name")) {
+      return false;
+    }
+    if (out[i].name.find(L'=') != std::wstring::npos) {
+      ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                      "environment name must not contain '='");
+      return false;
+    }
+    napi_value entry_value;
+    napi_get_named_property(env, item, "value", &entry_value);
+    if (!GetWideString(env, entry_value, out[i].value, "environment value",
+                       true)) {
+      return false;
+    }
+  }
+  std::sort(out.begin(), out.end(), [](const EnvEntry& a, const EnvEntry& b) {
+    return EnvNameCiLess(a.name, b.name);
+  });
+  for (size_t i = 1; i < out.size(); ++i) {
+    if (EnvNameCiEqual(out[i - 1].name, out[i].name)) {
+      ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                      "environment contains duplicate case-insensitive names");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ParseA4Options(napi_env env, napi_value value, A4Options& options) {
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok || type != napi_object) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "governed options must be an object");
+    return false;
+  }
+  if (!CheckObjectKeys(
+          env, value,
+          {L"environment", L"captureLimitBytes", L"stdoutSink",
+           L"stderrSink"},
+          "governed options")) {
+    return false;
+  }
+  napi_value environment_value;
+  napi_get_named_property(env, value, "environment", &environment_value);
+  napi_valuetype environment_type;
+  napi_typeof(env, environment_value, &environment_type);
+  if (environment_type == napi_undefined || environment_type == napi_null) {
+    ThrowStructured(
+        env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+        "options.environment is required (use [] for an explicitly empty "
+        "environment)");
+    return false;
+  }
+  if (!ParseEnvironmentEntries(env, environment_value, options.environment)) {
+    return false;
+  }
+
+  napi_value capture_value;
+  napi_get_named_property(env, value, "captureLimitBytes", &capture_value);
+  napi_valuetype capture_type;
+  napi_typeof(env, capture_value, &capture_type);
+  if (capture_type == napi_undefined || capture_type == napi_null) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "options.captureLimitBytes is required");
+    return false;
+  }
+  if (!GetUint32(env, capture_value, options.capture_limit,
+                 "captureLimitBytes")) {
+    return false;
+  }
+  if (options.capture_limit > kMaxCaptureBytes) {
+    ThrowStructured(env, "INPUT_TOO_LARGE", ERROR_BUFFER_OVERFLOW,
+                    "captureLimitBytes exceeds 128 MiB");
+    return false;
+  }
+
+  napi_value stdout_value;
+  napi_get_named_property(env, value, "stdoutSink", &stdout_value);
+  if (IsPropertyDefined(env, value, "stdoutSink") &&
+      !ParseSinkDescriptor(env, stdout_value, options.stdout_sink)) {
+    return false;
+  }
+  napi_value stderr_value;
+  napi_get_named_property(env, value, "stderrSink", &stderr_value);
+  if (IsPropertyDefined(env, value, "stderrSink") &&
+      !ParseSinkDescriptor(env, stderr_value, options.stderr_sink)) {
+    return false;
+  }
+  return true;
+}
+
+napi_value SpawnContainedA4Impl(
+    napi_env env,
+    const std::wstring& command,
+    const std::vector<std::wstring>& args,
+    const std::wstring* cwd,
+    const A4Options& options,
+    ProcessFailpoint failpoint) {
+#ifndef WINHELM_NATIVE_TEST_HOOKS
+  (void)failpoint;
+#endif
+  if (!IsAbsoluteWindowsPath(command)) {
+    return ThrowStructured(
+        env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+        "command must be an absolute Windows executable path");
+  }
+
+  std::wstring command_line = BuildCommandLine(command, args);
+  if (command_line.size() >= 32767) {
+    return ThrowStructured(
+        env, "INPUT_TOO_LARGE", ERROR_BUFFER_OVERFLOW,
+        "Windows command line exceeds the 32766-character limit");
+  }
+  std::vector<wchar_t> mutable_command(command_line.begin(),
+                                       command_line.end());
+  mutable_command.push_back(L'\0');
+
+  std::vector<wchar_t> environment_block;
+  if (!BuildEnvironmentBlock(options.environment, environment_block)) {
+    return ThrowStructured(
+        env, "INPUT_TOO_LARGE", ERROR_BUFFER_OVERFLOW,
+        "Environment block exceeds the 32767-character Windows limit");
+  }
+
+  // Defense-in-depth only; the public STREAM_REDIRECTION_COLLISION policy
+  // remains a decision of the future TypeScript/M1 layer.
+  if (options.stdout_sink.present && options.stderr_sink.present &&
+      EnvNameCiEqual(options.stdout_sink.path, options.stderr_sink.path)) {
+    return ThrowStructured(env, "SINK_PATH_CONFLICT", ERROR_INVALID_PARAMETER,
+                           "stdout and stderr sinks must not target the same "
+                           "path");
+  }
+
+  // Sinks open before process creation so an invalid sink cannot produce
+  // unrecorded child execution.
+  HANDLE sink_handles[2] = {nullptr, nullptr};
+  for (int i = 0; i < 2; ++i) {
+    const SinkSpec& spec =
+        i == kStreamStdout ? options.stdout_sink : options.stderr_sink;
+    if (!spec.present) continue;
+    DWORD sink_error = 0;
+    if (!OpenSinkHandle(spec.path, spec.mode, sink_handles[i], sink_error)) {
+      for (int j = 0; j < i; ++j) {
+        if (sink_handles[j]) CloseHandle(sink_handles[j]);
+      }
+      const char* code =
+          (sink_error == ERROR_FILE_EXISTS || sink_error == ERROR_ALREADY_EXISTS)
+              ? "SINK_ALREADY_EXISTS"
+              : "SINK_OPEN_FAILED";
+      return ThrowWin32(env, code, sink_error, "CreateFileW(sink)");
+    }
+  }
+
+  // Deterministic non-interactive child stdin: an EOF-producing NUL handle.
+  SECURITY_ATTRIBUTES inherit_sa{};
+  inherit_sa.nLength = sizeof(inherit_sa);
+  inherit_sa.bInheritHandle = TRUE;
+  HANDLE stdin_handle = CreateFileW(
+      L"\\\\.\\NUL",
+      GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE,
+      &inherit_sa,
+      OPEN_EXISTING,
+      0,
+      nullptr);
+  if (stdin_handle == INVALID_HANDLE_VALUE) {
+    const DWORD error = GetLastError();
+    for (HANDLE sink : sink_handles) {
+      if (sink) CloseHandle(sink);
+    }
+    return ThrowWin32(env, "CHILD_STDIN_FAILED", error, "CreateFileW(NUL)");
+  }
+
+  HANDLE stdout_read = nullptr;
+  HANDLE stdout_write = nullptr;
+  HANDLE stderr_read = nullptr;
+  HANDLE stderr_write = nullptr;
+  if (!CreatePipe(&stdout_read, &stdout_write, &inherit_sa, 0) ||
+      !CreatePipe(&stderr_read, &stderr_write, &inherit_sa, 0)) {
+    const DWORD error = GetLastError();
+    CloseHandle(stdin_handle);
+    if (stdout_read) CloseHandle(stdout_read);
+    if (stdout_write) CloseHandle(stdout_write);
+    if (stderr_read) CloseHandle(stderr_read);
+    if (stderr_write) CloseHandle(stderr_write);
+    for (HANDLE sink : sink_handles) {
+      if (sink) CloseHandle(sink);
+    }
+    return ThrowWin32(env, "CHILD_PIPE_FAILED", error, "CreatePipe");
+  }
+  SetHandleInformation(stdout_read, HANDLE_FLAG_INHERIT, 0);
+  SetHandleInformation(stderr_read, HANDLE_FLAG_INHERIT, 0);
+
+  auto* state = new ProcessState();
+  state->a4 = true;
+  state->streams[kStreamStdout].read_end = stdout_read;
+  state->streams[kStreamStderr].read_end = stderr_read;
+  state->streams[kStreamStdout].sink = sink_handles[kStreamStdout];
+  state->streams[kStreamStderr].sink = sink_handles[kStreamStderr];
+  state->streams[kStreamStdout].capture_limit = options.capture_limit;
+  state->streams[kStreamStderr].capture_limit = options.capture_limit;
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  state->streams[kStreamStdout].test_sink_fail_after_bytes =
+      options.stdout_sink.test_fail_after_bytes;
+  state->streams[kStreamStderr].test_sink_fail_after_bytes =
+      options.stderr_sink.test_fail_after_bytes;
+#endif
+  if (!CreateStreamHash(state->streams[kStreamStdout]) ||
+      !CreateStreamHash(state->streams[kStreamStderr])) {
+    CloseHandle(stdin_handle);
+    CloseHandle(stdout_write);
+    CloseHandle(stderr_write);
+    CloseProcessState(state);
+    delete state;
+    return ThrowStructured(env, "STREAM_HASH_FAILED", ERROR_INVALID_DATA,
+                           "Unable to initialize incremental SHA-256 for the "
+                           "output collectors");
+  }
+
+  // Restricted standard-handle inheritance: bInheritHandles=TRUE is accepted
+  // only together with an explicit PROC_THREAD_ATTRIBUTE_HANDLE_LIST
+  // allowlist, so the Job handle, parent read ends, sink handles, and any
+  // unrelated inheritable server handle cannot reach the child.
+  HANDLE child_handles[3] = {stdin_handle, stdout_write, stderr_write};
+  SIZE_T attribute_size = 0;
+  InitializeProcThreadAttributeList(nullptr, 1, 0, &attribute_size);
+  LPPROC_THREAD_ATTRIBUTE_LIST attribute_list =
+      static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+          HeapAlloc(GetProcessHeap(), 0, attribute_size));
+  bool attribute_initialized = false;
+  if (attribute_list &&
+      InitializeProcThreadAttributeList(
+          attribute_list, 1, 0, &attribute_size)) {
+    attribute_initialized = true;
+  }
+  const bool attribute_ready =
+      attribute_initialized &&
+      UpdateProcThreadAttribute(
+          attribute_list,
+          0,
+          PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+          child_handles,
+          sizeof(child_handles),
+          nullptr,
+          nullptr);
+  if (!attribute_ready) {
+    const DWORD error = attribute_list ? GetLastError()
+                                       : ERROR_NOT_ENOUGH_MEMORY;
+    if (attribute_initialized) {
+      DeleteProcThreadAttributeList(attribute_list);
+    }
+    if (attribute_list) {
+      HeapFree(GetProcessHeap(), 0, attribute_list);
+    }
+    CloseHandle(stdin_handle);
+    CloseHandle(stdout_write);
+    CloseHandle(stderr_write);
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(
+        env, "HANDLE_LIST_FAILED", error, "InitializeProcThreadAttributeList");
+  }
+
+  STARTUPINFOEXW startup{};
+  startup.StartupInfo.cb = sizeof(startup);
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdInput = stdin_handle;
+  startup.StartupInfo.hStdOutput = stdout_write;
+  startup.StartupInfo.hStdError = stderr_write;
+  startup.lpAttributeList = attribute_list;
+
+  PROCESS_INFORMATION pi{};
+  const DWORD creation_flags = CREATE_SUSPENDED |
+                               CREATE_UNICODE_ENVIRONMENT |
+                               EXTENDED_STARTUPINFO_PRESENT;
+  if (!CreateProcessW(
+          command.c_str(),
+          mutable_command.data(),
+          nullptr,
+          nullptr,
+          TRUE,
+          creation_flags,
+          environment_block.data(),
+          cwd ? cwd->c_str() : nullptr,
+          &startup.StartupInfo,
+          &pi)) {
+    const DWORD error = GetLastError();
+    DeleteProcThreadAttributeList(attribute_list);
+    HeapFree(GetProcessHeap(), 0, attribute_list);
+    CloseHandle(stdin_handle);
+    CloseHandle(stdout_write);
+    CloseHandle(stderr_write);
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "CREATE_PROCESS_FAILED", error, "CreateProcessW");
+  }
+
+  // Parent copies of the child-side std handles are closed before resume so
+  // stream EOF is observable and no write end leaks in the parent.
+  CloseHandle(stdin_handle);
+  CloseHandle(stdout_write);
+  CloseHandle(stderr_write);
+  DeleteProcThreadAttributeList(attribute_list);
+  HeapFree(GetProcessHeap(), 0, attribute_list);
+
+  state->process = pi.hProcess;
+  state->thread = pi.hThread;
+  state->pid = pi.dwProcessId;
+
+  state->job = CreateJobObjectW(nullptr, nullptr);
+  if (!state->job) {
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "JOB_CREATE_FAILED", error, "CreateJobObjectW");
+  }
+
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  if (failpoint == ProcessFailpoint::BeforeJobConfig) {
+    CloseProcessState(state);
+    delete state;
+    return ThrowStructured(env, "TEST_FAILPOINT", ERROR_GEN_FAILURE,
+                           "Injected failure before Job Object configuration");
+  }
+
+  if (failpoint == ProcessFailpoint::ForceJobConfigFailure) {
+    if (SetInformationJobObject(
+            state->job,
+            JobObjectExtendedLimitInformation,
+            nullptr,
+            0)) {
+      CloseProcessState(state);
+      delete state;
+      return ThrowStructured(env, "TEST_HOOK_FAILED", ERROR_INVALID_DATA,
+                             "Forced Job configuration failure unexpectedly "
+                             "succeeded");
+    }
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "JOB_CONFIG_FAILED", error,
+                      "SetInformationJobObject(forced failure)");
+  }
+#endif
+
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+  limits.BasicLimitInformation.LimitFlags =
+      JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+  if (!SetInformationJobObject(
+          state->job,
+          JobObjectExtendedLimitInformation,
+          &limits,
+          sizeof(limits))) {
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "JOB_CONFIG_FAILED", error,
+                      "SetInformationJobObject");
+  }
+
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  if (failpoint == ProcessFailpoint::BeforeAssign) {
+    CloseProcessState(state);
+    delete state;
+    return ThrowStructured(env, "TEST_FAILPOINT", ERROR_GEN_FAILURE,
+                           "Injected failure before AssignProcessToJobObject");
+  }
+
+  if (failpoint == ProcessFailpoint::ForceAssignFailure) {
+    if (AssignProcessToJobObject(nullptr, state->process)) {
+      CloseProcessState(state);
+      delete state;
+      return ThrowStructured(env, "TEST_HOOK_FAILED", ERROR_INVALID_DATA,
+                             "Forced Job assignment failure unexpectedly "
+                             "succeeded");
+    }
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "JOB_ASSIGN_FAILED", error,
+                      "AssignProcessToJobObject(forced failure)");
+  }
+#endif
+
+  if (!AssignProcessToJobObject(state->job, state->process)) {
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "JOB_ASSIGN_FAILED", error,
+                      "AssignProcessToJobObject");
+  }
+
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  if (failpoint == ProcessFailpoint::BeforeResume) {
+    CloseProcessState(state);
+    delete state;
+    return ThrowStructured(env, "TEST_FAILPOINT", ERROR_GEN_FAILURE,
+                           "Injected failure before ResumeThread");
+  }
+#endif
+
+  // Collectors may begin blocking on the pipes before resume; all
+  // containment-critical setup above is already complete.
+  state->collectors[kStreamStdout] =
+      std::thread(CollectorMain, state, kStreamStdout);
+  state->collectors[kStreamStderr] =
+      std::thread(CollectorMain, state, kStreamStderr);
+  state->collectors_started = true;
+
+  const DWORD resume_result = ResumeThread(state->thread);
+  if (resume_result == static_cast<DWORD>(-1)) {
+    const DWORD error = GetLastError();
+    CloseProcessState(state);
+    delete state;
+    return ThrowWin32(env, "PROCESS_RESUME_FAILED", error, "ResumeThread");
+  }
+
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  state->steps = {
+      "CREATE_SUSPENDED",
+      "JOB_CONFIGURED",
+      "ASSIGNED_TO_JOB",
+      "RESUMED",
+  };
+#endif
+
+  napi_value object;
+  napi_create_object(env, &object);
+  if (napi_wrap(env, object, state, ProcessFinalize, nullptr, nullptr) !=
+      napi_ok) {
+    CloseProcessState(state);
+    delete state;
+    return ThrowStructured(env, "NATIVE_WRAP_FAILED", ERROR_INVALID_DATA,
+                           "Unable to wrap contained-process state");
+  }
+
+  std::vector<napi_property_descriptor> props = {
+      {"wait", nullptr, ProcessWait, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"waitAsync", nullptr, ProcessWaitAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"terminate", nullptr, ProcessTerminate, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"isInJob", nullptr, ProcessIsInJob, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"streamState", nullptr, ProcessStreamState, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"streamCapture", nullptr, ProcessStreamCapture, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"peakRss", nullptr, ProcessPeakRss, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"pid", nullptr, ProcessPid, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"close", nullptr, ProcessClose, nullptr, nullptr, nullptr, napi_default, nullptr},
+  };
+#ifdef WINHELM_NATIVE_TEST_HOOKS
+  props.push_back({"testSteps", nullptr, ProcessTestSteps, nullptr, nullptr, nullptr, napi_default, nullptr});
+  props.push_back({"testWin32CallCounts", nullptr, ProcessTestWin32CallCounts, nullptr, nullptr, nullptr, napi_default, nullptr});
+  props.push_back({"testCloseJob", nullptr, ProcessTestCloseJob, nullptr, nullptr, nullptr, napi_default, nullptr});
+  props.push_back({"testIsPidInJob", nullptr, ProcessTestIsPidInJob, nullptr, nullptr, nullptr, napi_default, nullptr});
+#endif
+  napi_define_properties(env, object, props.size(), props.data());
+  return object;
+}
 
 napi_value SpawnContainedImpl(
     napi_env env,
@@ -1371,16 +2634,15 @@ napi_value SpawnContainedCommon(
     napi_env env,
     napi_callback_info info,
     bool allow_failpoint) {
-  napi_value argv[4];
+  napi_value argv[5];
 #ifdef WINHELM_NATIVE_TEST_HOOKS
-  size_t argc = allow_failpoint ? 4 : 3;
-  const size_t max_args = allow_failpoint ? 4 : 3;
+  const size_t max_args = allow_failpoint ? 5 : 4;
 #else
   (void)allow_failpoint;
-  size_t argc = 3;
-  const size_t max_args = 3;
+  const size_t max_args = 4;
 #endif
   napi_value this_value;
+  size_t argc = max_args;
   if (!GetThisAndArgs(env, info, max_args, argc, argv, this_value)) {
     return nullptr;
   }
@@ -1388,10 +2650,12 @@ napi_value SpawnContainedCommon(
   if (argc < min_args || argc > max_args) {
 #ifdef WINHELM_NATIVE_TEST_HOOKS
     const char* message = allow_failpoint
-        ? "spawnContainedTest(command, args, cwd?, failpoint?) has invalid arity"
-        : "spawnContained(command, args, cwd?) has invalid arity";
+        ? "spawnContainedTest(command, args, cwd?, failpoint?, options?) has "
+          "invalid arity"
+        : "spawnContained(command, args, cwd?, options?) has invalid arity";
 #else
-    const char* message = "spawnContained(command, args, cwd?) has invalid arity";
+    const char* message = "spawnContained(command, args, cwd?, options?) has "
+                          "invalid arity";
 #endif
     return ThrowStructured(
         env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER, message);
@@ -1416,17 +2680,33 @@ napi_value SpawnContainedCommon(
   ProcessFailpoint failpoint = ProcessFailpoint::None;
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   if (allow_failpoint && argc >= 4) {
-    std::wstring failpoint_text;
-    if (!GetWideString(env, argv[3], failpoint_text, "failpoint", true)) return nullptr;
-    failpoint = ParseProcessFailpoint(failpoint_text);
-    if (failpoint == ProcessFailpoint::None && !failpoint_text.empty()) {
-      return ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
-                             "Unknown process failpoint");
+    napi_valuetype type;
+    napi_typeof(env, argv[3], &type);
+    if (type != napi_undefined && type != napi_null) {
+      std::wstring failpoint_text;
+      if (!GetWideString(env, argv[3], failpoint_text, "failpoint", true)) {
+        return nullptr;
+      }
+      failpoint = ParseProcessFailpoint(failpoint_text);
+      if (failpoint == ProcessFailpoint::None && !failpoint_text.empty()) {
+        return ThrowStructured(env, "INVALID_ARGUMENT",
+                               ERROR_INVALID_PARAMETER,
+                               "Unknown process failpoint");
+      }
     }
   }
-#else
-  (void)allow_failpoint;
 #endif
+
+  // Governed A4 form: the final argument is the purpose-specific options
+  // object; its presence selects the explicit-environment/restricted-handle
+  // path, keeping the legacy NB1 form fully functional.
+  const size_t options_index = allow_failpoint ? 4 : 3;
+  if (argc > options_index) {
+    A4Options options;
+    if (!ParseA4Options(env, argv[options_index], options)) return nullptr;
+    return SpawnContainedA4Impl(
+        env, command, args, cwd, options, failpoint);
+  }
 
   return SpawnContainedImpl(env, command, args, cwd, failpoint);
 }
@@ -1449,6 +2729,58 @@ napi_value CurrentProcessHandleCount(napi_env env, napi_callback_info) {
   }
   return MakeUint32(env, count);
 }
+
+// Harmless test-only inheritable sentinel used to prove that unrelated
+// inheritable handles never reach the child through the restricted
+// handle-list path. The sentinel file is opened with an exclusive share mode,
+// so a child that inherited it could never re-open the file.
+HANDLE g_test_sentinel_handle = nullptr;
+
+napi_value CreateTestInheritableSentinel(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 1;
+  napi_value this_value;
+  if (!GetThisAndArgs(env, info, 1, argc, argv, this_value) || argc != 1) {
+    return ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                           "createTestInheritableSentinel(path) requires one "
+                           "argument");
+  }
+  std::wstring path;
+  if (!GetWideString(env, argv[0], path, "path")) return nullptr;
+  if (g_test_sentinel_handle) {
+    return ThrowStructured(env, "SENTINEL_ALREADY_HELD", ERROR_INVALID_HANDLE,
+                           "A test sentinel handle is already held");
+  }
+  SECURITY_ATTRIBUTES inherit_sa{};
+  inherit_sa.nLength = sizeof(inherit_sa);
+  inherit_sa.bInheritHandle = TRUE;
+  HANDLE file = CreateFileW(
+      path.c_str(),
+      GENERIC_READ,
+      0,
+      &inherit_sa,
+      OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL,
+      nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    const DWORD error = GetLastError();
+    return ThrowWin32(env, "SENTINEL_OPEN_FAILED", error, "CreateFileW");
+  }
+  g_test_sentinel_handle = file;
+  napi_value undefined_value;
+  napi_get_undefined(env, &undefined_value);
+  return undefined_value;
+}
+
+napi_value ReleaseTestInheritableSentinel(napi_env env, napi_callback_info) {
+  if (g_test_sentinel_handle) {
+    CloseHandle(g_test_sentinel_handle);
+    g_test_sentinel_handle = nullptr;
+  }
+  napi_value undefined_value;
+  napi_get_undefined(env, &undefined_value);
+  return undefined_value;
+}
 #endif
 
 napi_value Init(napi_env env, napi_value exports) {
@@ -1465,8 +2797,10 @@ napi_value Init(napi_env env, napi_value exports) {
       {"atomicReplaceTest", nullptr, AtomicReplaceTest, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"spawnContainedTest", nullptr, SpawnContainedTest, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"getCurrentProcessHandleCount", nullptr, CurrentProcessHandleCount, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"createTestInheritableSentinel", nullptr, CreateTestInheritableSentinel, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"releaseTestInheritableSentinel", nullptr, ReleaseTestInheritableSentinel, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
-  napi_define_properties(env, exports, 3, test_props);
+  napi_define_properties(env, exports, 5, test_props);
 #endif
 
   SetProp(env, exports, "abi", MakeString(env, "node-api"));

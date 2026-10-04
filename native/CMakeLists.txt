@@ -36,6 +36,7 @@ function(configure_winhelm_native target_name)
     NOMINMAX
     UNICODE
     _UNICODE
+    PSAPI_VERSION=2
   )
   target_compile_options(${target_name} PRIVATE
     /W4
@@ -58,3 +59,13 @@ endfunction()
 configure_winhelm_native(winhelm_native)
 configure_winhelm_native(winhelm_native_test)
 target_compile_definitions(winhelm_native_test PRIVATE WINHELM_NATIVE_TEST_HOOKS=1)
+
+# Test-only helper executable for A4 stdio/environment qualification.
+add_executable(a4_child test/helpers/a4-child.cpp)
+target_compile_definitions(a4_child PRIVATE
+  WIN32_LEAN_AND_MEAN
+  NOMINMAX
+  UNICODE
+  _UNICODE
+)
+target_compile_options(a4_child PRIVATE /W4 /WX)
