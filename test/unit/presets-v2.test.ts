@@ -41,21 +41,22 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(ALL_TOOL_NAMES.length, 38);
   });
 
-  it("builds Safe according to Appendix A", () => {
+  it("builds Safe as the accepted read-only R0 capability envelope", () => {
     const policy = buildToolPolicyForPreset("safe");
 
     assert.strictEqual(policy.file_read, "auto");
     assert.strictEqual(policy.system_info, "auto");
-    assert.strictEqual(policy.terminal_task_list, "off");
+    assert.strictEqual(policy.terminal_task_list, "auto");
+    assert.strictEqual(policy.terminal_task_logs, "auto");
     assert.strictEqual(policy.file_write, "off");
     assert.strictEqual(policy.http_request, "off");
     assert.strictEqual(policy.screen_capture, "off");
     assert.strictEqual(policy.process_kill, "off");
 
     // Current 34 policy-controlled tools + 2 future recovery tools.
-    assert.strictEqual(countPolicy(policy, "auto"), 17);
+    assert.strictEqual(countPolicy(policy, "auto"), 19);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
-    assert.strictEqual(countPolicy(policy, "off"), 19);
+    assert.strictEqual(countPolicy(policy, "off"), 17);
 
     const config = buildPresetConfig("safe", {
       folders: ["D:\\Workspace"],
@@ -72,19 +73,20 @@ describe("Schema-v2 product preset mapping", () => {
 
     assert.strictEqual(policy.file_read, "auto");
     assert.strictEqual(policy.file_write, "auto");
-    assert.strictEqual(policy.http_request, "ask");
-    assert.strictEqual(policy.screen_capture, "ask");
-    assert.strictEqual(policy.process_kill, "ask");
+    assert.strictEqual(policy.http_request, "auto");
+    assert.strictEqual(policy.screen_capture, "auto");
+    assert.strictEqual(policy.process_kill, "off");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 28);
-    assert.strictEqual(countPolicy(policy, "ask"), 8);
-    assert.strictEqual(countPolicy(policy, "off"), 0);
+    assert.strictEqual(countPolicy(policy, "auto"), 34);
+    assert.strictEqual(countPolicy(policy, "ask"), 0);
+    assert.strictEqual(countPolicy(policy, "off"), 2);
 
     const config = buildPresetConfig("balanced", {
       folders: ["D:\\Workspace"],
       now: "2026-10-03T00:00:00.000Z",
     });
-    assert.strictEqual(config.terminal.mode, "ask");
+    assert.strictEqual(config.terminal.mode, "full");
+    assert.strictEqual(config.approval.mode, "smart");
     assert.deepStrictEqual(config.folders, [
       { path: "D:\\Workspace", permission: "readwrite" },
     ]);
@@ -95,14 +97,15 @@ describe("Schema-v2 product preset mapping", () => {
 
     assert.strictEqual(policy.file_write, "auto");
     assert.strictEqual(policy.http_request, "auto");
-    assert.strictEqual(policy.clipboard_get, "ask");
-    assert.strictEqual(policy.service_control, "ask");
+    assert.strictEqual(policy.clipboard_get, "auto");
+    assert.strictEqual(policy.service_control, "auto");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 30);
-    assert.strictEqual(countPolicy(policy, "ask"), 6);
+    assert.strictEqual(countPolicy(policy, "auto"), 36);
+    assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 0);
 
     assert.strictEqual(buildPresetConfig("power").terminal.mode, "full");
+    assert.strictEqual(buildPresetConfig("power").approval.mode, "smart");
   });
 
   it("stores an authoritative appliedSnapshot separate from mutable current fields", () => {
@@ -124,7 +127,7 @@ describe("Schema-v2 product preset mapping", () => {
     );
     assert.strictEqual(
       config.profileState!.appliedSnapshot.toolPolicy.http_request,
-      "ask"
+      "auto"
     );
   });
 });

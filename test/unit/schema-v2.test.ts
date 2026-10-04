@@ -61,6 +61,32 @@ describe("Schema-v2 configuration primitives", () => {
     assert.deepStrictEqual(result.errors, []);
   });
 
+  it("validates Manual/Smart/Trusted without inventing a mode for legacy schema-v2", () => {
+    for (const mode of ["manual", "smart", "trusted"] as const) {
+      const result = validateApprovalConfig({
+        mode,
+        blockHoldMs: 30_000,
+        jobTtlMs: 120_000,
+        maxPending: 10,
+      });
+      assert.strictEqual(result.valid, true, mode);
+      assert.strictEqual(result.value.mode, mode);
+    }
+
+    const legacy = validateApprovalConfig({
+      blockHoldMs: 30_000,
+      jobTtlMs: 120_000,
+      maxPending: 10,
+    });
+    assert.strictEqual(legacy.value.mode, undefined);
+
+    const invalid = validateApprovalConfig({
+      mode: "automatic" as any,
+    });
+    assert.strictEqual(invalid.valid, false);
+    assert.ok(invalid.errors.some((error) => error.includes("approval.mode")));
+  });
+
   it("accepts explicit development install-root access and rejects invalid values", () => {
     const allowed = validateSchemaV2Config({
       schemaVersion: 2,

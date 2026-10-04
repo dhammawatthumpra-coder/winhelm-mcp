@@ -40,12 +40,16 @@ export function logPermissionChange(audit: PermissionChangeAudit): void {
         schemaMode: audit.from.schemaMode,
         preset: audit.from.preset,
         terminalMode: audit.from.terminalMode,
+        approvalMode: audit.from.approvalMode,
+        approvalBehavior: audit.from.approvalBehavior,
         modified: audit.from.modified,
       },
       to: {
         schemaMode: audit.to.schemaMode,
         preset: audit.to.preset,
         terminalMode: audit.to.terminalMode,
+        approvalMode: audit.to.approvalMode,
+        approvalBehavior: audit.to.approvalBehavior,
         modified: audit.to.modified,
       },
       ...(audit.changedFields

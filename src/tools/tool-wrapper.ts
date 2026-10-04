@@ -15,7 +15,7 @@ import { getToolMetadata } from "./metadata.js";
 import { getServerRuntimeContext } from "../gateway/session-context.js";
 import { taskManager } from "../engine/task-manager.js";
 import { inspectProcessTargets } from "../engine/system.js";
-import { processKillNeedsExternalApproval } from "../permissions/process-kill.js";
+import { classifyToolMandatoryConfirmation } from "../permissions/mandatory-confirmation.js";
 import { normalizeSchemaV2ToolErrorResult } from "../errors/tool-error.js";
 import { translate as t } from "../i18n/messages.js";
 
@@ -140,21 +140,26 @@ export function registerTracedTool(
         liveConfig
       );
 
-      if (
-        name === "process_kill" &&
-        access.decision === "allow" &&
-        processKillNeedsExternalApproval(
+      if (access.decision === "allow") {
+        const mandatory = classifyToolMandatoryConfirmation(
+          name,
           args ?? {},
-          taskManager
-        )
-      ) {
-        access = {
-          decision: "ask",
-          code: "APPROVAL_REQUIRED",
-          reason:
-            "Terminating a process not started by WinHelm requires explicit approval.",
-          userAction: t("action.approve.generic"),
-        };
+          taskManager,
+          liveConfig.approval.mode
+        );
+        if (mandatory.required) {
+          access = {
+            decision: "ask",
+            code: "APPROVAL_REQUIRED",
+            reason:
+              mandatory.reason ??
+              "This action requires explicit human confirmation.",
+            userAction: t("action.approve.generic"),
+            details: mandatory.code
+              ? { mandatoryConfirmation: mandatory.code }
+              : undefined,
+          };
+        }
       }
 
       if (access.decision === "deny") {

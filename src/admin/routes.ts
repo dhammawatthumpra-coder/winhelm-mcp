@@ -6,12 +6,15 @@ import express, {
 } from "express";
 import { ConfigManager } from "../config/config-manager.js";
 import {
+  applyApprovalMode,
   applyLegacyMigrationApplication,
   applyProfilePreset,
   getProfileStatus,
+  previewApprovalModeApplication,
   previewLegacyMigrationApplication,
   previewProfileApplication,
   ProfileServiceError,
+  type ApprovalModeApplyInput,
   type LegacyMigrationInput,
   type ProfileApplyInput,
 } from "../config/profile-service.js";
@@ -27,6 +30,10 @@ import {
 import { getSessionClientInfo, listSessionClients } from "../gateway/session-context.js";
 import { rotateAuthToken } from "../config/auth-token-rotation.js";
 import { describeRequestFolderAccess } from "../permissions/tool-access.js";
+import {
+  adminMutationRequiresMandatoryConfirmation,
+  isValidLocalConfirmation,
+} from "../permissions/admin-confirmation.js";
 import {
   applyClientConnection,
   previewClientConnection,
@@ -103,6 +110,8 @@ const PROFILE_PRESETS = new Set([
   "full",
 ]);
 
+const APPROVAL_MODES = new Set(["manual", "smart", "trusted"]);
+
 function parseProfileBody(body: unknown): ProfileApplyInput {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new ProfileServiceError(
@@ -173,6 +182,33 @@ function parseProfileBody(body: unknown): ProfileApplyInput {
   };
 }
 
+function parseApprovalModeBody(body: unknown): ApprovalModeApplyInput {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "Approval Mode request body must be an object."
+    );
+  }
+
+  const raw = body as Record<string, unknown>;
+  if (
+    typeof raw.mode !== "string" ||
+    !APPROVAL_MODES.has(raw.mode)
+  ) {
+    throw new ProfileServiceError(
+      "INVALID_ARGUMENT",
+      "mode must be one of manual, smart, trusted."
+    );
+  }
+
+  return {
+    mode: raw.mode as ApprovalModeApplyInput["mode"],
+    ...(typeof raw.confirmation === "string"
+      ? { confirmation: raw.confirmation }
+      : {}),
+  };
+}
+
 function parseMigrationBody(body: unknown): LegacyMigrationInput {
   if (body === undefined || body === null) return {};
   if (typeof body !== "object" || Array.isArray(body)) {
@@ -233,7 +269,8 @@ function profileErrorStatus(err: ProfileServiceError): number {
   if (
     err.code === "TYPED_CONFIRMATION_REQUIRED" ||
     err.code === "FOLDER_SELECTION_REQUIRED" ||
-    err.code === "MIGRATION_NOT_AVAILABLE"
+    err.code === "MIGRATION_NOT_AVAILABLE" ||
+    err.code === "APPROVAL_MODE_REQUIRES_SCHEMA_V2"
   ) {
     return 409;
   }
@@ -564,6 +601,22 @@ export function registerAdminRoutes(app: Express): void {
         );
         return;
       }
+      if (
+        adminMutationRequiresMandatoryConfirmation(
+          "credential-security-mutation"
+        ) &&
+        !isValidLocalConfirmation(
+          (req.body as Record<string, unknown> | undefined)?.confirmation
+        )
+      ) {
+        structuredError(
+          res,
+          409,
+          "MANDATORY_CONFIRMATION_REQUIRED",
+          'Token rotation requires an explicit local confirmation ("confirm" or "ยืนยัน").'
+        );
+        return;
+      }
 
       try {
         const rotated = await rotateAuthToken({ manager });
@@ -642,6 +695,128 @@ export function registerAdminRoutes(app: Express): void {
               }
             : null,
       });
+    }
+  );
+
+  router.post(
+    "/approval-mode/preview",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    (req: Request, res: Response) => {
+      try {
+        const input = parseApprovalModeBody(req.body);
+        const preview = previewApprovalModeApplication(
+          input,
+          ConfigManager.getInstance()
+        );
+        res.json({ preview });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Approval Mode preview failed."
+        );
+      }
+    }
+  );
+
+  router.post(
+    "/approval-mode/apply",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      const before = getProfileStatus(manager);
+
+      try {
+        const input = parseApprovalModeBody(req.body);
+        const result = await applyApprovalMode(input, manager);
+
+        auditLogger.log({
+          event: "APPROVAL_MODE_APPLIED",
+          severity:
+            result.status.approvalMode === "trusted" ? "WARN" : "INFO",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/approval-mode/apply",
+          resource: result.status.approvalMode ?? "legacy",
+          outcome: "ALLOWED",
+          details: {
+            channel: "dashboard",
+            fromMode: before.approvalMode,
+            fromBehavior: before.approvalBehavior,
+            toMode: result.status.approvalMode,
+            warnings: result.preview.warnings,
+            backupCreated: Boolean(result.backupPath),
+          },
+        });
+
+        res.json({
+          success: true,
+          backupPath: result.backupPath,
+          preview: result.preview,
+          profile: result.status,
+        });
+      } catch (err) {
+        if (err instanceof ProfileServiceError) {
+          auditLogger.log({
+            event: "APPROVAL_MODE_APPLY_REJECTED",
+            severity: "WARN",
+            actor: {
+              ip: req.ip,
+              authType: "session_cookie",
+              sessionId: res.locals.adminSessionId as string,
+            },
+            action: "POST /admin/approval-mode/apply",
+            outcome: "DENIED",
+            details: {
+              code: err.code,
+              fromMode: before.approvalMode,
+            },
+          });
+          structuredError(
+            res,
+            profileErrorStatus(err),
+            err.code,
+            err.message
+          );
+          return;
+        }
+
+        auditLogger.log({
+          event: "APPROVAL_MODE_APPLY_ERROR",
+          severity: "CRITICAL",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action: "POST /admin/approval-mode/apply",
+          outcome: "ERROR",
+          details: (err as Error).message || String(err),
+        });
+        structuredError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          (err as Error).message || "Approval Mode apply failed."
+        );
+      }
     }
   );
 
@@ -749,6 +924,8 @@ export function registerAdminRoutes(app: Express): void {
               schemaMode: result.status.schemaMode,
               preset: result.status.preset,
               terminalMode: result.status.terminalMode,
+              approvalMode: result.status.approvalMode,
+              approvalBehavior: result.status.approvalBehavior,
               modified: result.status.modified,
             },
             folderCount: result.status.folders.length,
@@ -876,12 +1053,16 @@ export function registerAdminRoutes(app: Express): void {
               schemaMode: before.schemaMode,
               preset: before.preset,
               terminalMode: before.terminalMode,
+              approvalMode: before.approvalMode,
+              approvalBehavior: before.approvalBehavior,
               modified: before.modified,
             },
             to: {
               schemaMode: result.status.schemaMode,
               preset: result.status.preset,
               terminalMode: result.status.terminalMode,
+              approvalMode: result.status.approvalMode,
+              approvalBehavior: result.status.approvalBehavior,
               modified: result.status.modified,
             },
             changedFields: previewBefore.changedFields,

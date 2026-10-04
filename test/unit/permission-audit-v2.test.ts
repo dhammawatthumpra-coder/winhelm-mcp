@@ -71,6 +71,8 @@ describe("Permission change audit", () => {
           configFile,
           "--answers",
           answersFile,
+          "--confirm",
+          "confirm",
           "--yes",
         ]);
         assert.strictEqual(result.handled, true);
@@ -92,6 +94,7 @@ describe("Permission change audit", () => {
         assert.strictEqual(details.from.preset, null);
         assert.strictEqual(details.to.preset, "balanced");
         assert.strictEqual(details.to.terminalMode, "ask");
+        assert.strictEqual(details.to.approvalMode, "smart");
         assert.strictEqual(typeof details.backupCreated, "boolean");
         assert.strictEqual(
           JSON.stringify(event).includes("authToken"),

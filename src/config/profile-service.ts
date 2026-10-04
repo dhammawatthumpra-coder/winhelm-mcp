@@ -8,11 +8,19 @@ import path from "node:path";
 import type { ServerConfig } from "../types/index.js";
 import { ConfigManager, isWildcardAllowAll } from "./config-manager.js";
 import type {
+  ApprovalMode,
   FolderPermission,
   ProfilePreset,
   SchemaV2PermissionConfig,
 } from "./schema-v2.js";
 import { buildPresetConfig } from "../permissions/presets.js";
+import { assessAuthorityExpansion } from "../permissions/authority-expansion.js";
+import { approvalModeProtectionRank } from "../permissions/approval-model.js";
+import { getToolRiskClass } from "../permissions/risk.js";
+import {
+  adminMutationRequiresMandatoryConfirmation,
+  isValidLocalConfirmation,
+} from "../permissions/admin-confirmation.js";
 import {
   proposeLegacyMigration,
   type LegacyMigrationProposal,
@@ -42,6 +50,12 @@ export interface ProfileStatus {
   folders: FolderPermission[];
   terminalMode: string | null;
   toolPolicy: Record<string, string>;
+  approvalMode: ApprovalMode | null;
+  approvalBehavior: "explicit" | "legacy";
+  explicitConfirmationFloors: {
+    toolPolicyAskCount: number;
+    terminalAsk: boolean;
+  };
   validationErrors: readonly string[];
 }
 
@@ -50,7 +64,9 @@ export interface ProfilePreview {
   folders: FolderPermission[];
   terminalMode: SchemaV2PermissionConfig["terminal"]["mode"];
   toolPolicy: Record<string, string>;
+  approvalMode: ApprovalMode | null;
   changedFields: string[];
+  authorityExpansionReasons: string[];
   requiresTypedConfirmation: boolean;
   legacyWildcardRequiresFolderSelection: boolean;
   warnings: string[];
@@ -71,6 +87,25 @@ export interface LegacyMigrationApplyResult {
   status: ProfileStatus;
 }
 
+export interface ApprovalModeApplyInput {
+  mode: ApprovalMode;
+  confirmation?: string;
+}
+
+export interface ApprovalModePreview {
+  currentMode: ApprovalMode | null;
+  targetMode: ApprovalMode;
+  legacyBehavior: boolean;
+  requiresTypedConfirmation: boolean;
+  warnings: string[];
+}
+
+export interface ApprovalModeApplyResult {
+  backupPath: string | null;
+  preview: ApprovalModePreview;
+  status: ProfileStatus;
+}
+
 export class ProfileServiceError extends Error {
   constructor(
     public readonly code: string,
@@ -80,8 +115,6 @@ export class ProfileServiceError extends Error {
     this.name = "ProfileServiceError";
   }
 }
-
-const FULL_CONFIRMATIONS = new Set(["confirm", "ยืนยัน"]);
 
 function normalizeComparable(input: string): string {
   const resolved = path.resolve(input.normalize("NFKC"));
@@ -181,6 +214,48 @@ function selectedFolders(
   }));
 }
 
+function applyLegacyApprovalCompatibilityFloors(
+  manager: ConfigManager,
+  candidate: SchemaV2PermissionConfig
+): void {
+  if (manager.getConfigMode() !== "v2") return;
+
+  const current =
+    manager.getConfig() as unknown as SchemaV2PermissionConfig;
+  if (current.approval?.mode) return;
+
+  // An explicit product-preset preview/apply transitions to the preset\'s
+  // Approval Mode (Smart for Safe/Balanced/Power), but legacy schema-v2
+  // confirmation floors remain explicit ask floors when provenance is absent.
+  for (const [toolName, candidatePolicy] of Object.entries(
+    candidate.toolPolicy
+  )) {
+    if (candidatePolicy === "off") continue;
+
+    const currentPolicy = current.toolPolicy?.[toolName];
+    if (currentPolicy === "ask") {
+      candidate.toolPolicy[toolName] = "ask";
+      continue;
+    }
+    if (currentPolicy === "auto") {
+      candidate.toolPolicy[toolName] = "auto";
+      continue;
+    }
+
+    // A capability newly introduced while the config is still on the frozen
+    // v1.3 prompting model fails toward confirmation unless it is read-only.
+    candidate.toolPolicy[toolName] =
+      getToolRiskClass(toolName) === "R0" ? "auto" : "ask";
+  }
+
+  if (candidate.terminal.mode === "full") {
+    candidate.terminal = {
+      ...candidate.terminal,
+      mode: current.terminal?.mode === "full" ? "full" : "ask",
+    };
+  }
+}
+
 function buildCandidate(
   manager: ConfigManager,
   input: ProfileApplyInput
@@ -213,6 +288,8 @@ function buildCandidate(
     alias: normalizedSelection[index]?.alias,
   }));
 
+  applyLegacyApprovalCompatibilityFloors(manager, candidate);
+
   if (candidate.profileState) {
     candidate.profileState.appliedSnapshot.folders =
       candidate.folders.map((folder) => ({ ...folder }));
@@ -243,18 +320,34 @@ function currentGovernedState(
   };
 }
 
-function requiresTypedConfirmation(
-  candidate: SchemaV2PermissionConfig
-): boolean {
-  return candidate.terminal.mode === "full" ||
-    candidate.terminal.mode === "dangerous";
+function currentV2Config(
+  manager: ConfigManager
+): SchemaV2PermissionConfig | undefined {
+  if (manager.getConfigMode() !== "v2") return undefined;
+  return manager.getConfig() as unknown as SchemaV2PermissionConfig;
 }
 
-function confirmationValid(value: string | undefined): boolean {
-  if (!value) return false;
-  return FULL_CONFIRMATIONS.has(
-    value.normalize("NFKC").trim().toLowerCase()
-  );
+function profileAuthorityExpansionReasons(
+  manager: ConfigManager,
+  candidate: SchemaV2PermissionConfig
+): string[] {
+  const current = currentV2Config(manager);
+  if (current) {
+    return assessAuthorityExpansion(current, candidate).reasons;
+  }
+
+  // Preserve the accepted v1.3 local-confirmation floor when a legacy setup
+  // first enables unrestricted direct execution through profile application.
+  if (
+    candidate.terminal.mode === "full" ||
+    candidate.terminal.mode === "dangerous"
+  ) {
+    return [
+      `enables direct terminal capability from legacy configuration: ${candidate.terminal.mode}`,
+    ];
+  }
+
+  return [];
 }
 
 export function getProfileStatus(
@@ -282,6 +375,14 @@ export function getProfileStatus(
     folders: (config.folders ?? []).map((folder) => ({ ...folder })),
     terminalMode: config.terminal?.mode ?? null,
     toolPolicy: { ...(config.toolPolicy ?? {}) },
+    approvalMode: config.approval?.mode ?? null,
+    approvalBehavior: config.approval?.mode ? "explicit" : "legacy",
+    explicitConfirmationFloors: {
+      toolPolicyAskCount: Object.values(config.toolPolicy ?? {}).filter(
+        (value) => value === "ask"
+      ).length,
+      terminalAsk: config.terminal?.mode === "ask",
+    },
     validationErrors: [...manager.getConfigValidationErrors()],
   };
 }
@@ -307,9 +408,23 @@ export function previewProfileApplication(
             ? "off"
             : "ask",
       toolPolicy: {},
+      approvalMode:
+        input.preset === "safe" ||
+        input.preset === "balanced" ||
+        input.preset === "power"
+          ? "smart"
+          : null,
       changedFields: ["folders", "terminal.mode", "toolPolicy"],
+      authorityExpansionReasons:
+        input.preset === "balanced" ||
+        input.preset === "power" ||
+        input.preset === "full"
+          ? ["enables direct terminal capability from legacy configuration"]
+          : [],
       requiresTypedConfirmation:
-        input.preset === "power" || input.preset === "full",
+        input.preset === "balanced" ||
+        input.preset === "power" ||
+        input.preset === "full",
       legacyWildcardRequiresFolderSelection: true,
       warnings: [
         'Legacy allowedDirectories=["*"] is not migrated automatically. Choose specific folders first.',
@@ -322,14 +437,26 @@ export function previewProfileApplication(
   const changedFields = current
     ? diffGovernedState(current, candidate).fields
     : ["folders", "terminal.mode", "toolPolicy"];
+  const authorityExpansionReasons =
+    profileAuthorityExpansionReasons(manager, candidate);
+  const currentApprovalMode =
+    manager.getConfigMode() === "v2"
+      ? (manager.getConfig().approval?.mode ?? null)
+      : null;
+  const effectiveApprovalMode =
+    currentApprovalMode ?? candidate.approval.mode ?? null;
 
   return {
     preset: input.preset,
     folders: candidate.folders.map((folder) => ({ ...folder })),
     terminalMode: candidate.terminal.mode,
     toolPolicy: { ...candidate.toolPolicy },
+    approvalMode: effectiveApprovalMode,
     changedFields,
-    requiresTypedConfirmation: requiresTypedConfirmation(candidate),
+    authorityExpansionReasons,
+    requiresTypedConfirmation:
+      authorityExpansionReasons.length > 0 &&
+      adminMutationRequiresMandatoryConfirmation("authority-expansion"),
     legacyWildcardRequiresFolderSelection,
     warnings: [],
   };
@@ -481,6 +608,102 @@ export async function applyLegacyMigrationApplication(
   };
 }
 
+export function previewApprovalModeApplication(
+  input: ApprovalModeApplyInput,
+  manager = ConfigManager.getInstance()
+): ApprovalModePreview {
+  if (manager.getConfigMode() !== "v2") {
+    throw new ProfileServiceError(
+      "APPROVAL_MODE_REQUIRES_SCHEMA_V2",
+      "Approval Mode can be selected only after schema-v2 permissions are active."
+    );
+  }
+
+  const currentMode = manager.getConfig().approval?.mode ?? null;
+  const legacyBehavior = currentMode === null;
+  const reducesConfirmation =
+    currentMode !== null &&
+    approvalModeProtectionRank(input.mode) >
+      approvalModeProtectionRank(currentMode);
+  const requiresTypedConfirmation =
+    (input.mode === "trusted" || reducesConfirmation) &&
+    adminMutationRequiresMandatoryConfirmation("approval-prompt-reduction");
+
+  const warnings: string[] = [];
+  if (legacyBehavior) {
+    warnings.push(
+      "Current schema-v2 config uses legacy v1.3 approval behavior. Applying this preview writes approval.mode explicitly without changing toolPolicy or terminal floors."
+    );
+  }
+  if (input.mode === "trusted") {
+    warnings.push(
+      "Trusted reduces routine prompting but cannot bypass capability denials, explicit ask floors, Mandatory Confirmation, or Absolute Deny."
+    );
+  }
+
+  return {
+    currentMode,
+    targetMode: input.mode,
+    legacyBehavior,
+    requiresTypedConfirmation,
+    warnings,
+  };
+}
+
+export async function applyApprovalMode(
+  input: ApprovalModeApplyInput,
+  manager = ConfigManager.getInstance()
+): Promise<ApprovalModeApplyResult> {
+  const preview = previewApprovalModeApplication(input, manager);
+
+  if (
+    preview.requiresTypedConfirmation &&
+    !isValidLocalConfirmation(input.confirmation)
+  ) {
+    throw new ProfileServiceError(
+      "TYPED_CONFIRMATION_REQUIRED",
+      'Type "confirm" (or "ยืนยัน" in Thai UI) locally before reducing approval prompting.'
+    );
+  }
+
+  const current = manager.getConfig();
+  const backupPath = await backupConfig(manager);
+
+  try {
+    await manager.updateConfig(
+      {
+        approval: {
+          ...current.approval!,
+          mode: input.mode,
+        },
+      },
+      true
+    );
+  } catch (err) {
+    if (backupPath && existsSync(backupPath)) {
+      await fs.copyFile(backupPath, manager.getConfigFilePath()).catch(() => {});
+      await manager.init(manager.getConfigFilePath()).catch(() => {});
+    }
+    throw new ProfileServiceError(
+      "CONFIG_PERSIST_FAILED",
+      `Failed to persist approval mode: ${(err as Error).message}`
+    );
+  }
+
+  if (manager.getConfigMode() !== "v2") {
+    throw new ProfileServiceError(
+      "CONFIG_PERSIST_FAILED",
+      "Approval Mode update did not preserve a valid schema-v2 configuration."
+    );
+  }
+
+  return {
+    backupPath,
+    preview,
+    status: getProfileStatus(manager),
+  };
+}
+
 function profilePersistenceUpdates(
   manager: ConfigManager,
   candidate: SchemaV2PermissionConfig
@@ -515,12 +738,25 @@ function profilePersistenceUpdates(
       fingerprintGovernedState(profileState.appliedSnapshot);
   }
 
+  const approval =
+    manager.getConfigMode() === "v2" && current.approval
+      ? {
+          ...current.approval,
+          ...(current.approval.mode
+            ? { mode: current.approval.mode }
+            : candidate.approval.mode
+              ? { mode: candidate.approval.mode }
+              : {}),
+        }
+      : { ...candidate.approval };
+
   return {
     schemaVersion: 2,
     profilePreset: candidate.profilePreset,
     folders: candidate.folders.map((folder) => ({ ...folder })),
     terminal,
     toolPolicy: { ...candidate.toolPolicy },
+    approval,
     ...(profileState ? { profileState } : {}),
   };
 }
@@ -540,12 +776,12 @@ export async function applyProfilePreset(
 
   const candidate = buildCandidate(manager, input);
   if (
-    requiresTypedConfirmation(candidate) &&
-    !confirmationValid(input.confirmation)
+    preview.requiresTypedConfirmation &&
+    !isValidLocalConfirmation(input.confirmation)
   ) {
     throw new ProfileServiceError(
       "TYPED_CONFIRMATION_REQUIRED",
-      'Type "confirm" (or "ยืนยัน" in Thai UI) locally before enabling terminal full.'
+      'Type "confirm" (or "ยืนยัน" in Thai UI) locally before expanding the active capability envelope.'
     );
   }
 

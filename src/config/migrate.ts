@@ -206,6 +206,7 @@ export function proposeLegacyMigration(
     candidate = buildPresetConfig(namedPreset, {
       folders: legacyDirectories,
       now,
+      approvalMode: "manual",
     });
   } else {
     // Legacy Custom does not become a named reusable Custom Profile in v1.3.
@@ -214,6 +215,7 @@ export function proposeLegacyMigration(
     candidate = buildPresetConfig("balanced", {
       folders: legacyDirectories,
       now,
+      approvalMode: "manual",
     });
     delete candidate.profilePreset;
     delete candidate.profileState;
@@ -222,7 +224,9 @@ export function proposeLegacyMigration(
   setAliasedFolders(candidate, legacyDirectories);
 
   const warnings: string[] = [];
-  const notes: string[] = [];
+  const notes: string[] = [
+    "Legacy migration proposes approval.mode=manual conservatively; Smart or Trusted must be selected explicitly after migration.",
+  ];
 
   if (
     explicitFolders !== undefined &&
