@@ -37,6 +37,66 @@ export function createToolErrorResult(
   };
 }
 
+/**
+ * Normalized in-process error for the Spec 3.4 structured-error contract
+ * (`code`/`message`/`userAction`/`details`). Tool handlers throw this and
+ * convert it with structuredErrorResult() so the public result always carries
+ * the exact frozen error code.
+ */
+export class StructuredToolError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly userAction?: string,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = "StructuredToolError";
+  }
+}
+
+export function structuredErrorResult(err: StructuredToolError): ToolErrorResult {
+  return createToolErrorResult(err.code, err.message, err.userAction, err.details);
+}
+
+export function toStructuredToolErrorResult(
+  err: unknown,
+  fallbackCode: string,
+  fallbackUserAction?: string
+): ToolErrorResult {
+  if (err instanceof StructuredToolError) return structuredErrorResult(err);
+  const message = err instanceof Error ? err.message : String(err);
+  return createToolErrorResult(fallbackCode, message, fallbackUserAction);
+}
+
+/**
+ * Native addon errors arrive as Error objects carrying `code`/`nativeCode`.
+ * Map them onto the structured contract without weakening the stable code.
+ */
+export function fromNativeError(
+  err: unknown,
+  fallbackCode: string,
+  fallbackUserAction?: string
+): StructuredToolError {
+  if (err instanceof StructuredToolError) return err;
+  const native = err as { code?: unknown; nativeCode?: unknown; message?: unknown };
+  const message =
+    typeof native?.message === "string" && native.message
+      ? native.message
+      : String(err);
+  if (typeof native?.code === "string" && native.code.trim()) {
+    return new StructuredToolError(
+      native.code,
+      message,
+      fallbackUserAction,
+      typeof native?.nativeCode === "number"
+        ? { nativeCode: native.nativeCode }
+        : undefined
+    );
+  }
+  return new StructuredToolError(fallbackCode, message, fallbackUserAction);
+}
+
 export function parseToolErrorPayload(
   result: unknown
 ): ToolErrorPayload | undefined {

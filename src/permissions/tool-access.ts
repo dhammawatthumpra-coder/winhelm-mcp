@@ -59,6 +59,34 @@ export function pathRequirements(toolName: string, args: Record<string, any>): P
     case "file_hash":
       return [{ field: "path", value: args.path, access: "read" }];
 
+    case "file_inspect_batch": {
+      const paths = Array.isArray(args.paths) ? args.paths : [];
+      return paths.map((value: unknown) => ({ value, access: "read" as const }));
+    }
+
+    case "file_provenance_lookup":
+      return [{ field: "path", value: args.path, access: "read" }];
+
+    case "file_compare":
+      return [
+        { field: "path_a", value: args.path_a, access: "read" },
+        { field: "path_b", value: args.path_b, access: "read" },
+      ];
+
+    case "directory_manifest":
+      return [{ field: "root_path", value: args.root_path, access: "read" }];
+
+    case "file_write_atomic":
+    case "file_create_exclusive":
+      return [
+        {
+          field: "path",
+          value: args.path,
+          access: "write",
+          denyRootMutation: true,
+        },
+      ];
+
     case "file_list":
     case "file_search":
     case "file_search_ripgrep":

@@ -59,6 +59,14 @@ export const SCHEMA_V2_TOOL_NAMES = {
   COMMAND_RUN: "command_run",
 } as const;
 
+/**
+ * Spec 3.4 Tier A / Phase 1 public additions (final surface: 9 tools):
+ * batch inspection, mutation integrity, governance/provenance, governed
+ * process execution and deterministic verification. Names are adopted per
+ * capability group as their implementations land; Tier B remains out of scope.
+ */
+export const SPEC_34_TIER_A_TOOL_NAMES = ["file_inspect_batch"] as const;
+
 export const RECOVERY_TOOL_NAMES = [
   SCHEMA_V2_TOOL_NAMES.WINHELM_STATUS,
   SCHEMA_V2_TOOL_NAMES.WINHELM_JOB_STATUS,
@@ -85,6 +93,16 @@ export const LEGACY_TOOL_NAMES = ALL_TOOL_NAMES;
 export const ALL_V13_TOOL_NAMES: string[] = [
   ...ALL_TOOL_NAMES,
   ...Object.values(SCHEMA_V2_TOOL_NAMES),
+];
+
+/**
+ * Canonical v1.4 public surface: the accepted v1.3 surface plus the adopted
+ * Spec 3.4 Tier A tools. The canonical count is 41 + adopted Tier A names
+ * (50 when Tier A Phase 1 is complete).
+ */
+export const ALL_V14_TOOL_NAMES: string[] = [
+  ...ALL_V13_TOOL_NAMES,
+  ...SPEC_34_TIER_A_TOOL_NAMES,
 ];
 
 export const PROFILE_CONTROLLED_V13_TOOL_NAMES: string[] = [

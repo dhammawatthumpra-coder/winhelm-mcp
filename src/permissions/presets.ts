@@ -9,7 +9,7 @@ import {
   type SchemaV2PermissionConfig,
   type ToolPolicy,
 } from "../config/schema-v2.js";
-import { ALL_TOOL_NAMES } from "../tools/registry.js";
+import { ALL_TOOL_NAMES, SPEC_34_TIER_A_TOOL_NAMES } from "../tools/registry.js";
 
 export const R0_TOOLS = new Set([
   "file_read",
@@ -29,6 +29,8 @@ export const R0_TOOLS = new Set([
   "eventlog_query",
   "terminal_task_list",
   "terminal_task_logs",
+  // Spec 3.4 Tier A read-only projections and inspection/verification tools.
+  "file_inspect_batch",
 ]);
 
 export const R1_TOOLS = new Set([
@@ -59,9 +61,12 @@ export const R5_TOOLS = new Set([
   "command_run",
 ]);
 
-const POLICY_CONTROLLED_CURRENT_TOOLS = ALL_TOOL_NAMES.filter(
-  (name) => !R5_TOOLS.has(name)
-);
+const POLICY_CONTROLLED_CURRENT_TOOLS = [
+  ...ALL_TOOL_NAMES.filter((name) => !R5_TOOLS.has(name)),
+  // Spec 3.4 Tier A tools receive their Spec section 5 preset policies
+  // (R0 inspection/projection -> auto; R1 mutation -> off/auto per profile).
+  ...SPEC_34_TIER_A_TOOL_NAMES,
+];
 
 export interface PresetBuildOptions {
   folders?: string[];

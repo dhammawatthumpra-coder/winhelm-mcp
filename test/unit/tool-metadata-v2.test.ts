@@ -6,6 +6,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ALL_V13_TOOL_NAMES,
+  ALL_V14_TOOL_NAMES,
   RECOVERY_TOOL_NAMES,
 } from "../../src/tools/registry.js";
 import {
@@ -91,12 +92,12 @@ describe("MCP tool metadata and annotations", () => {
   });
 
 
-  it("covers the exact 41-tool v1.3 surface with no drift", () => {
+  it("covers the accepted v1.3 surface plus adopted Spec 3.4 Tier A tools with no drift", () => {
     assert.strictEqual(ALL_V13_TOOL_NAMES.length, 41);
-    assert.strictEqual(Object.keys(TOOL_METADATA).length, 41);
+    assert.strictEqual(Object.keys(TOOL_METADATA).length, ALL_V14_TOOL_NAMES.length);
     assert.deepStrictEqual(
       Object.keys(TOOL_METADATA).sort(),
-      [...ALL_V13_TOOL_NAMES].sort()
+      [...ALL_V14_TOOL_NAMES].sort()
     );
     assert.deepStrictEqual(validateToolMetadataRegistry(), []);
   });
@@ -202,7 +203,7 @@ describe("MCP tool metadata and annotations", () => {
 
   it("describes every parameter of every registered tool", async () => {
     await withRegisteredV13Tools((tools) => {
-      assert.strictEqual(Object.keys(tools).length, 41);
+      assert.strictEqual(Object.keys(tools).length, ALL_V14_TOOL_NAMES.length);
       assert.deepStrictEqual(collectParameterDescriptionIssues(tools), []);
       return undefined;
     });

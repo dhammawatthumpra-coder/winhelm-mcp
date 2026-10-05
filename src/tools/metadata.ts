@@ -1,13 +1,18 @@
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import {
-  ALL_V13_TOOL_NAMES,
+  ALL_V14_TOOL_NAMES,
   type ToolName,
   SCHEMA_V2_TOOL_NAMES,
+  SPEC_34_TIER_A_TOOL_NAMES,
 } from "./registry.js";
 
 export type V13ToolName =
   | ToolName
   | (typeof SCHEMA_V2_TOOL_NAMES)[keyof typeof SCHEMA_V2_TOOL_NAMES];
+
+export type V14ToolName =
+  | V13ToolName
+  | (typeof SPEC_34_TIER_A_TOOL_NAMES)[number];
 
 export interface WinHelmToolMetadata {
   title: string;
@@ -86,7 +91,7 @@ const ADDITIVE = {
   openWorldHint: false,
 } as const;
 
-export const TOOL_METADATA: Record<V13ToolName, WinHelmToolMetadata> = {
+export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   terminal_run: metadata(
     "Run PowerShell command",
     "Run one PowerShell command synchronously with timeout and UTF-8 output handling.",
@@ -307,6 +312,12 @@ export const TOOL_METADATA: Record<V13ToolName, WinHelmToolMetadata> = {
     "Run a direct executable without a shell; Safe mode permits only hardened package-manager adapters.",
     MUTATING_OPEN_WORLD
   ),
+
+  file_inspect_batch: metadata(
+    "Inspect file batch",
+    "Inspect up to 100 paths in one call with metadata, streaming SHA-256 and best-effort or writer-denying consistency.",
+    READ_ONLY
+  ),
 };
 
 export function getToolMetadata(name: string): WinHelmToolMetadata {
@@ -319,7 +330,7 @@ export function getToolMetadata(name: string): WinHelmToolMetadata {
 
 export function validateToolMetadataRegistry(): string[] {
   const issues: string[] = [];
-  const expected = new Set(ALL_V13_TOOL_NAMES);
+  const expected = new Set(ALL_V14_TOOL_NAMES);
   const actual = new Set(Object.keys(TOOL_METADATA));
 
   for (const name of expected) {
