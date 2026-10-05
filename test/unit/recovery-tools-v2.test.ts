@@ -6,6 +6,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { registerAllTools } from "../../src/tools/index.js";
+import { ALL_V14_TOOL_NAMES } from "../../src/tools/registry.js";
 import {
   getApprovalEngine,
   resetApprovalEngine,
@@ -45,7 +46,7 @@ describe("Schema-v2 recovery tools", () => {
       registerAllTools(server);
       const tools = (server as any)._registeredTools;
 
-      assert.strictEqual(Object.keys(tools).length, 41);
+      assert.strictEqual(Object.keys(tools).length, ALL_V14_TOOL_NAMES.length);
       assert.ok(tools.winhelm_status);
       assert.ok(tools.winhelm_job_status);
       assert.ok(tools.command_run);
@@ -85,7 +86,7 @@ describe("Schema-v2 recovery tools", () => {
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
 
-        assert.strictEqual(Object.keys(tools).length, 41);
+        assert.strictEqual(Object.keys(tools).length, ALL_V14_TOOL_NAMES.length);
         assert.ok(tools.command_run);
 
         const status = await tools.winhelm_status.handler({}, {});

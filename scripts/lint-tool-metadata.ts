@@ -15,7 +15,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConfigManager } from "../src/config/config-manager.js";
 import { registerAllTools } from "../src/tools/index.js";
-import { ALL_V13_TOOL_NAMES } from "../src/tools/registry.js";
+import { ALL_V14_TOOL_NAMES } from "../src/tools/registry.js";
 import {
   TOOL_METADATA,
   validateToolMetadataRegistry,
@@ -55,20 +55,20 @@ try {
     ...collectParameterDescriptionIssues(registered),
   ];
 
-  for (const name of ALL_V13_TOOL_NAMES) {
+  for (const name of ALL_V14_TOOL_NAMES) {
     if (!registered[name]) {
       issues.push(`tool missing from the schema-v2 surface: ${name}`);
     }
   }
 
-  const payload = ALL_V13_TOOL_NAMES.map((name) => ({
+  const payload = ALL_V14_TOOL_NAMES.map((name) => ({
     name,
     title: TOOL_METADATA[name].title,
     description: TOOL_METADATA[name].description,
     annotations: TOOL_METADATA[name].annotations,
   }));
 
-  console.log(`tools checked: ${ALL_V13_TOOL_NAMES.length}`);
+  console.log(`tools checked: ${ALL_V14_TOOL_NAMES.length}`);
   console.log(
     `metadata projection bytes: ${Buffer.byteLength(JSON.stringify(payload), "utf8")} (name/title/description/annotations only; excludes JSON input schemas, which this script does not serialize; bytes, not a token count)`
   );
