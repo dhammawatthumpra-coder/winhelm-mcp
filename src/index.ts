@@ -27,6 +27,10 @@ import {
   getToolRiskPresentation,
 } from "./permissions/risk.js";
 import { readStoredAuthToken, resolveStartupAuthToken } from "./config/auth-token-store.js";
+import {
+  getRunManager,
+  initializeRunManager,
+} from "./engine/run-manager.js";
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -313,6 +317,22 @@ async function main() {
   await controlServer.start();
   console.error("[WinHelm] Local approval control ready. Run 'winhelm jobs' or 'winhelm admin-code' from a local terminal.");
 
+  // Spec 3.4 A4: reconcile runs left `running` by a previous server process
+  // to aborted/unknown. There is never an automatic replay.
+  try {
+    const reconciledRuns = await initializeRunManager();
+    if (reconciledRuns > 0) {
+      console.error(
+        `[WinHelm] Reconciled ${reconciledRuns} previously-running governed command record(s) to aborted/unknown; no run was replayed.`
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[WinHelm] Governed run journal reconciliation failed:",
+      (err as Error).message
+    );
+  }
+
   if (IS_STDIO) {
     // DEF-02: a stdio client (Claude Desktop, Cursor) uses one implicit
     // session for the whole process. Publish that session and its announced
@@ -341,6 +361,8 @@ async function main() {
 
     const shutdown = async () => {
       await controlServer.close().catch(() => {});
+      // Spec 3.4 A4: server termination closes every job-contained process.
+      getRunManager().shutdownAll();
       await mcpServer.close().catch(() => {});
       process.exit(0);
     };
@@ -378,6 +400,9 @@ async function main() {
     } catch {
       // ignore
     }
+
+    // Spec 3.4 A4: server termination closes every job-contained process.
+    getRunManager().shutdownAll();
 
     try {
       await stop(server);
