@@ -328,6 +328,21 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
     "Create a new file with Win32 CREATE_NEW semantics that can never overwrite an existing evidence target.",
     MUTATING
   ),
+  session_current: metadata(
+    "Read current session identity",
+    "Report the current WinHelm session identity, client, process, and permission context.",
+    READ_ONLY
+  ),
+  session_audit_search: metadata(
+    "Search current session audit",
+    "Search this session's own audit projection only; other sessions' activity is never returned.",
+    READ_ONLY
+  ),
+  file_provenance_lookup: metadata(
+    "Look up file provenance",
+    "Project the cross-session mutation attribution of one authorized path without exposing the audit store.",
+    READ_ONLY
+  ),
 };
 
 export function getToolMetadata(name: string): WinHelmToolMetadata {

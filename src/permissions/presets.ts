@@ -31,6 +31,9 @@ export const R0_TOOLS = new Set([
   "terminal_task_logs",
   // Spec 3.4 Tier A read-only projections and inspection/verification tools.
   "file_inspect_batch",
+  "session_current",
+  "session_audit_search",
+  "file_provenance_lookup",
 ]);
 
 export const R1_TOOLS = new Set([
