@@ -72,6 +72,7 @@ export const SPEC_34_TIER_A_TOOL_NAMES = [
   "session_current",
   "session_audit_search",
   "file_provenance_lookup",
+  "command_wait",
 ] as const;
 
 export const RECOVERY_TOOL_NAMES = [

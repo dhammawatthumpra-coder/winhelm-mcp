@@ -34,6 +34,7 @@ export const R0_TOOLS = new Set([
   "session_current",
   "session_audit_search",
   "file_provenance_lookup",
+  "command_wait",
 ]);
 
 export const R1_TOOLS = new Set([

@@ -343,6 +343,11 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
     "Project the cross-session mutation attribution of one authorized path without exposing the audit store.",
     READ_ONLY
   ),
+  command_wait: metadata(
+    "Wait for governed command",
+    "Wait for an owned governed run without ever cancelling it; timeouts return still_running.",
+    READ_ONLY
+  ),
 };
 
 export function getToolMetadata(name: string): WinHelmToolMetadata {

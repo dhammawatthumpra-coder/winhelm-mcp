@@ -6,6 +6,18 @@ import {
 import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import { ConfigManager } from "../config/config-manager.js";
+import { getNativeBoundary } from "../native/boundary.js";
+import { StructuredToolError } from "../errors/tool-error.js";
+import {
+  buildGovernedEnvironment,
+  validatePublicTimeoutMs,
+  type EnvMode,
+} from "./command-env.js";
+import {
+  getRunManager,
+  type LiveRun,
+  type RunFinalResult,
+} from "./run-manager.js";
 
 export type SafePackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -640,5 +652,329 @@ export async function runCommandNoShell(
     durationMs: Date.now() - startedAt,
     timedOut,
     aborted,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Spec 3.4 A4 — governed process execution (normative Tier A path)   */
+/* ------------------------------------------------------------------ */
+
+export type StreamSinkMode = "create_new" | "overwrite" | "append";
+
+export interface GovernedCommandRunInput {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  /** Legacy v1.3 timeout field (integer, 100..600000 ms). */
+  timeoutMs?: number;
+  /** Spec 3.4 timeout field with the public finite-timeout lock. */
+  timeout_ms?: number;
+  env_mode?: EnvMode;
+  env?: Record<string, string>;
+  async?: boolean;
+  max_capture_bytes?: number;
+  stdout_file?: string;
+  stdout_mode?: StreamSinkMode;
+  stderr_file?: string;
+  stderr_mode?: StreamSinkMode;
+  sessionId: string;
+}
+
+export interface GovernedSinkPlan {
+  path: string;
+  mode: StreamSinkMode;
+}
+
+export interface PreparedGovernedCommandRun {
+  plan: ResolvedCommandPlan;
+  finalArgs: string[];
+  cwd: string;
+  effectiveTimeoutMs: number;
+  captureLimitBytes: number;
+  envEntries: Array<{ name: string; value: string }>;
+  stdoutSink: GovernedSinkPlan | null;
+  stderrSink: GovernedSinkPlan | null;
+  displayCommand: string;
+  asyncRequested: boolean;
+}
+
+const DEFAULT_CAPTURE_LIMIT_BYTES = 1_048_576;
+/** Independently reviewed native capture safety ceiling (128 MiB). */
+export const NATIVE_CAPTURE_CEILING_BYTES = 134_217_728;
+
+function fail(
+  code: string,
+  message: string,
+  userAction?: string,
+  details?: Record<string, unknown>
+): never {
+  throw new StructuredToolError(code, message, userAction, details);
+}
+
+function toStructuredNativeError(err: unknown): StructuredToolError {
+  if (err instanceof StructuredToolError) return err;
+  const native = err as { code?: unknown; nativeCode?: unknown; message?: unknown };
+  const code = typeof native?.code === "string" && native.code ? native.code : "COMMAND_RUN_REJECTED";
+  const message =
+    typeof native?.message === "string" && native.message ? native.message : String(err);
+  return new StructuredToolError(
+    code,
+    message,
+    "Review the governed command inputs and retry.",
+    typeof native?.nativeCode === "number" ? { nativeCode: native.nativeCode } : undefined
+  );
+}
+
+function normalizeSinkPathKey(value: string): string {
+  const resolved = path.resolve(value.normalize("NFKC").trim());
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+/**
+ * Deterministic preflight for the governed command path. Reuses the accepted
+ * command security planning (blocklist, safe adapter, executable resolution)
+ * and adds the Spec 3.4 environment policy, timeout-domain lock, capture
+ * ceiling, and physical-sink authorization. All checks here are
+ * preflightable Absolute-Deny material.
+ */
+export function preflightGovernedCommandRun(
+  input: GovernedCommandRunInput
+): PreparedGovernedCommandRun {
+  if (input.timeoutMs !== undefined && input.timeout_ms !== undefined) {
+    fail(
+      "COMMAND_RUN_REJECTED",
+      "Provide only one of timeoutMs (legacy) and timeout_ms (Spec 3.4).",
+      "Remove the duplicate timeout field and retry."
+    );
+  }
+
+  const legacyTimeout =
+    typeof input.timeoutMs === "number" ? input.timeoutMs : undefined;
+  const base = preflightCommandRun({
+    command: input.command,
+    args: input.args,
+    cwd: input.cwd,
+    timeoutMs: legacyTimeout,
+  });
+
+  let effectiveTimeoutMs: number;
+  if (input.timeout_ms !== undefined) {
+    effectiveTimeoutMs = validatePublicTimeoutMs(input.timeout_ms, {
+      tool: "command_run",
+      field: "timeout_ms",
+    });
+  } else if (legacyTimeout !== undefined) {
+    effectiveTimeoutMs = legacyTimeout;
+  } else {
+    effectiveTimeoutMs = 60_000;
+  }
+
+  const envMode: EnvMode = input.env_mode ?? "sanitized";
+  if (
+    envMode !== "sanitized" &&
+    envMode !== "inherit" &&
+    envMode !== "empty"
+  ) {
+    fail(
+      "ILLEGAL_ENVIRONMENT_OVERRIDE",
+      "env_mode must be sanitized, inherit, or empty."
+    );
+  }
+
+  const captureLimitBytes = input.max_capture_bytes ?? DEFAULT_CAPTURE_LIMIT_BYTES;
+  if (
+    typeof captureLimitBytes !== "number" ||
+    !Number.isFinite(captureLimitBytes) ||
+    !Number.isInteger(captureLimitBytes) ||
+    captureLimitBytes < 0
+  ) {
+    fail(
+      "COMMAND_RUN_REJECTED",
+      "max_capture_bytes must be a non-negative integer."
+    );
+  }
+  // Explicit structural pre-validation of the native 128 MiB safety ceiling:
+  // never silently clamped.
+  if (captureLimitBytes > NATIVE_CAPTURE_CEILING_BYTES) {
+    fail(
+      "INPUT_TOO_LARGE",
+      `max_capture_bytes exceeds the 128 MiB native capture ceiling (${NATIVE_CAPTURE_CEILING_BYTES} bytes).`,
+      "Lower max_capture_bytes or rely on physical stdout/stderr sinks for larger streams.",
+      { requestedBytes: captureLimitBytes, ceilingBytes: NATIVE_CAPTURE_CEILING_BYTES }
+    );
+  }
+
+  const manager = ConfigManager.getInstance();
+  const authorizeSink = (file: string | undefined, label: string): GovernedSinkPlan | null => {
+    if (file === undefined || file === null || String(file).trim() === "") return null;
+    const resolved = path.resolve(String(file).normalize("NFKC").trim());
+    const check = manager.checkPathAccess(resolved, "write", {
+      denyRootMutation: false,
+      rejectReparseMutation: true,
+    });
+    if (!check.allowed) {
+      fail(
+        check.code === "FOLDER_REPARSE_MUTATION"
+          ? "REPARSE_TRAVERSAL_DENIED"
+          : check.code ?? "FOLDER_ACCESS_DENIED",
+        check.reason ?? `stdout/stderr sink is not authorized: ${label}`,
+        "Point the stream sink at a file inside an allowed readwrite WinHelm folder."
+      );
+    }
+    return { path: resolved, mode: "create_new" };
+  };
+
+  const stdoutSink = authorizeSink(input.stdout_file, "stdout_file");
+  const stderrSink = authorizeSink(input.stderr_file, "stderr_file");
+
+  if (stdoutSink && stderrSink) {
+    if (normalizeSinkPathKey(stdoutSink.path) === normalizeSinkPathKey(stderrSink.path)) {
+      fail(
+        "STREAM_REDIRECTION_COLLISION",
+        "stdout_file and stderr_file must not target the same path; concurrent interleaved writes cannot be deterministic.",
+        "Use two different sink paths."
+      );
+    }
+  }
+
+  const governedEnv = buildGovernedEnvironment({
+    envMode,
+    overlay: input.env,
+    resolvedExecutable: base.plan.executable,
+    terminalMode: manager.getConfig().terminal?.mode ?? "off",
+  });
+
+  const sinkMode = (value: StreamSinkMode | undefined, file: string | undefined): StreamSinkMode =>
+    file ? value ?? "create_new" : "create_new";
+
+  return {
+    plan: base.plan,
+    finalArgs: base.finalArgs,
+    cwd: base.cwd,
+    effectiveTimeoutMs,
+    captureLimitBytes,
+    envEntries: governedEnv.entries,
+    stdoutSink: stdoutSink
+      ? { path: stdoutSink.path, mode: sinkMode(input.stdout_mode, input.stdout_file) }
+      : null,
+    stderrSink: stderrSink
+      ? { path: stderrSink.path, mode: sinkMode(input.stderr_mode, input.stderr_file) }
+      : null,
+    displayCommand: base.displayCommand,
+    asyncRequested: input.async === true,
+  };
+}
+
+export interface GovernedCommandRunHandle {
+  run_id: string;
+  status: "running";
+  started_at_utc: string;
+  pid: number | null;
+  command: string;
+  resolvedExecutable: string;
+  cwd: string;
+}
+
+export type GovernedCommandRunResult = RunFinalResult & {
+  // Schema-compatible legacy projection for accepted v1.3 callers.
+  exitCode: number;
+  timedOut: boolean;
+  aborted: false;
+  durationMs: number;
+  command: string;
+  resolvedExecutable: string;
+  resolvedArgs: string[];
+  cwd: string;
+  stdout_file: string | null;
+  stderr_file: string | null;
+};
+
+/**
+ * Normative Spec 3.4 governed execution: the promoted native boundary spawns
+ * the process CREATE_SUSPENDED -> AssignProcessToJobObject -> ResumeThread
+ * with an explicit Unicode environment; ordinary Node child_process.spawn is
+ * never used for this path.
+ */
+export async function runCommandGoverned(
+  input: GovernedCommandRunInput
+): Promise<GovernedCommandRunHandle | GovernedCommandRunResult> {
+  const prepared = preflightGovernedCommandRun(input);
+  const boundary = getNativeBoundary();
+  const manager = getRunManager();
+
+  let native;
+  try {
+    native = boundary.spawnContained(
+      prepared.plan.executable,
+      prepared.finalArgs,
+      prepared.cwd,
+      {
+        environment: prepared.envEntries,
+        captureLimitBytes: prepared.captureLimitBytes,
+        ...(prepared.stdoutSink ? { stdoutSink: prepared.stdoutSink } : {}),
+        ...(prepared.stderrSink ? { stderrSink: prepared.stderrSink } : {}),
+      }
+    );
+  } catch (err) {
+    // Native structured failures (environment policy, sink conflicts, Win32
+    // spawn errors) keep their exact stable codes.
+    throw toStructuredNativeError(err);
+  }
+
+  const run: LiveRun = manager.registerLaunch({
+    sessionId: input.sessionId,
+    command: prepared.displayCommand,
+    native,
+  });
+
+  if (prepared.asyncRequested) {
+    let pid: number | null = null;
+    try {
+      pid = native.pid();
+    } catch {
+      pid = null;
+    }
+    return {
+      run_id: run.run_id,
+      status: "running",
+      started_at_utc: run.started_at_utc,
+      pid,
+      command: input.command,
+      resolvedExecutable: prepared.plan.executable,
+      cwd: prepared.cwd,
+    };
+  }
+
+  const firstWait = await manager.waitForRun(run, prepared.effectiveTimeoutMs);
+  let finalResult: RunFinalResult;
+  if (firstWait.status === "still_running") {
+    // Sync timeout kills the run (accepted v1.3 behavior); command_wait
+    // timeouts never do.
+    run.timedOut = true;
+    manager.terminate(run);
+    await run.settlement;
+    finalResult = await manager.getFinalResult(run);
+  } else {
+    finalResult = firstWait;
+  }
+
+  try {
+    native.close();
+  } catch {
+    // close() is best-effort; repeated close is safe on the native boundary.
+  }
+
+  return {
+    ...finalResult,
+    exitCode: finalResult.exit_code,
+    timedOut: finalResult.timed_out,
+    aborted: false,
+    durationMs: Math.round(finalResult.wall_seconds * 1000),
+    command: input.command,
+    resolvedExecutable: prepared.plan.executable,
+    resolvedArgs: prepared.finalArgs,
+    cwd: prepared.cwd,
+    stdout_file: prepared.stdoutSink?.path ?? null,
+    stderr_file: prepared.stderrSink?.path ?? null,
   };
 }

@@ -7,8 +7,10 @@ import {
 import {
   CommandRunPolicyError,
   preflightCommandRun,
+  preflightGovernedCommandRun,
 } from "../engine/command-runner.js";
 import { preflightZipExtractionSecurity } from "../engine/filesystem.js";
+import { StructuredToolError } from "../errors/tool-error.js";
 import { translate as t } from "../i18n/messages.js";
 import { pathRequirements } from "./tool-access.js";
 import { isFolderListingRequest } from "./request-paths.js";
@@ -184,15 +186,68 @@ export async function preflightAbsoluteDeny(
 
     if (toolName === "command_run") {
       try {
-        preflightCommandRun({
-          command: String(args.command ?? ""),
-          args: Array.isArray(args.args)
-            ? args.args.map((value: unknown) => String(value))
-            : [],
-          cwd: typeof args.cwd === "string" ? args.cwd : undefined,
-          timeoutMs:
-            typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
-        });
+        if (
+          args.env_mode !== undefined ||
+          args.env !== undefined ||
+          args.timeout_ms !== undefined ||
+          args.async !== undefined ||
+          args.max_capture_bytes !== undefined ||
+          args.stdout_file !== undefined ||
+          args.stderr_file !== undefined
+        ) {
+          // Extended Spec 3.4 governed form: validate environment policy,
+          // timeout domain, capture ceiling, and sink authorization as
+          // preflightable Absolute-Deny material.
+          preflightGovernedCommandRun({
+            command: String(args.command ?? ""),
+            args: Array.isArray(args.args)
+              ? args.args.map((value: unknown) => String(value))
+              : [],
+            cwd: typeof args.cwd === "string" ? args.cwd : undefined,
+            timeoutMs:
+              typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
+            timeout_ms:
+              typeof args.timeout_ms === "number" ? args.timeout_ms : undefined,
+            env_mode:
+              args.env_mode === "sanitized" ||
+              args.env_mode === "inherit" ||
+              args.env_mode === "empty"
+                ? args.env_mode
+                : undefined,
+            env:
+              args.env && typeof args.env === "object" && !Array.isArray(args.env)
+                ? (args.env as Record<string, string>)
+                : undefined,
+            async: args.async === true,
+            max_capture_bytes:
+              typeof args.max_capture_bytes === "number"
+                ? args.max_capture_bytes
+                : undefined,
+            stdout_file:
+              typeof args.stdout_file === "string" ? args.stdout_file : undefined,
+            stdout_mode:
+              args.stdout_mode === "overwrite" || args.stdout_mode === "append"
+                ? args.stdout_mode
+                : undefined,
+            stderr_file:
+              typeof args.stderr_file === "string" ? args.stderr_file : undefined,
+            stderr_mode:
+              args.stderr_mode === "overwrite" || args.stderr_mode === "append"
+                ? args.stderr_mode
+                : undefined,
+            sessionId: "preapproval-preflight",
+          });
+        } else {
+          preflightCommandRun({
+            command: String(args.command ?? ""),
+            args: Array.isArray(args.args)
+              ? args.args.map((value: unknown) => String(value))
+              : [],
+            cwd: typeof args.cwd === "string" ? args.cwd : undefined,
+            timeoutMs:
+              typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
+          });
+        }
       } catch (err) {
         if (err instanceof CommandRunPolicyError) {
           return {
@@ -201,7 +256,21 @@ export async function preflightAbsoluteDeny(
             userAction: t("action.command.allowed"),
           };
         }
-        throw err;
+        if (err instanceof StructuredToolError) {
+          // Frozen Spec 3.4 structured codes (for example
+          // ILLEGAL_ENVIRONMENT_OVERRIDE, STREAM_REDIRECTION_COLLISION,
+          // TIMEOUT_INVALID) keep their exact public code pre-approval.
+          return {
+            code: err.code,
+            reason: err.message,
+            userAction: err.userAction ?? t("action.command.allowed"),
+          };
+        }
+        return {
+          code: "COMMAND_RUN_REJECTED",
+          reason: (err as Error).message || String(err),
+          userAction: t("action.command.allowed"),
+        };
       }
     }
 
