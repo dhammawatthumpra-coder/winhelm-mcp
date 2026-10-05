@@ -10,6 +10,8 @@ import {
   lookupFileProvenanceStatus,
   searchCurrentSessionAudit,
 } from "../engine/session-governance.js";
+import { compareFiles } from "../engine/file-compare.js";
+import { buildDirectoryManifest } from "../engine/directory-manifest.js";
 import { approvalSessionKey } from "../approval/provenance.js";
 import { toStructuredToolErrorResult } from "../errors/tool-error.js";
 import { registerTracedTool } from "./tool-wrapper.js";
@@ -268,6 +270,91 @@ export function registerGovernedTools(server: McpServer): void {
         };
       } catch (err) {
         return toStructuredToolErrorResult(err, "PROVENANCE_LOOKUP_FAILED");
+      }
+    }
+  );
+
+  // A5 — Deterministic Verification
+  registerTracedTool(
+    server,
+    "file_compare",
+    {
+      path_a: z.string().describe("First file path (read-authorized)."),
+      path_b: z.string().describe("Second file path (read-authorized)."),
+      mode: z
+        .enum(["bytes", "text"])
+        .describe("Compare raw bytes or decoded text."),
+      newline_normalization: z
+        .enum(["none", "ignore_cr", "strict"])
+        .optional()
+        .describe(
+          "Text-mode newline handling: none, ignore_cr (drop CR), or strict (crlf->lf) (default: none)."
+        ),
+      unified_diff: z
+        .boolean()
+        .optional()
+        .describe("Include a bounded unified diff for text mode (default: false)."),
+      max_diff_lines: z
+        .number()
+        .int()
+        .min(1)
+        .max(2_000)
+        .optional()
+        .describe("Maximum unified-diff lines to return (default: 200)."),
+    },
+    async (args) => {
+      try {
+        const result = await compareFiles(args);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "FILE_COMPARE_FAILED");
+      }
+    }
+  );
+
+  registerTracedTool(
+    server,
+    "directory_manifest",
+    {
+      root_path: z.string().describe("Directory to snapshot (read-authorized)."),
+      recursive: z
+        .boolean()
+        .optional()
+        .describe("Scan subdirectories (default: true)."),
+      max_depth: z
+        .number()
+        .int()
+        .min(0)
+        .max(64)
+        .optional()
+        .describe("Maximum recursion depth (default: 10)."),
+      hash_files: z
+        .boolean()
+        .optional()
+        .describe("Compute a SHA-256 for every file (default: true)."),
+      exclude_patterns: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Glob patterns to exclude (for example *.tmp or node_modules/**); sorted lexicographically before hashing the manifest."
+        ),
+      follow_reparse: z
+        .literal(false)
+        .optional()
+        .describe(
+          "Fixed to false in v1.4; reparse points are recorded but never traversed."
+        ),
+    },
+    async (args) => {
+      try {
+        const result = await buildDirectoryManifest(args);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "DIRECTORY_MANIFEST_FAILED");
       }
     }
   );
