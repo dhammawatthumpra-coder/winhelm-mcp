@@ -348,6 +348,16 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
     "Wait for an owned governed run without ever cancelling it; timeouts return still_running.",
     READ_ONLY
   ),
+  file_compare: metadata(
+    "Compare two files",
+    "Compare two authorized files byte- or text-wise with first-difference and bounded diff output.",
+    READ_ONLY
+  ),
+  directory_manifest: metadata(
+    "Snapshot folder manifest",
+    "Build a deterministic canonical folder manifest with a stable manifest SHA-256.",
+    READ_ONLY
+  ),
 };
 
 export function getToolMetadata(name: string): WinHelmToolMetadata {
