@@ -257,6 +257,86 @@ test("NB-ENV-1 rejects malformed option shapes", () => {
   );
 });
 
+test("NB-ENV-1 rejects duplicates under Windows Unicode case-insensitive identity", () => {
+  // Windows environment lookup (GetEnvironmentVariableW) folds non-ASCII
+  // letters via the OS upcase table, so these pairs are the SAME variable to
+  // the child even though their bytes differ. NB2 must reject them exactly
+  // like the ASCII pair above.
+  const unicodeCasePairs = [
+    ["\u0422CASE-PROBE", "\u0442case-probe"], // Cyrillic Te / te
+    ["\u03A9CASE-PROBE", "\u03C9case-probe"], // Greek Omega / omega
+    ["\u00C9CASE-PROBE", "\u00E9case-probe"], // Latin-1 E-acute / e-acute
+  ];
+  for (const [upper, lower] of unicodeCasePairs) {
+    assertInvalid(
+      () => prod.spawnContained(
+        childExe,
+        ["exit", "0"],
+        null,
+        a4Options({
+          environment: [
+            { name: upper, value: "value-a" },
+            { name: lower, value: "value-b" },
+          ],
+        }),
+      ),
+      "INVALID_ARGUMENT",
+      `Windows Unicode case-identity duplicate (${upper})`,
+    );
+  }
+});
+
+test("NB-ENV-1 genuinely distinct Unicode names that merely look similar remain accepted", () => {
+  const outPath = child("env-distinct-unicode.txt");
+  const run = prod.spawnContained(childExe, [
+    "env-report",
+    outPath,
+    "\u0391\u0392CONFUSABLE", // Greek Alpha-Beta
+    "ABCONFUSABLE",           // Latin A-B
+  ], null, a4Options({
+    environment: [
+      { name: "\u0391\u0392CONFUSABLE", value: "greek-value" },
+      { name: "ABCONFUSABLE", value: "latin-value" },
+    ],
+  }));
+  try {
+    assert.deepEqual(run.wait(15000), { status: "exited", exitCode: 0 });
+    const lines = readFileSync(outPath, "utf8").trim().split("\n");
+    const seen = Object.fromEntries(
+      lines.map((line) => {
+        const tab = line.indexOf("\t");
+        return [line.slice(0, tab), line.slice(tab + 1)];
+      }),
+    );
+    assert.equal(seen["\u0391\u0392CONFUSABLE"], "greek-value");
+    assert.equal(seen["ABCONFUSABLE"], "latin-value");
+  } finally {
+    run.close();
+  }
+});
+
+test("NB-SINK-1 sink paths differing only by a non-ASCII Unicode case pair collide", () => {
+  const upperPath = join(root, "\u0422SINK-COLLIDE.txt");
+  const lowerPath = join(root, "\u0442sink-collide.txt");
+  const marker = child("sink-unicode-collide-marker.txt");
+  assert.equal(existsSync(marker), false);
+  assertInvalid(
+    () => prod.spawnContained(
+      process.execPath,
+      ["-e", `require("fs").writeFileSync(${JSON.stringify(marker)}, "ran")`],
+      null,
+      a4Options({
+        stdoutSink: { path: upperPath, mode: "create_new" },
+        stderrSink: { path: lowerPath, mode: "create_new" },
+      }),
+    ),
+    "SINK_PATH_CONFLICT",
+    "Unicode case-variant sink paths",
+  );
+  assert.equal(existsSync(marker), false, "payload executed despite sink collision");
+  assert.equal(existsSync(upperPath), false, "sink opened despite Unicode collision");
+});
+
 test("NB-PROC-2 child stdin is EOF-producing and non-interactive", () => {
   const outPath = child("stdin-report.txt");
   const run = prod.spawnContained(

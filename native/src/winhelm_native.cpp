@@ -679,26 +679,21 @@ struct EnvEntry {
   std::wstring value;
 };
 
-wchar_t EnvCiLower(wchar_t ch) {
-  return (ch >= L'A' && ch <= L'Z')
-      ? static_cast<wchar_t>(ch + (L'a' - L'A'))
-      : ch;
-}
-
-// Deterministic, locale-free, case-insensitive wide ordering used for both
-// duplicate detection and Windows environment block construction.
-bool EnvNameCiLess(const std::wstring& a, const std::wstring& b) {
-  const size_t common = std::min(a.size(), b.size());
-  for (size_t i = 0; i < common; ++i) {
-    const wchar_t ca = EnvCiLower(a[i]);
-    const wchar_t cb = EnvCiLower(b[i]);
-    if (ca != cb) return ca < cb;
+// Windows ordinal case-insensitive identity: CompareStringOrdinal(..., TRUE)
+// folds through the OS upcase table, matching the semantics Windows itself
+// uses for environment-variable lookup. Returns CSTR_LESS_THAN / CSTR_EQUAL /
+// CSTR_GREATER_THAN; sets ok=false when the Win32 comparison call itself
+// fails so callers can fail closed instead of treating the pair as unequal.
+int EnvNameWindowsCompare(const std::wstring& a, const std::wstring& b, bool& ok) {
+  const int result = CompareStringOrdinal(
+      a.c_str(), static_cast<int>(a.size()),
+      b.c_str(), static_cast<int>(b.size()), TRUE);
+  if (result != CSTR_LESS_THAN && result != CSTR_EQUAL &&
+      result != CSTR_GREATER_THAN) {
+    ok = false;
+    return CSTR_EQUAL;
   }
-  return a.size() < b.size();
-}
-
-bool EnvNameCiEqual(const std::wstring& a, const std::wstring& b) {
-  return !EnvNameCiLess(a, b) && !EnvNameCiLess(b, a);
+  return result;
 }
 
 bool BuildEnvironmentBlock(
@@ -2011,11 +2006,30 @@ bool ParseEnvironmentEntries(
       return false;
     }
   }
-  std::sort(out.begin(), out.end(), [](const EnvEntry& a, const EnvEntry& b) {
-    return EnvNameCiLess(a.name, b.name);
+  bool comparison_ok = true;
+  std::sort(out.begin(), out.end(), [&comparison_ok](const EnvEntry& a, const EnvEntry& b) {
+    bool ok = true;
+    const int result = EnvNameWindowsCompare(a.name, b.name, ok);
+    if (!ok) {
+      comparison_ok = false;
+      return false;
+    }
+    return result == CSTR_LESS_THAN;
   });
+  if (!comparison_ok) {
+    ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                    "environment name comparison failed");
+    return false;
+  }
   for (size_t i = 1; i < out.size(); ++i) {
-    if (EnvNameCiEqual(out[i - 1].name, out[i].name)) {
+    bool ok = true;
+    const int result = EnvNameWindowsCompare(out[i - 1].name, out[i].name, ok);
+    if (!ok) {
+      ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                      "environment name comparison failed");
+      return false;
+    }
+    if (result == CSTR_EQUAL) {
       ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
                       "environment contains duplicate case-insensitive names");
       return false;
@@ -2122,11 +2136,19 @@ napi_value SpawnContainedA4Impl(
 
   // Defense-in-depth only; the public STREAM_REDIRECTION_COLLISION policy
   // remains a decision of the future TypeScript/M1 layer.
-  if (options.stdout_sink.present && options.stderr_sink.present &&
-      EnvNameCiEqual(options.stdout_sink.path, options.stderr_sink.path)) {
-    return ThrowStructured(env, "SINK_PATH_CONFLICT", ERROR_INVALID_PARAMETER,
-                           "stdout and stderr sinks must not target the same "
-                           "path");
+  if (options.stdout_sink.present && options.stderr_sink.present) {
+    bool sink_compare_ok = true;
+    const int sink_compare = EnvNameWindowsCompare(
+        options.stdout_sink.path, options.stderr_sink.path, sink_compare_ok);
+    if (!sink_compare_ok) {
+      return ThrowStructured(env, "INVALID_ARGUMENT", ERROR_INVALID_PARAMETER,
+                             "Sink path comparison failed");
+    }
+    if (sink_compare == CSTR_EQUAL) {
+      return ThrowStructured(env, "SINK_PATH_CONFLICT", ERROR_INVALID_PARAMETER,
+                             "stdout and stderr sinks must not target the same "
+                             "path");
+    }
   }
 
   // Sinks open before process creation so an invalid sink cannot produce
