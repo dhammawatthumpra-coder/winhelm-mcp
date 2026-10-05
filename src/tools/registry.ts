@@ -69,6 +69,9 @@ export const SPEC_34_TIER_A_TOOL_NAMES = [
   "file_inspect_batch",
   "file_write_atomic",
   "file_create_exclusive",
+  "session_current",
+  "session_audit_search",
+  "file_provenance_lookup",
 ] as const;
 
 export const RECOVERY_TOOL_NAMES = [

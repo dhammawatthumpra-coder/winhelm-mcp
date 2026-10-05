@@ -5,6 +5,11 @@ import {
   createFileExclusive,
   writeFileAtomic,
 } from "../engine/atomic-file.js";
+import {
+  describeCurrentSession,
+  lookupFileProvenanceStatus,
+  searchCurrentSessionAudit,
+} from "../engine/session-governance.js";
 import { approvalSessionKey } from "../approval/provenance.js";
 import { toStructuredToolErrorResult } from "../errors/tool-error.js";
 import { registerTracedTool } from "./tool-wrapper.js";
@@ -171,6 +176,98 @@ export function registerGovernedTools(server: McpServer): void {
         };
       } catch (err) {
         return toStructuredToolErrorResult(err, "FILE_MUTATION_FAILED");
+      }
+    }
+  );
+
+  // A3 — Governance and Provenance
+  registerTracedTool(
+    server,
+    "session_current",
+    {
+      // No inputs; the session identity comes from the transport context.
+    },
+    async (_args, extra) => {
+      try {
+        const result = describeCurrentSession(extra?.sessionId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "SESSION_CONTEXT_FAILED");
+      }
+    }
+  );
+
+  registerTracedTool(
+    server,
+    "session_audit_search",
+    {
+      path: z
+        .string()
+        .optional()
+        .describe("Filter events to targets containing this filesystem path."),
+      actions: z
+        .array(z.enum(["create", "modify", "delete", "approve", "deny", "execute"]))
+        .optional()
+        .describe("Filter by action types."),
+      since_utc: z
+        .string()
+        .optional()
+        .describe("Inclusive ISO 8601 UTC lower time bound."),
+      until_utc: z
+        .string()
+        .optional()
+        .describe("Inclusive ISO 8601 UTC upper time bound."),
+      limit: z
+        .number()
+        .int()
+        .min(0)
+        .max(500)
+        .optional()
+        .describe("Maximum events to return, newest first (default: 50)."),
+    },
+    async (args, extra) => {
+      try {
+        const result = searchCurrentSessionAudit(args, extra?.sessionId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "SESSION_AUDIT_SEARCH_FAILED");
+      }
+    }
+  );
+
+  registerTracedTool(
+    server,
+    "file_provenance_lookup",
+    {
+      path: z
+        .string()
+        .describe(
+          "Target path whose WinHelm mutation attribution is requested; must be read-authorized."
+        ),
+      actions: z
+        .array(z.enum(["create", "modify", "delete"]))
+        .optional()
+        .describe("Attribution actions of interest (default: all recorded actions)."),
+      limit: z
+        .number()
+        .int()
+        .min(0)
+        .max(200)
+        .optional()
+        .describe("Maximum history entries to return, oldest first (default: 10)."),
+    },
+    async (args, extra) => {
+      try {
+        const result = await lookupFileProvenanceStatus(args, extra?.sessionId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "PROVENANCE_LOOKUP_FAILED");
       }
     }
   );
