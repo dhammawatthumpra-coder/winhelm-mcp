@@ -1,8 +1,47 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { inspectFileBatch } from "../engine/file-inspect.js";
+import {
+  createFileExclusive,
+  writeFileAtomic,
+} from "../engine/atomic-file.js";
+import { approvalSessionKey } from "../approval/provenance.js";
 import { toStructuredToolErrorResult } from "../errors/tool-error.js";
 import { registerTracedTool } from "./tool-wrapper.js";
+
+const MUTATION_TEXT_FIELD_CONTRACT =
+  "Text transforms apply to utf8/ascii content; base64 content is written verbatim after decoding.";
+
+function fileTextFields() {
+  return {
+    encoding: z
+      .enum(["utf8", "base64", "ascii"])
+      .optional()
+      .describe(`Content encoding (default: utf8). ${MUTATION_TEXT_FIELD_CONTRACT}`),
+    newline: z
+      .enum(["lf", "crlf", "preserve"])
+      .optional()
+      .describe(
+        `Line-ending normalization for text content (default: lf). ${MUTATION_TEXT_FIELD_CONTRACT}`
+      ),
+    final_newline: z
+      .boolean()
+      .optional()
+      .describe(
+        `Ensure non-empty text content ends with a newline (default: true). ${MUTATION_TEXT_FIELD_CONTRACT}`
+      ),
+    bom: z
+      .boolean()
+      .optional()
+      .describe(
+        `Control the UTF-8 BOM on text content: false strips it, true prepends it (default: false). ${MUTATION_TEXT_FIELD_CONTRACT}`
+      ),
+    create_parents: z
+      .boolean()
+      .optional()
+      .describe("Create the parent directory when it does not exist (default: false)."),
+  } as const;
+}
 
 /**
  * Spec 3.4 Tier A governed primitives (adopted per capability group).
@@ -70,6 +109,68 @@ export function registerGovernedTools(server: McpServer): void {
         };
       } catch (err) {
         return toStructuredToolErrorResult(err, "FILE_INSPECT_FAILED");
+      }
+    }
+  );
+
+  // A2 — Mutation Integrity
+  registerTracedTool(
+    server,
+    "file_write_atomic",
+    {
+      path: z.string().describe("Target file path inside an allowed readwrite folder."),
+      content: z.string().describe("File content (text, or base64 when encoding is base64)."),
+      ...fileTextFields(),
+      expected_absent: z
+        .boolean()
+        .optional()
+        .describe(
+          "Safety precondition: the target must not exist; the commit then uses native CREATE_NEW so a racing external writer can never be overwritten (default: false)."
+        ),
+      expected_current_sha256: z
+        .string()
+        .optional()
+        .describe(
+          "Optimistic precondition checksum of the current target content; a mismatch cancels the write with PRECONDITION_FAILED/TARGET_CHANGED."
+        ),
+      flush: z
+        .boolean()
+        .optional()
+        .describe(
+          "Request FlushFileBuffers on the temporary file before the rename; the WinHelm native boundary always performs this flush (default: true)."
+        ),
+    },
+    async (args, extra) => {
+      try {
+        const result = await writeFileAtomic(args, approvalSessionKey(extra?.sessionId));
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "FILE_MUTATION_FAILED");
+      }
+    }
+  );
+
+  registerTracedTool(
+    server,
+    "file_create_exclusive",
+    {
+      path: z.string().describe("Target file path inside an allowed readwrite folder."),
+      content: z.string().describe("File content (text, or base64 when encoding is base64)."),
+      ...fileTextFields(),
+    },
+    async (args, extra) => {
+      try {
+        const result = await createFileExclusive(
+          args,
+          approvalSessionKey(extra?.sessionId)
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return toStructuredToolErrorResult(err, "FILE_MUTATION_FAILED");
       }
     }
   );

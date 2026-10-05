@@ -13,6 +13,7 @@ import { getRuntimeLocale } from "../../src/i18n/messages.js";
 import { evaluateTerminalMode, evaluateToolPolicy } from "../../src/permissions/policy.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAllTools } from "../../src/tools/index.js";
+import { ALL_V14_TOOL_NAMES } from "../../src/tools/registry.js";
 import {
   getApprovalEngine,
   resetApprovalEngine,
@@ -452,7 +453,7 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const server = new McpServer({ name: "schema-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 42);
+        assert.strictEqual(Object.keys(tools).length, ALL_V14_TOOL_NAMES.length);
         assert.ok(tools.command_run);
         assert.ok(tools.file_inspect_batch);
 
@@ -522,7 +523,7 @@ describe("ConfigManager schema-v2 runtime mode", () => {
         const server = new McpServer({ name: "invalid-v2-gate", version: "1.0.0" });
         registerAllTools(server);
         const tools = (server as any)._registeredTools;
-        assert.strictEqual(Object.keys(tools).length, 42);
+        assert.strictEqual(Object.keys(tools).length, ALL_V14_TOOL_NAMES.length);
         assert.ok(tools.command_run);
         assert.ok(tools.file_inspect_batch);
 

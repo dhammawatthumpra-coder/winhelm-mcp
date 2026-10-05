@@ -32,8 +32,8 @@ describe("Schema-v2 product preset mapping", () => {
       ...R5_TOOLS,
     ];
 
-    assert.strictEqual(classified.length, 40);
-    assert.strictEqual(new Set(classified).size, 40);
+    assert.strictEqual(classified.length, 42);
+    assert.strictEqual(new Set(classified).size, 42);
     assert.deepStrictEqual(
       [...new Set(classified)].sort(),
       [...PROFILE_CONTROLLED_V13_TOOL_NAMES, ...SPEC_34_TIER_A_TOOL_NAMES].sort()
@@ -57,7 +57,7 @@ describe("Schema-v2 product preset mapping", () => {
     // 34 policy-controlled v1.3 tools + 2 recovery + adopted Tier A tools.
     assert.strictEqual(countPolicy(policy, "auto"), 20);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
-    assert.strictEqual(countPolicy(policy, "off"), 17);
+    assert.strictEqual(countPolicy(policy, "off"), 19);
 
     const config = buildPresetConfig("safe", {
       folders: ["D:\\Workspace"],
@@ -78,7 +78,7 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(policy.screen_capture, "auto");
     assert.strictEqual(policy.process_kill, "off");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 35);
+    assert.strictEqual(countPolicy(policy, "auto"), 37);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 2);
 
@@ -101,7 +101,7 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(policy.clipboard_get, "auto");
     assert.strictEqual(policy.service_control, "auto");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 37);
+    assert.strictEqual(countPolicy(policy, "auto"), 39);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 0);
 

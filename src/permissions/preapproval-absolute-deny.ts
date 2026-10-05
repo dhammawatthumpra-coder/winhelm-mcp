@@ -33,6 +33,9 @@ const READ_ONLY_MUTATION_TOOLS = new Set([
   "terminal_task_start",
   "process_kill",
   "service_control",
+  // Spec 3.4 Tier A governed mutation primitives.
+  "file_write_atomic",
+  "file_create_exclusive",
 ]);
 
 let networkResolverForTesting: NetworkResolver | undefined;
