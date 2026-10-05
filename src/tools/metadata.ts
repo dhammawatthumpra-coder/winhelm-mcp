@@ -318,6 +318,16 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
     "Inspect up to 100 paths in one call with metadata, streaming SHA-256 and best-effort or writer-denying consistency.",
     READ_ONLY
   ),
+  file_write_atomic: metadata(
+    "Write file atomically",
+    "Write a file through same-directory staging, FlushFileBuffers and exact atomic replacement with optimistic preconditions.",
+    MUTATING
+  ),
+  file_create_exclusive: metadata(
+    "Create file exclusively",
+    "Create a new file with Win32 CREATE_NEW semantics that can never overwrite an existing evidence target.",
+    MUTATING
+  ),
 };
 
 export function getToolMetadata(name: string): WinHelmToolMetadata {

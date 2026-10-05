@@ -65,7 +65,11 @@ export const SCHEMA_V2_TOOL_NAMES = {
  * process execution and deterministic verification. Names are adopted per
  * capability group as their implementations land; Tier B remains out of scope.
  */
-export const SPEC_34_TIER_A_TOOL_NAMES = ["file_inspect_batch"] as const;
+export const SPEC_34_TIER_A_TOOL_NAMES = [
+  "file_inspect_batch",
+  "file_write_atomic",
+  "file_create_exclusive",
+] as const;
 
 export const RECOVERY_TOOL_NAMES = [
   SCHEMA_V2_TOOL_NAMES.WINHELM_STATUS,

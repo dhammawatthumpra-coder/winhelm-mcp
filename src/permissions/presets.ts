@@ -43,6 +43,9 @@ export const R1_TOOLS = new Set([
   "archive_unzip",
   "pdf_generate",
   "notification_send",
+  // Spec 3.4 Tier A governed mutation primitives.
+  "file_write_atomic",
+  "file_create_exclusive",
 ]);
 
 export const R2_TOOLS = new Set(["http_ping", "http_request"]);
