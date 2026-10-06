@@ -14,6 +14,7 @@
  * the actual governed outcome.
  */
 import { createReadStream, existsSync, lstatSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { ConfigManager } from "../config/config-manager.js";
@@ -297,6 +298,24 @@ async function ensureParentDirectory(resolvedPath: string, createParents: boolea
       "Create the parent directory or pass create_parents=true."
     );
   }
+
+  // The target path has already passed the configured-folder/protected-path
+  // authorization and existing-component reparse checks. Create only the
+  // missing parent chain, then repeat both checks so a newly created or
+  // concurrently substituted junction/symlink can never authorize the commit.
+  try {
+    await mkdir(parent, { recursive: true });
+  } catch (err) {
+    fail(
+      "PARENT_CREATE_FAILED",
+      `Unable to create parent directory: ${parent}`,
+      "Verify that the parent path is inside an allowed readwrite folder and retry.",
+      { cause: (err as Error).message }
+    );
+  }
+
+  assertNoReparseTraversal(resolvedPath);
+  authorizeMutationTarget(resolvedPath);
 }
 
 async function recordMutationProvenance(options: {

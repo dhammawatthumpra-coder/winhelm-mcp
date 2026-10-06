@@ -196,11 +196,18 @@ export interface ServiceControlResult {
 }
 
 // Group 5: Advanced Search, PDF & Preview
+export interface RipgrepContextLine {
+  line: number;
+  text: string;
+}
+
 export interface RipgrepMatch {
   file: string;
   line: number;
   column: number;
   text: string;
+  contextBefore?: RipgrepContextLine[];
+  contextAfter?: RipgrepContextLine[];
 }
 
 export interface RipgrepSearchResult {

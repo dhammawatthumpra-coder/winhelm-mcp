@@ -1,5 +1,6 @@
 import { execFile, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { promisify } from "node:util";
@@ -63,6 +64,57 @@ export interface RipgrepOptions {
   contextLines?: number;
 }
 
+async function attachContextLines(
+  matches: RipgrepMatch[],
+  contextLines: number
+): Promise<RipgrepMatch[]> {
+  if (contextLines <= 0 || matches.length === 0) return matches;
+
+  const cache = new Map<string, Promise<string[]>>();
+
+  return Promise.all(
+    matches.map(async (match) => {
+      try {
+        const access = ConfigManager.getInstance().checkPathAccess(match.file, "read");
+        if (!access.allowed) return match;
+
+        let linesPromise = cache.get(match.file);
+        if (!linesPromise) {
+          linesPromise = readFile(match.file, "utf8").then((content) =>
+            content.split(/\r?\n/)
+          );
+          cache.set(match.file, linesPromise);
+        }
+        const lines = await linesPromise;
+
+        const matchIndex = Math.max(0, match.line - 1);
+        const beforeStart = Math.max(0, matchIndex - contextLines);
+        const afterEnd = Math.min(lines.length, matchIndex + contextLines + 1);
+
+        return {
+          ...match,
+          contextBefore: lines
+            .slice(beforeStart, matchIndex)
+            .map((text, index) => ({
+              line: beforeStart + index + 1,
+              text,
+            })),
+          contextAfter: lines
+            .slice(matchIndex + 1, afterEnd)
+            .map((text, index) => ({
+              line: matchIndex + index + 2,
+              text,
+            })),
+        };
+      } catch {
+        // Search results remain useful if a file changes or disappears between
+        // ripgrep and context hydration. Preserve the match and omit context.
+        return match;
+      }
+    })
+  );
+}
+
 /**
  * Execute paginated high-speed codebase search using ripgrep with fallback
  */
@@ -98,6 +150,10 @@ export async function searchCodebase(
 
     const startIndex = (page - 1) * pageSize;
     const paginatedMatches = matches.slice(startIndex, startIndex + pageSize);
+    const hydratedMatches = await attachContextLines(
+      paginatedMatches,
+      Math.max(0, options.contextLines ?? 0)
+    );
 
     return {
       query: options.query,
@@ -106,7 +162,7 @@ export async function searchCodebase(
       page,
       pageSize,
       hasMore: startIndex + pageSize < matches.length,
-      matches: paginatedMatches,
+      matches: hydratedMatches,
     };
   }
 
@@ -133,10 +189,8 @@ export async function searchCodebase(
     args.push("-g", options.filePattern);
   }
 
-  if (options.contextLines && options.contextLines > 0) {
-    args.push("-C", String(options.contextLines));
-  }
-
+  // Context is hydrated after match pagination. This avoids mixing
+  // ripgrep's context-record separator format into match parsing/counting.
   args.push("--", options.query, targetPath);
 
   try {
@@ -183,6 +237,10 @@ export async function searchCodebase(
 
     const startIndex = (page - 1) * pageSize;
     const paginatedMatches = allMatches.slice(startIndex, startIndex + pageSize);
+    const hydratedMatches = await attachContextLines(
+      paginatedMatches,
+      Math.max(0, options.contextLines ?? 0)
+    );
 
     return {
       query: options.query,
@@ -191,7 +249,7 @@ export async function searchCodebase(
       page,
       pageSize,
       hasMore: startIndex + pageSize < allMatches.length,
-      matches: paginatedMatches,
+      matches: hydratedMatches,
     };
   } catch (err: any) {
     // ripgrep exits with code 1 when no matches are found

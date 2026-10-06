@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { searchCodebase } from "../../src/engine/ripgrep.js";
+import { renderRipgrepSearchSummary } from "../../src/tools/file-tools.js";
 import { generatePdf, findChromiumPath, markdownToHtml } from "../../src/engine/pdf-generator.js";
 import { getFilePreviewHtml } from "../../src/gateway/preview-html.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
@@ -63,6 +64,38 @@ describe("Advanced Features: Ripgrep, PDF & Interactive Preview", () => {
 
       assert.strictEqual(res.matches.length, 1);
       assert.strictEqual(res.page, 2);
+    });
+
+    it("should return visible before/after context without counting context as matches", async () => {
+      const contextFile = path.join(testDir, "context-sample.txt");
+      await fs.writeFile(
+        contextFile,
+        "before-line\nROUTING_CONTEXT_TARGET\nafter-line\n",
+        "utf8"
+      );
+
+      const res = await searchCodebase({
+        query: "ROUTING_CONTEXT_TARGET",
+        searchPath: testDir,
+        filePattern: "*.txt",
+        pageSize: 10,
+        page: 1,
+        contextLines: 1,
+      });
+
+      assert.strictEqual(res.totalMatches, 1);
+      assert.strictEqual(res.matches.length, 1);
+      assert.deepStrictEqual(res.matches[0].contextBefore, [
+        { line: 1, text: "before-line" },
+      ]);
+      assert.deepStrictEqual(res.matches[0].contextAfter, [
+        { line: 3, text: "after-line" },
+      ]);
+
+      const rendered = renderRipgrepSearchSummary(res);
+      assert.match(rendered, /context-sample\.txt:1 \| before-line/);
+      assert.match(rendered, /context-sample\.txt:2:\d+ -> ROUTING_CONTEXT_TARGET/);
+      assert.match(rendered, /context-sample\.txt:3 \| after-line/);
     });
   });
 
