@@ -614,4 +614,55 @@ test("Tier B git numstat count-token validation fails closed", async (t) => {
       deletions: 1,
     });
   });
+
+  await t.test("MAX_SAFE_INTEGER counts parse exactly", () => {
+    assert.deepEqual(parseNumstat("9007199254740991\t0\tbig.txt\0"), [
+      { path: "big.txt", binary: false, additions: 9007199254740991, deletions: 0 },
+    ]);
+    assert.deepEqual(parseNumstat("0\t9007199254740991\tbig.txt\0"), [
+      { path: "big.txt", binary: false, additions: 0, deletions: 9007199254740991 },
+    ]);
+  });
+});
+
+test("Tier B git mixed binary markers fail closed", async (t) => {
+  const parseError = (fn: () => unknown): unknown => {
+    try {
+      fn();
+    } catch (err) {
+      return err;
+    }
+    assert.fail("expected GIT_DIFF_PARSE_FAILED");
+  };
+
+  await t.test("mixed marker pairs throw GIT_DIFF_PARSE_FAILED", () => {
+    // Git documentation defines the numstat binary marker as a *pair* of two
+    // "-"; a record with exactly one "-" is malformed and must not be
+    // silently normalized into a binary record with null counts.
+    const cases: { text: string; why: string }[] = [
+      { text: "-\t1\tfile.bin\0", why: "binary additions marker with numeric deletions" },
+      { text: "1\t-\tfile.bin\0", why: "numeric additions with binary deletions marker" },
+      { text: "-\t2\t\0old.bin\0new.bin\0", why: "mixed-marker rename record" },
+      { text: "2\t-\t\0old.bin\0new.bin\0", why: "reverse mixed-marker rename record" },
+    ];
+    for (const { text, why } of cases) {
+      const err = parseError(() => parseNumstat(text)) as { code?: string };
+      assert.equal(err.code, "GIT_DIFF_PARSE_FAILED", why);
+    }
+  });
+
+  await t.test("both-marker binary records remain valid", () => {
+    assert.deepEqual(parseNumstat("-\t-\tblob.bin\0"), [
+      { path: "blob.bin", binary: true, additions: null, deletions: null },
+    ]);
+    assert.deepEqual(parseNumstat("-\t-\t\0old.bin\0new.bin\0"), [
+      {
+        path: "new.bin",
+        old_path: "old.bin",
+        binary: true,
+        additions: null,
+        deletions: null,
+      },
+    ]);
+  });
 });

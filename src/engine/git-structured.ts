@@ -466,7 +466,20 @@ export function parseNumstat(text: string): GitDiffFileStat[] {
     const addedRaw = record.slice(0, firstTab);
     const deletedRaw = record.slice(firstTab + 1, secondTab);
     const inlinePath = record.slice(secondTab + 1);
-    const binary = addedRaw === "-" || deletedRaw === "-";
+    // Git's numstat binary marker is a *pair*: binary files output two "-"
+    // (diff-options.adoc). A record with exactly one "-" is malformed and
+    // must fail closed instead of being normalized into a binary record.
+    const addedBinary = addedRaw === "-";
+    const deletedBinary = deletedRaw === "-";
+    if (addedBinary !== deletedBinary) {
+      gitError(
+        "GIT_DIFF_PARSE_FAILED",
+        "Git numstat output contained a malformed binary marker pair.",
+        "Retry the query; if it persists, report the parser issue.",
+        { record: JSON.stringify(record) }
+      );
+    }
+    const binary = addedBinary;
     let entryPath = inlinePath;
     let oldPath: string | undefined;
     if (inlinePath === "") {
