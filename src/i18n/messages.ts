@@ -143,6 +143,145 @@ export const EN_MESSAGES = {
     "Use a permitted network target or change WinHelm network settings where appropriate.",
   "action.error.review":
     "Review the error details and adjust the request or WinHelm settings before retrying.",
+
+  "shell.title":
+    "WinHelm | Control Center",
+  "shell.nav.overview":
+    "Overview",
+  "shell.nav.access":
+    "Access",
+  "shell.nav.approvals":
+    "Approvals",
+  "shell.nav.activity":
+    "Activity",
+  "shell.nav.connections":
+    "Connections",
+  "shell.nav.settings":
+    "Settings",
+  "shell.nav.advanced":
+    "Advanced / Diagnostics",
+  "shell.overview.status.running":
+    "Running",
+  "shell.overview.status.stopped":
+    "Stopped",
+  "shell.overview.profile.title":
+    "Capability Profile",
+  "shell.overview.profile.modified":
+    "Modified",
+  "shell.overview.approval.title":
+    "Approval Mode",
+  "shell.overview.pending.title":
+    "Pending Approvals",
+  "shell.overview.connections.title":
+    "Client Connections",
+  "shell.overview.legacy.banner":
+    "Legacy configuration active. Upgrade to schema v2 in Access & Settings for granular policy enforcement.",
+  "shell.overview.warnings.none":
+    "System operating within normal parameters.",
+  "shell.access.title":
+    "Folder Access & Terminal Policy",
+  "shell.access.folders.title":
+    "Approved Workspace Folders",
+  "shell.access.folders.empty":
+    "No specific workspace folders configured.",
+  "shell.access.folders.read":
+    "Read-only",
+  "shell.access.folders.readwrite":
+    "Read-Write",
+  "shell.access.terminal.title":
+    "Terminal Containment",
+  "shell.access.terminal.safe_distinction":
+    "Note: Safe Profile restricts available tool schemas; terminal mode controls execution safety.",
+  "shell.access.preview":
+    "Preview Access Changes",
+  "shell.access.save":
+    "Apply Access Changes",
+  "shell.approvals.title":
+    "Pending Approvals",
+  "shell.approvals.empty":
+    "No pending approval requests.",
+  "shell.approvals.approve":
+    "Approve",
+  "shell.approvals.deny":
+    "Deny",
+  "shell.approvals.client":
+    "Client",
+  "shell.approvals.tool":
+    "Tool",
+  "shell.approvals.risk":
+    "Risk",
+  "shell.approvals.target":
+    "Target",
+  "shell.approvals.details":
+    "Details",
+  "shell.approvals.preview":
+    "Text Preview",
+  "shell.approvals.once":
+    "Approvals execute exactly once upon decision.",
+  "shell.activity.title":
+    "Recent Activity",
+  "shell.activity.empty":
+    "No activity recorded yet.",
+  "shell.activity.filter.all":
+    "All",
+  "shell.activity.filter.tools":
+    "Tools",
+  "shell.activity.filter.security":
+    "Security",
+  "shell.activity.filter.errors":
+    "Errors",
+  "shell.activity.advanced_hint":
+    "Detailed telemetry and raw logs are available in Advanced / Diagnostics.",
+  "shell.connections.title":
+    "Client Connections",
+  "shell.connections.claude.label":
+    "Claude Desktop",
+  "shell.connections.claude.type":
+    "First-Class",
+  "shell.connections.cursor.label":
+    "Cursor",
+  "shell.connections.cursor.type":
+    "First-Class",
+  "shell.connections.chatgpt.label":
+    "ChatGPT / OpenAI Tunnel",
+  "shell.connections.chatgpt.type":
+    "First-Class Target",
+  "shell.connections.tailscale.label":
+    "Tailscale HTTPS /mcp",
+  "shell.connections.tailscale.type":
+    "Advanced / Manual",
+  "shell.connections.configure":
+    "Configure",
+  "shell.connections.connected":
+    "Connected",
+  "shell.connections.not_connected":
+    "Not Connected",
+  "shell.settings.title":
+    "Settings",
+  "shell.settings.profile":
+    "Capability Profile",
+  "shell.settings.approval_mode":
+    "Approval Mode",
+  "shell.settings.language":
+    "Language",
+  "shell.settings.token":
+    "Access Token",
+  "shell.settings.dangerous_notice":
+    "Dangerous terminal mode is not permitted in product settings. Use Advanced Dashboard if required.",
+  "shell.settings.save":
+    "Save Settings",
+  "shell.admin.required":
+    "Admin Unlock Required",
+  "shell.admin.hint":
+    "Run 'winhelm admin-code' in your terminal and enter the one-time code here.",
+  "shell.admin.placeholder":
+    "Enter one-time admin code",
+  "shell.admin.unlock":
+    "Unlock",
+  "shell.admin.status_unlocked":
+    "Admin Unlocked",
+  "shell.admin.status_locked":
+    "Read-Only (Locked)",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -290,6 +429,145 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "ใช้ปลายทางเครือข่ายที่อนุญาต หรือปรับการตั้งค่าเครือข่ายของ WinHelm เมื่อเหมาะสม",
   "action.error.review":
     "ตรวจรายละเอียดข้อผิดพลาด แล้วปรับคำขอหรือการตั้งค่า WinHelm ก่อนลองใหม่",
+
+  "shell.title":
+    "WinHelm | ศูนย์ควบคุม",
+  "shell.nav.overview":
+    "ภาพรวม",
+  "shell.nav.access":
+    "การเข้าถึง",
+  "shell.nav.approvals":
+    "การอนุมัติ",
+  "shell.nav.activity":
+    "กิจกรรม",
+  "shell.nav.connections":
+    "การเชื่อมต่อ",
+  "shell.nav.settings":
+    "การตั้งค่า",
+  "shell.nav.advanced":
+    "ขั้นสูง / การวินิจฉัย",
+  "shell.overview.status.running":
+    "กำลังทำงาน",
+  "shell.overview.status.stopped":
+    "หยุดทำงาน",
+  "shell.overview.profile.title":
+    "โพรไฟล์ความสามารถ",
+  "shell.overview.profile.modified":
+    "ปรับแต่งเพิ่มเติม",
+  "shell.overview.approval.title":
+    "โหมดการอนุมัติ",
+  "shell.overview.pending.title":
+    "รายการรออนุมัติ",
+  "shell.overview.connections.title":
+    "การเชื่อมต่อไคลเอนต์",
+  "shell.overview.legacy.banner":
+    "กำลังใช้การกำหนดค่าแบบเดิม อัปเกรดเป็น schema v2 ในเมนูการเข้าถึงและการตั้งค่าเพื่อการบังคับใช้นโยบายที่ละเอียดขึ้น",
+  "shell.overview.warnings.none":
+    "ระบบกำลังทำงานตามขอบเขตและพารามิเตอร์ปกติ",
+  "shell.access.title":
+    "การเข้าถึงโฟลเดอร์และนโยบายเทอร์มินัล",
+  "shell.access.folders.title":
+    "โฟลเดอร์เวิร์กสเปซที่ได้รับอนุมัติ",
+  "shell.access.folders.empty":
+    "ยังไม่ได้ระบุโฟลเดอร์เวิร์กสเปซเฉพาะ",
+  "shell.access.folders.read":
+    "อ่านอย่างเดียว",
+  "shell.access.folders.readwrite":
+    "อ่าน-เขียน",
+  "shell.access.terminal.title":
+    "การควบคุมเทอร์มินัล",
+  "shell.access.terminal.safe_distinction":
+    "หมายเหตุ: โพรไฟล์ Safe จำกัด schema เครื่องมือที่แสดง ส่วนโหมดเทอร์มินัลควบคุมความปลอดภัยในการรันคำสั่ง",
+  "shell.access.preview":
+    "ดูตัวอย่างการเปลี่ยนแปลงสิทธิ์",
+  "shell.access.save":
+    "บันทึกการเปลี่ยนแปลงสิทธิ์",
+  "shell.approvals.title":
+    "รายการที่รอการอนุมัติ",
+  "shell.approvals.empty":
+    "ไม่มีคำขอที่รอการอนุมัติ",
+  "shell.approvals.approve":
+    "อนุมัติ",
+  "shell.approvals.deny":
+    "ปฏิเสธ",
+  "shell.approvals.client":
+    "ไคลเอนต์",
+  "shell.approvals.tool":
+    "เครื่องมือ",
+  "shell.approvals.risk":
+    "ความเสี่ยง",
+  "shell.approvals.target":
+    "เป้าหมาย",
+  "shell.approvals.details":
+    "รายละเอียด",
+  "shell.approvals.preview":
+    "ดูตัวอย่างข้อความ",
+  "shell.approvals.once":
+    "การตัดสินใจมีผลและทำงานเพียงครั้งเดียวตามลำดับ",
+  "shell.activity.title":
+    "กิจกรรมล่าสุด",
+  "shell.activity.empty":
+    "ยังไม่มีกิจกรรมที่บันทึกไว้",
+  "shell.activity.filter.all":
+    "ทั้งหมด",
+  "shell.activity.filter.tools":
+    "เครื่องมือ",
+  "shell.activity.filter.security":
+    "ความปลอดภัย",
+  "shell.activity.filter.errors":
+    "ข้อผิดพลาด",
+  "shell.activity.advanced_hint":
+    "สามารถดูข้อมูลการทำงานเชิงลึกและล็อกดิบได้ที่ ขั้นสูง / การวินิจฉัย",
+  "shell.connections.title":
+    "การเชื่อมต่อไคลเอนต์",
+  "shell.connections.claude.label":
+    "Claude Desktop",
+  "shell.connections.claude.type":
+    "ระดับหนึ่ง (First-Class)",
+  "shell.connections.cursor.label":
+    "Cursor",
+  "shell.connections.cursor.type":
+    "ระดับหนึ่ง (First-Class)",
+  "shell.connections.chatgpt.label":
+    "ChatGPT / OpenAI Tunnel",
+  "shell.connections.chatgpt.type":
+    "เป้าหมายระดับหนึ่ง (First-Class Target)",
+  "shell.connections.tailscale.label":
+    "Tailscale HTTPS /mcp",
+  "shell.connections.tailscale.type":
+    "ขั้นสูง / กำหนดเอง (Advanced/Manual)",
+  "shell.connections.configure":
+    "กำหนดค่า",
+  "shell.connections.connected":
+    "เชื่อมต่อแล้ว",
+  "shell.connections.not_connected":
+    "ไม่ได้เชื่อมต่อ",
+  "shell.settings.title":
+    "การตั้งค่า",
+  "shell.settings.profile":
+    "โพรไฟล์ความสามารถ",
+  "shell.settings.approval_mode":
+    "โหมดการอนุมัติ",
+  "shell.settings.language":
+    "ภาษา",
+  "shell.settings.token":
+    "โทเค็นการเข้าถึง",
+  "shell.settings.dangerous_notice":
+    "ไม่อนุญาตให้เลือกโหมดเทอร์มินัล Dangerous ในการตั้งค่าปกติ หากจำเป็นต้องใช้ให้ไปที่แดชบอร์ดขั้นสูง",
+  "shell.settings.save":
+    "บันทึกการตั้งค่า",
+  "shell.admin.required":
+    "จำเป็นต้องปลดล็อกสิทธิ์ผู้ดูแล",
+  "shell.admin.hint":
+    "รัน 'winhelm admin-code' ในเทอร์มินัล แล้วใส่รหัสที่ได้รับที่นี่",
+  "shell.admin.placeholder":
+    "ใส่รหัสผู้ดูแลแบบใช้ครั้งเดียว",
+  "shell.admin.unlock":
+    "ปลดล็อก",
+  "shell.admin.status_unlocked":
+    "ปลดล็อกผู้ดูแลแล้ว",
+  "shell.admin.status_locked":
+    "อ่านอย่างเดียว (ล็อกอยู่)",
 };
 
 export const MESSAGE_CATALOGS: Record<
