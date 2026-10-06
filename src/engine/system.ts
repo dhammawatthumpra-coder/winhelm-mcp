@@ -135,31 +135,60 @@ $drives = Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='FreeGB';
   }
 }
 
+interface PortConnectionCandidate {
+  pid: number;
+  processName: string;
+  state: string;
+}
+
 /**
- * Check if a TCP port is in use and find owning PID
+ * Prefer an active listener when several TCP records share one local port.
+ * TIME_WAIT and other historical/connected rows must never mask the listener
+ * that actually owns the bound server socket.
+ */
+export function selectPreferredPortConnection(
+  candidates: PortConnectionCandidate[]
+): PortConnectionCandidate | undefined {
+  return (
+    candidates.find(
+      (candidate) => candidate.state.trim().toLowerCase() === "listen"
+    ) ?? candidates[0]
+  );
+}
+
+/**
+ * Check if a TCP port is in use and find the most relevant owning PID.
  */
 export async function checkPort(port: number): Promise<PortCheckResult> {
   const psScript = `
-$conn = Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -First 1;
-if ($conn) {
+$connections = @(Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue);
+$result = foreach ($conn in $connections) {
   $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue;
-  @{
-    port = ${port};
-    inUse = $true;
-    pid = $conn.OwningProcess;
-    processName = if ($proc) { $proc.ProcessName } else { "Unknown" };
-    state = $conn.State.ToString();
-  } | ConvertTo-Json;
-} else {
-  @{
-    port = ${port};
-    inUse = $false;
-  } | ConvertTo-Json;
+  [PSCustomObject]@{
+    pid = [int]$conn.OwningProcess;
+    processName = if ($proc) { [string]$proc.ProcessName } else { "Unknown" };
+    state = [string]$conn.State.ToString();
+  };
 }
+@($result) | ConvertTo-Json -Depth 3 -Compress;
 `;
   const result = await runPowerShell(psScript, { timeoutMs: 5000 });
   try {
-    return JSON.parse(result.stdout) as PortCheckResult;
+    const parsed = JSON.parse(result.stdout) as
+      | PortConnectionCandidate
+      | PortConnectionCandidate[];
+    const candidates = Array.isArray(parsed) ? parsed : [parsed];
+    const selected = selectPreferredPortConnection(candidates);
+    if (!selected) {
+      return { port, inUse: false };
+    }
+    return {
+      port,
+      inUse: true,
+      pid: selected.pid,
+      processName: selected.processName,
+      state: selected.state,
+    };
   } catch {
     return { port, inUse: false };
   }
