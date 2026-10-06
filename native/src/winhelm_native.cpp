@@ -1605,6 +1605,146 @@ napi_value ProcessPeakRss(napi_env env, napi_callback_info info) {
   return MakeDouble(env, static_cast<double>(counters.PeakWorkingSetSize));
 }
 
+napi_value MakeUint64(napi_env env, uint64_t value) {
+  napi_value out;
+  if (napi_create_bigint_uint64(env, value, &out) != napi_ok) {
+    return ThrowStructured(env, "NATIVE_VALUE_FAILED", ERROR_INVALID_DATA,
+                           "Unable to create uint64 value");
+  }
+  return out;
+}
+
+// Spec 3.4 Tier B memory_info: direct GlobalMemoryStatusEx query. The host
+// counters are exposed as exact uint64 BigInt values so the TS engine can
+// apply its own integer-safe conversion without any silent rounding.
+napi_value MemoryStatus(napi_env env, napi_callback_info) {
+  MEMORYSTATUSEX status{};
+  status.dwLength = sizeof(status);
+  if (!GlobalMemoryStatusEx(&status)) {
+    const DWORD error = GetLastError();
+    return ThrowWin32(
+        env, "MEMORY_STATUS_UNAVAILABLE", error, "GlobalMemoryStatusEx");
+  }
+  napi_value out;
+  napi_create_object(env, &out);
+  SetProp(env, out, "memoryLoadPercent", MakeUint32(env, status.dwMemoryLoad));
+  SetProp(env, out, "totalPhysBytes", MakeUint64(env, status.ullTotalPhys));
+  SetProp(env, out, "availPhysBytes", MakeUint64(env, status.ullAvailPhys));
+  SetProp(env, out, "totalPageFileBytes",
+          MakeUint64(env, status.ullTotalPageFile));
+  SetProp(env, out, "availPageFileBytes",
+          MakeUint64(env, status.ullAvailPageFile));
+  SetProp(env, out, "totalVirtualBytes", MakeUint64(env, status.ullTotalVirtual));
+  SetProp(env, out, "availVirtualBytes",
+          MakeUint64(env, status.ullAvailVirtual));
+  return out;
+}
+
+uint64_t FileTimeToTicks(const FILETIME& value) {
+  ULARGE_INTEGER combined;
+  combined.LowPart = value.dwLowDateTime;
+  combined.HighPart = value.dwHighDateTime;
+  return combined.QuadPart;
+}
+
+// Spec 3.4 Tier B process_resource_monitor: bounded, non-cancelling
+// observation of one governed contained process and its Job Object. The
+// query never terminates, waits on, or otherwise mutates the process.
+napi_value ProcessResourceInfo(napi_env env, napi_callback_info info) {
+  napi_value argv[1];
+  size_t argc = 0;
+  napi_value this_value;
+  ProcessState* state = UnwrapProcess(env, info, 0, argc, argv, this_value);
+  if (!state) return nullptr;
+
+  napi_value out;
+  napi_create_object(env, &out);
+
+  PROCESS_MEMORY_COUNTERS_EX counters{};
+  counters.cb = sizeof(counters);
+  if (!GetProcessMemoryInfo(
+          state->process,
+          reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+          sizeof(counters))) {
+    const DWORD error = GetLastError();
+    return ThrowWin32(
+        env, "RESOURCE_INFO_UNAVAILABLE", error, "GetProcessMemoryInfo");
+  }
+  SetProp(env, out, "peakWorkingSetBytes",
+          MakeUint64(env, counters.PeakWorkingSetSize));
+  SetProp(env, out, "currentPrivateBytes", MakeUint64(env, counters.PrivateUsage));
+
+  FILETIME creation_time{};
+  FILETIME exit_time{};
+  FILETIME kernel_time{};
+  FILETIME user_time{};
+  if (!GetProcessTimes(
+          state->process,
+          &creation_time,
+          &exit_time,
+          &kernel_time,
+          &user_time)) {
+    const DWORD error = GetLastError();
+    return ThrowWin32(
+        env, "RESOURCE_INFO_UNAVAILABLE", error, "GetProcessTimes");
+  }
+  // FILETIME ticks are 100-ns units; x100 stays far below uint64 wraparound
+  // for any realistic CPU accumulation.
+  SetProp(env, out, "kernelCpuTimeNs",
+          MakeUint64(env, FileTimeToTicks(kernel_time) * 100ull));
+  SetProp(env, out, "userCpuTimeNs",
+          MakeUint64(env, FileTimeToTicks(user_time) * 100ull));
+
+  if (!state->job) {
+    return ThrowStructured(env, "RESOURCE_INFO_UNAVAILABLE",
+                           ERROR_INVALID_HANDLE,
+                           "The governed process has no Job Object handle");
+  }
+  ULONG process_capacity = 64;
+  std::vector<uint8_t> pid_buffer;
+  JOBOBJECT_BASIC_PROCESS_ID_LIST* pid_list = nullptr;
+  for (;;) {
+    pid_buffer.assign(
+        sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) +
+            (process_capacity - 1) * sizeof(ULONG_PTR),
+        0);
+    pid_list =
+        reinterpret_cast<JOBOBJECT_BASIC_PROCESS_ID_LIST*>(pid_buffer.data());
+    if (QueryInformationJobObject(
+            state->job,
+            JobObjectBasicProcessIdList,
+            pid_list,
+            static_cast<DWORD>(pid_buffer.size()),
+            nullptr)) {
+      break;
+    }
+    const DWORD error = GetLastError();
+    if (error == ERROR_MORE_DATA) {
+      if (pid_list->NumberOfAssignedProcesses > 4096) {
+        return ThrowStructured(
+            env, "RESOURCE_INFO_UNAVAILABLE", ERROR_BUFFER_OVERFLOW,
+            "Job Object process list exceeds the observation bound");
+      }
+      process_capacity = pid_list->NumberOfAssignedProcesses * 2;
+      continue;
+    }
+    return ThrowWin32(
+        env, "RESOURCE_INFO_UNAVAILABLE", error, "QueryInformationJobObject");
+  }
+
+  napi_value pids;
+  napi_create_array(env, &pids);
+  for (DWORD index = 0; index < pid_list->NumberOfProcessIdsInList; ++index) {
+    napi_set_element(
+        env,
+        pids,
+        index,
+        MakeUint32(env, static_cast<uint32_t>(pid_list->ProcessIdList[index])));
+  }
+  SetProp(env, out, "pids", pids);
+  return out;
+}
+
 void WaitAsyncExecute(napi_env, void* data) {
   auto* state = static_cast<ProcessState*>(data);
   const DWORD wait_result =
@@ -2462,6 +2602,7 @@ napi_value SpawnContainedA4Impl(
       {"streamState", nullptr, ProcessStreamState, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"streamCapture", nullptr, ProcessStreamCapture, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"peakRss", nullptr, ProcessPeakRss, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"resourceInfo", nullptr, ProcessResourceInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"pid", nullptr, ProcessPid, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"close", nullptr, ProcessClose, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
@@ -2639,6 +2780,7 @@ napi_value SpawnContainedImpl(
       {"wait", nullptr, ProcessWait, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"terminate", nullptr, ProcessTerminate, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"isInJob", nullptr, ProcessIsInJob, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"resourceInfo", nullptr, ProcessResourceInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"pid", nullptr, ProcessPid, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"close", nullptr, ProcessClose, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
@@ -2811,8 +2953,9 @@ napi_value Init(napi_env env, napi_value exports) {
       {"createExclusive", nullptr, CreateExclusive, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"atomicReplace", nullptr, AtomicReplace, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"spawnContained", nullptr, SpawnContained, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"memoryStatus", nullptr, MemoryStatus, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
-  napi_define_properties(env, exports, 4, props);
+  napi_define_properties(env, exports, 5, props);
 
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   napi_property_descriptor test_props[] = {

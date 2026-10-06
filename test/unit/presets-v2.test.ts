@@ -15,6 +15,7 @@ import {
   ALL_TOOL_NAMES,
   PROFILE_CONTROLLED_V13_TOOL_NAMES,
   SPEC_34_TIER_A_TOOL_NAMES,
+  SPEC_34_TIER_B_TOOL_NAMES,
 } from "../../src/tools/registry.js";
 
 function countPolicy(policy: Record<string, string>, value: string): number {
@@ -32,11 +33,17 @@ describe("Schema-v2 product preset mapping", () => {
       ...R5_TOOLS,
     ];
 
-    assert.strictEqual(classified.length, 48);
-    assert.strictEqual(new Set(classified).size, 48);
+    // Spec 3.4 Tier B adds six R0-class public primitives, so the accepted
+    // Tier A classification (48) grows to the completed 54-tool set.
+    assert.strictEqual(classified.length, 54);
+    assert.strictEqual(new Set(classified).size, 54);
     assert.deepStrictEqual(
       [...new Set(classified)].sort(),
-      [...PROFILE_CONTROLLED_V13_TOOL_NAMES, ...SPEC_34_TIER_A_TOOL_NAMES].sort()
+      [
+        ...PROFILE_CONTROLLED_V13_TOOL_NAMES,
+        ...SPEC_34_TIER_A_TOOL_NAMES,
+        ...SPEC_34_TIER_B_TOOL_NAMES,
+      ].sort()
     );
     assert.ok(R5_TOOLS.has("command_run"));
     assert.strictEqual(ALL_TOOL_NAMES.length, 38);
@@ -54,8 +61,9 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(policy.screen_capture, "off");
     assert.strictEqual(policy.process_kill, "off");
 
-    // 34 policy-controlled v1.3 tools + 2 recovery + adopted Tier A tools.
-    assert.strictEqual(countPolicy(policy, "auto"), 26);
+    // 34 policy-controlled v1.3 tools + 2 recovery + adopted Tier A and
+    // Tier B tools.
+    assert.strictEqual(countPolicy(policy, "auto"), 32);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 19);
 
@@ -78,7 +86,7 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(policy.screen_capture, "auto");
     assert.strictEqual(policy.process_kill, "off");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 43);
+    assert.strictEqual(countPolicy(policy, "auto"), 49);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 2);
 
@@ -101,7 +109,7 @@ describe("Schema-v2 product preset mapping", () => {
     assert.strictEqual(policy.clipboard_get, "auto");
     assert.strictEqual(policy.service_control, "auto");
 
-    assert.strictEqual(countPolicy(policy, "auto"), 45);
+    assert.strictEqual(countPolicy(policy, "auto"), 51);
     assert.strictEqual(countPolicy(policy, "ask"), 0);
     assert.strictEqual(countPolicy(policy, "off"), 0);
 
