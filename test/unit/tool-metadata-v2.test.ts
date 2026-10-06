@@ -161,6 +161,45 @@ describe("MCP tool metadata and annotations", () => {
     });
   });
 
+  it("states explicit routing preferences for overlapping tool families", () => {
+    assert.match(
+      getToolMetadata("file_read").description,
+      /prefer this over terminal\/Get-Content/i
+    );
+    assert.match(
+      getToolMetadata("file_write").description,
+      /prefer file_write_atomic/i
+    );
+    assert.match(
+      getToolMetadata("file_write_atomic").description,
+      /preferred for important or concurrency-sensitive/i
+    );
+    assert.match(
+      getToolMetadata("file_create_exclusive").description,
+      /must not already exist|must never be overwritten/i
+    );
+    assert.match(
+      getToolMetadata("file_search").description,
+      /prefer ripgrep for code, regex, globs, context, or pagination/i
+    );
+    assert.match(
+      getToolMetadata("file_search_ripgrep").description,
+      /codebase, regex, glob, context, or large-result/i
+    );
+    assert.match(
+      getToolMetadata("command_run").description,
+      /prefer this for direct executable invocation/i
+    );
+    assert.match(
+      getToolMetadata("terminal_run").description,
+      /shell\/PowerShell semantics are required/i
+    );
+    assert.match(
+      getToolMetadata("terminal_task_start").description,
+      /long-running or interactive PowerShell task/i
+    );
+  });
+
   it("keeps both recovery tools read-only and closed-world", () => {
     for (const name of RECOVERY_TOOL_NAMES) {
       const annotations = getToolMetadata(name).annotations;

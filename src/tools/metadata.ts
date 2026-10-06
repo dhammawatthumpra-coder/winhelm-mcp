@@ -94,12 +94,12 @@ const ADDITIVE = {
 export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   terminal_run: metadata(
     "Run PowerShell command",
-    "Run one PowerShell command synchronously with timeout and UTF-8 output handling.",
+    "Run one PowerShell command synchronously when shell/PowerShell semantics are required; prefer dedicated WinHelm tools or command_run for direct executables.",
     MUTATING_OPEN_WORLD
   ),
   terminal_task_start: metadata(
     "Start background terminal task",
-    "Start a long-running PowerShell task and return a WinHelm task identifier.",
+    "Start a long-running or interactive PowerShell task and return a WinHelm task identifier for later logs, stdin, or termination.",
     MUTATING_OPEN_WORLD
   ),
   terminal_task_list: metadata(
@@ -125,12 +125,12 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
 
   file_read: metadata(
     "Read file",
-    "Read UTF-8 file content with optional line-range slicing.",
+    "Read UTF-8 file content with optional line-range slicing; prefer this over terminal/Get-Content for ordinary text reads.",
     READ_ONLY
   ),
   file_write: metadata(
     "Write file",
-    "Create or replace a UTF-8 file inside an allowed writable folder.",
+    "Create or replace a UTF-8 file when ordinary replacement is acceptable; prefer file_write_atomic for important or concurrency-sensitive updates.",
     {
       readOnlyHint: false,
       destructiveHint: true,
@@ -150,7 +150,7 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   file_search: metadata(
     "Search files",
-    "Search file contents for a substring or pattern inside an allowed folder.",
+    "Search file contents for a simple literal or modest pattern inside an allowed folder; prefer ripgrep for code, regex, globs, context, or pagination.",
     READ_ONLY
   ),
   file_delete_safe: metadata(
@@ -190,7 +190,7 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   file_search_ripgrep: metadata(
     "Search code with ripgrep",
-    "Run paginated ripgrep search inside an allowed folder.",
+    "Run paginated ripgrep search for codebase, regex, glob, context, or large-result queries inside an allowed folder.",
     READ_ONLY
   ),
   pdf_generate: metadata(
@@ -309,7 +309,7 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   command_run: metadata(
     "Run executable without a shell",
-    "Run a direct executable without a shell; Safe mode permits only hardened package-manager adapters.",
+    "Prefer this for direct executable invocation without a shell, including governed async runs; use terminal_run only when shell/PowerShell semantics are required.",
     MUTATING_OPEN_WORLD
   ),
 
@@ -320,12 +320,12 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   file_write_atomic: metadata(
     "Write file atomically",
-    "Write a file through same-directory staging, FlushFileBuffers and exact atomic replacement with optimistic preconditions.",
+    "Preferred for important or concurrency-sensitive file updates: atomic replacement, optimistic preconditions, and governed text or base64 binary writes.",
     MUTATING
   ),
   file_create_exclusive: metadata(
     "Create file exclusively",
-    "Create a new file with Win32 CREATE_NEW semantics that can never overwrite an existing evidence target.",
+    "Create a new text or base64 binary file with Win32 CREATE_NEW semantics; use when the target must not already exist and must never be overwritten.",
     MUTATING
   ),
   session_current: metadata(
