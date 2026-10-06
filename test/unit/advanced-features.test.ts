@@ -97,6 +97,35 @@ describe("Advanced Features: Ripgrep, PDF & Interactive Preview", () => {
       assert.match(rendered, /context-sample\.txt:2:\d+ -> ROUTING_CONTEXT_TARGET/);
       assert.match(rendered, /context-sample\.txt:3 \| after-line/);
     });
+
+    it("should not fabricate context after a match on the final newline-terminated line", async () => {
+      const eofFile = path.join(testDir, "context-eof-sample.txt");
+      await fs.writeFile(
+        eofFile,
+        "before-line\nROUTING_CONTEXT_EOF\n",
+        "utf8"
+      );
+
+      const res = await searchCodebase({
+        query: "ROUTING_CONTEXT_EOF",
+        searchPath: testDir,
+        filePattern: "context-eof-sample.txt",
+        pageSize: 10,
+        page: 1,
+        contextLines: 2,
+      });
+
+      assert.strictEqual(res.totalMatches, 1);
+      assert.strictEqual(res.matches.length, 1);
+      assert.deepStrictEqual(res.matches[0].contextBefore, [
+        { line: 1, text: "before-line" },
+      ]);
+      assert.deepStrictEqual(res.matches[0].contextAfter, []);
+
+      const rendered = renderRipgrepSearchSummary(res);
+      assert.match(rendered, /context-eof-sample\.txt:2:\d+ -> ROUTING_CONTEXT_EOF/);
+      assert.doesNotMatch(rendered, /context-eof-sample\.txt:3 \|/);
+    });
   });
 
   describe("Feature 2: Native Windows PDF Generation", () => {

@@ -64,6 +64,18 @@ export interface RipgrepOptions {
   contextLines?: number;
 }
 
+function splitLogicalLines(content: string): string[] {
+  const lines = content.split(/\r?\n/);
+
+  // A terminating line break closes the final logical line; it does not
+  // create an additional empty line after EOF. Interior empty lines remain.
+  if (content.endsWith("\n") && lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  return lines;
+}
+
 async function attachContextLines(
   matches: RipgrepMatch[],
   contextLines: number
@@ -80,9 +92,7 @@ async function attachContextLines(
 
         let linesPromise = cache.get(match.file);
         if (!linesPromise) {
-          linesPromise = readFile(match.file, "utf8").then((content) =>
-            content.split(/\r?\n/)
-          );
+          linesPromise = readFile(match.file, "utf8").then(splitLogicalLines);
           cache.set(match.file, linesPromise);
         }
         const lines = await linesPromise;
