@@ -77,6 +77,20 @@ export const SPEC_34_TIER_A_TOOL_NAMES = [
   "directory_manifest",
 ] as const;
 
+/**
+ * Spec 3.4 Tier B / Phase 2 public additions (6 tools): deterministic JSON,
+ * resource monitoring and structured Git primitives. `json_parse_strict` is
+ * a public MCP primitive per the accepted Product Model clarification.
+ */
+export const SPEC_34_TIER_B_TOOL_NAMES = [
+  "json_parse_strict",
+  "json_canonical_hash",
+  "memory_info",
+  "process_resource_monitor",
+  "git_status_structured",
+  "git_diff_structured",
+] as const;
+
 export const RECOVERY_TOOL_NAMES = [
   SCHEMA_V2_TOOL_NAMES.WINHELM_STATUS,
   SCHEMA_V2_TOOL_NAMES.WINHELM_JOB_STATUS,
@@ -107,12 +121,13 @@ export const ALL_V13_TOOL_NAMES: string[] = [
 
 /**
  * Canonical v1.4 public surface: the accepted v1.3 surface plus the adopted
- * Spec 3.4 Tier A tools. The canonical count is 41 + adopted Tier A names
- * (50 when Tier A Phase 1 is complete).
+ * Spec 3.4 Tier A and Tier B tools. The canonical count is 41 + 9 Tier A +
+ * 6 Tier B = 56 when Spec 3.4 is complete.
  */
 export const ALL_V14_TOOL_NAMES: string[] = [
   ...ALL_V13_TOOL_NAMES,
   ...SPEC_34_TIER_A_TOOL_NAMES,
+  ...SPEC_34_TIER_B_TOOL_NAMES,
 ];
 
 export const PROFILE_CONTROLLED_V13_TOOL_NAMES: string[] = [

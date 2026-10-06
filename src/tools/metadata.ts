@@ -4,6 +4,7 @@ import {
   type ToolName,
   SCHEMA_V2_TOOL_NAMES,
   SPEC_34_TIER_A_TOOL_NAMES,
+  SPEC_34_TIER_B_TOOL_NAMES,
 } from "./registry.js";
 
 export type V13ToolName =
@@ -12,7 +13,8 @@ export type V13ToolName =
 
 export type V14ToolName =
   | V13ToolName
-  | (typeof SPEC_34_TIER_A_TOOL_NAMES)[number];
+  | (typeof SPEC_34_TIER_A_TOOL_NAMES)[number]
+  | (typeof SPEC_34_TIER_B_TOOL_NAMES)[number];
 
 export interface WinHelmToolMetadata {
   title: string;
@@ -356,6 +358,37 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   directory_manifest: metadata(
     "Snapshot folder manifest",
     "Build a deterministic canonical folder manifest with a stable manifest SHA-256.",
+    READ_ONLY
+  ),
+
+  json_parse_strict: metadata(
+    "Parse JSON strictly",
+    "Parse raw JSON text or an authorized JSON file and reject duplicate keys, malformed structure, and depth violations instead of silently overwriting values.",
+    READ_ONLY
+  ),
+  json_canonical_hash: metadata(
+    "Hash canonical JSON",
+    "Compute a deterministic canonical JSON SHA-256 with the frozen jcs-rfc8785 or CPython-pinned python-sorted-json-v1 scheme, including exclusion selection.",
+    READ_ONLY
+  ),
+  memory_info: metadata(
+    "Read memory information",
+    "Read global physical memory, memory load, and commit limit counters directly from the Windows host through the WinHelm native boundary.",
+    READ_ONLY
+  ),
+  process_resource_monitor: metadata(
+    "Monitor governed run resources",
+    "Observe peak RSS, private bytes, CPU times, and contained PIDs of one owned governed run through its Job Object without ever altering the run.",
+    READ_ONLY
+  ),
+  git_status_structured: metadata(
+    "Read Git status structured",
+    "Return staged, unstaged, untracked, and unmerged state of an authorized repository as structured records instead of raw Git CLI text.",
+    READ_ONLY
+  ),
+  git_diff_structured: metadata(
+    "Read Git diff structured",
+    "Return deterministic per-file diff statistics with bounded chunk and line information for an authorized repository, without raw CLI stdout.",
     READ_ONLY
   ),
 };

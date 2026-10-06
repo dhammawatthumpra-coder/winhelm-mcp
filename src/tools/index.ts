@@ -6,6 +6,7 @@ import { registerNetworkTools } from "./network-tools.js";
 import { registerRecoveryTools } from "./recovery-tools.js";
 import { registerCommandTools } from "./command-tools.js";
 import { registerGovernedTools } from "./governed-tools.js";
+import { registerTierBTools } from "./tier-b-tools.js";
 
 /**
  * Register all WinHelm tools into an McpServer instance
@@ -18,6 +19,7 @@ export function registerAllTools(server: McpServer): void {
   registerRecoveryTools(server);
   registerCommandTools(server);
   registerGovernedTools(server);
+  registerTierBTools(server);
 }
 
 export * from "./registry.js";
@@ -29,4 +31,5 @@ export {
   registerRecoveryTools,
   registerCommandTools,
   registerGovernedTools,
+  registerTierBTools,
 };

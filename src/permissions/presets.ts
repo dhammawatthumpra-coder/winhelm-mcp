@@ -9,7 +9,7 @@ import {
   type SchemaV2PermissionConfig,
   type ToolPolicy,
 } from "../config/schema-v2.js";
-import { ALL_TOOL_NAMES, SPEC_34_TIER_A_TOOL_NAMES } from "../tools/registry.js";
+import { ALL_TOOL_NAMES, SPEC_34_TIER_A_TOOL_NAMES, SPEC_34_TIER_B_TOOL_NAMES } from "../tools/registry.js";
 
 export const R0_TOOLS = new Set([
   "file_read",
@@ -37,6 +37,10 @@ export const R0_TOOLS = new Set([
   "command_wait",
   "file_compare",
   "directory_manifest",
+  // Spec 3.4 Tier B read-only/computation primitives (Spec section 5:
+  // AUTO across product profiles; path sources still require read
+  // authorization through the normal path-security gate).
+  ...SPEC_34_TIER_B_TOOL_NAMES,
 ]);
 
 export const R1_TOOLS = new Set([
@@ -75,6 +79,9 @@ const POLICY_CONTROLLED_CURRENT_TOOLS = [
   // Spec 3.4 Tier A tools receive their Spec section 5 preset policies
   // (R0 inspection/projection -> auto; R1 mutation -> off/auto per profile).
   ...SPEC_34_TIER_A_TOOL_NAMES,
+  // Spec 3.4 Tier B tools are R0-class (computation/read-only/monitoring)
+  // and receive auto across product profiles per Spec section 5.
+  ...SPEC_34_TIER_B_TOOL_NAMES,
 ];
 
 export interface PresetBuildOptions {

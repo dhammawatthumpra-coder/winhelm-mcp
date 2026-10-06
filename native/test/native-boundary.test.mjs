@@ -110,6 +110,9 @@ test("production addon exports only the narrow native capability surface", () =>
     "abi",
     "atomicReplace",
     "createExclusive",
+    // Spec 3.4 Tier B narrow extension: GlobalMemoryStatusEx read-only
+    // memory counters (WO-sanctioned native boundary addition).
+    "memoryStatus",
     "napiVersion",
     "spawnContained",
     "stableReadOpen",

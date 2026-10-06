@@ -76,6 +76,34 @@ export function pathRequirements(toolName: string, args: Record<string, any>): P
     case "directory_manifest":
       return [{ field: "root_path", value: args.root_path, access: "read" }];
 
+    // Spec 3.4 Tier B: path sources require normal read authorization.
+    // Pure text/value sources produce no path requirement.
+    case "json_parse_strict": {
+      const source = args.source as Record<string, unknown> | undefined;
+      if (source && typeof source.path === "string") {
+        return [{ field: "source_path", value: source.path, access: "read" }];
+      }
+      return [];
+    }
+
+    case "json_canonical_hash": {
+      const source = args.source as Record<string, unknown> | undefined;
+      if (source && typeof source.path === "string") {
+        return [{ field: "source_path", value: source.path, access: "read" }];
+      }
+      return [];
+    }
+
+    case "git_status_structured":
+      return [
+        { field: "repo_path", value: args.repo_path, access: "read" },
+      ];
+
+    case "git_diff_structured":
+      return [
+        { field: "repo_path", value: args.repo_path, access: "read" },
+      ];
+
     case "file_write_atomic":
     case "file_create_exclusive":
       return [

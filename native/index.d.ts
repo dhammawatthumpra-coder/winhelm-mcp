@@ -68,8 +68,32 @@ export interface ContainedProcess {
   wait(timeoutMs?: number): ContainedWaitResult;
   terminate(exitCode?: number): void;
   isInJob(): boolean;
+  resourceInfo(): ContainedResourceInfo;
   pid(): number;
   close(): void;
+}
+
+/**
+ * Spec 3.4 Tier B bounded, non-cancelling observation of one governed
+ * contained process and its Job Object. Host counters arrive as exact uint64
+ * BigInt values; the TS engine owns integer-safe conversion.
+ */
+export interface ContainedResourceInfo {
+  peakWorkingSetBytes: bigint;
+  currentPrivateBytes: bigint;
+  userCpuTimeNs: bigint;
+  kernelCpuTimeNs: bigint;
+  pids: number[];
+}
+
+export interface NativeMemoryStatus {
+  memoryLoadPercent: number;
+  totalPhysBytes: bigint;
+  availPhysBytes: bigint;
+  totalPageFileBytes: bigint;
+  availPageFileBytes: bigint;
+  totalVirtualBytes: bigint;
+  availVirtualBytes: bigint;
 }
 
 export interface GovernedContainedProcess extends ContainedProcess {
@@ -96,4 +120,5 @@ export interface WinHelmNativeBoundary {
     cwd: string | null | undefined,
     options: ContainedSpawnOptions,
   ): GovernedContainedProcess;
+  memoryStatus(): NativeMemoryStatus;
 }
