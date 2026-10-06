@@ -539,3 +539,79 @@ test("Tier B git numstat -z rename grammar", async (t) => {
     assert.deepEqual(parseNumstat(""), []);
   });
 });
+
+test("Tier B git numstat count-token validation fails closed", async (t) => {
+  const parseError = (fn: () => unknown): unknown => {
+    try {
+      fn();
+    } catch (err) {
+      return err;
+    }
+    assert.fail("expected GIT_DIFF_PARSE_FAILED");
+  };
+
+  await t.test("malformed count tokens throw GIT_DIFF_PARSE_FAILED", () => {
+    const cases: { text: string; why: string }[] = [
+      { text: "abc\t1\tfile.txt\0", why: "alphabetic additions" },
+      { text: "1x\t2\tfile.txt\0", why: "partial numeric additions" },
+      { text: "\t1\tfile.txt\0", why: "empty additions" },
+      { text: "-1\t2\tfile.txt\0", why: "negative decimal additions" },
+      { text: "+1\t2\tfile.txt\0", why: "plus-prefixed additions" },
+      { text: "1.5\t2\tfile.txt\0", why: "fractional additions" },
+      { text: " 1\t2\tfile.txt\0", why: "leading-whitespace additions" },
+      { text: "1 \t2\tfile.txt\0", why: "trailing-whitespace additions" },
+      { text: "1\tabc\tfile.txt\0", why: "alphabetic deletions" },
+      { text: "1\t2x\tfile.txt\0", why: "partial numeric deletions" },
+      { text: "1\t2.5\tfile.txt\0", why: "fractional deletions" },
+      { text: "9007199254740993\t0\tfile.txt\0", why: "unsafe integer additions" },
+      { text: "0\t111111111111111111111111\tfile.txt\0", why: "overflow deletions" },
+    ];
+    for (const { text, why } of cases) {
+      const err = parseError(() => parseNumstat(text)) as { code?: string };
+      assert.equal(err.code, "GIT_DIFF_PARSE_FAILED", why);
+    }
+  });
+
+  await t.test("valid zero and positive counts still parse exactly", () => {
+    assert.deepEqual(parseNumstat("0\t0\tempty.txt\0"), [
+      { path: "empty.txt", binary: false, additions: 0, deletions: 0 },
+    ]);
+    assert.deepEqual(parseNumstat("12\t34\tnormal.txt\0"), [
+      { path: "normal.txt", binary: false, additions: 12, deletions: 34 },
+    ]);
+  });
+
+  await t.test("binary marker '-' is still accepted with null counts", () => {
+    assert.deepEqual(parseNumstat("-\t-\tblob.bin\0"), [
+      { path: "blob.bin", binary: true, additions: null, deletions: null },
+    ]);
+  });
+
+  await t.test("tab paths and rename grammar stay intact alongside validated counts", () => {
+    assert.deepEqual(parseNumstat("7\t3\tprefix\tinfix.txt\0"), [
+      {
+        path: "prefix\tinfix.txt",
+        binary: false,
+        additions: 7,
+        deletions: 3,
+      },
+    ]);
+    const files = parseNumstat(
+      "4\t2\t\0base.txt\0renamed file.txt\0" + "5\t1\tafter.txt\0"
+    );
+    assert.equal(files.length, 2);
+    assert.deepEqual(files[0], {
+      path: "renamed file.txt",
+      old_path: "base.txt",
+      binary: false,
+      additions: 4,
+      deletions: 2,
+    });
+    assert.deepEqual(files[1], {
+      path: "after.txt",
+      binary: false,
+      additions: 5,
+      deletions: 1,
+    });
+  });
+});
