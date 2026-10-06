@@ -23,6 +23,27 @@ import {
 } from "../engine/filesystem.js";
 import { registerTracedTool } from "./tool-wrapper.js";
 import { isFolderListingRequest } from "../permissions/request-paths.js";
+import type { RipgrepSearchResult } from "../types/index.js";
+
+export function renderRipgrepSearchSummary(res: RipgrepSearchResult): string {
+  const renderedMatches = res.matches.flatMap((m) => [
+    ...(m.contextBefore ?? []).map(
+      (ctx) => `  ${m.file}:${ctx.line} | ${ctx.text}`
+    ),
+    `${m.file}:${m.line}:${m.column} -> ${m.text}`,
+    ...(m.contextAfter ?? []).map(
+      (ctx) => `  ${m.file}:${ctx.line} | ${ctx.text}`
+    ),
+  ]);
+
+  return [
+    `Engine: ${res.engine.toUpperCase()}`,
+    `Query: "${res.query}"`,
+    `Matches: ${res.totalMatches} total (Showing page ${res.page} with ${res.matches.length} matches, hasMore: ${res.hasMore})`,
+    "",
+    ...renderedMatches,
+  ].join("\n");
+}
 
 export function registerFileTools(server: McpServer): void {
   // 1. File Read
@@ -364,15 +385,7 @@ export function registerFileTools(server: McpServer): void {
           contextLines: context_lines,
         });
 
-        const summary = [
-          `Engine: ${res.engine.toUpperCase()}`,
-          `Query: "${res.query}"`,
-          `Matches: ${res.totalMatches} total (Showing page ${res.page} with ${res.matches.length} matches, hasMore: ${res.hasMore})`,
-          "",
-          ...res.matches.map(
-            (m) => `${m.file}:${m.line}:${m.column} -> ${m.text}`
-          ),
-        ].join("\n");
+        const summary = renderRipgrepSearchSummary(res);
 
         return {
           content: [{ type: "text", text: summary }],

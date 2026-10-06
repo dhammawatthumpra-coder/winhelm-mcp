@@ -73,6 +73,43 @@ describe("A2 file_create_exclusive", () => {
     assert.strictEqual(await fs.readFile(target, "utf8"), content);
   });
 
+  it("creates missing parent directories when create_parents=true", async () => {
+    const root = await makeFixture();
+    const target = path.join(root, "nested", "evidence", "exclusive.txt");
+
+    const result = await createFileExclusive(
+      { path: target, content: "created-through-parents\n", create_parents: true },
+      SESSION
+    );
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(await fs.readFile(target, "utf8"), "created-through-parents\n");
+  });
+
+  it("does not create parent directories outside the allowed root", async () => {
+    const root = await makeFixture();
+    const outsideRoot = path.join(
+      path.dirname(root),
+      path.basename(root) + "-outside"
+    );
+    const target = path.join(outsideRoot, "nested", "blocked.txt");
+
+    try {
+      await assert.rejects(
+        createFileExclusive(
+          { path: target, content: "blocked", create_parents: true },
+          SESSION
+        ),
+        (err: unknown) =>
+          err instanceof StructuredToolError &&
+          (err.code === "FOLDER_NOT_APPROVED" || err.code === "FOLDER_ACCESS_DENIED")
+      );
+      assert.strictEqual(existsSync(outsideRoot), false);
+    } finally {
+      await fs.rm(outsideRoot, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it("never overwrites an existing target (FILE_ALREADY_EXISTS)", async () => {
     const root = await makeFixture();
     const target = path.join(root, "existing.txt");
@@ -92,6 +129,23 @@ describe("A2 file_create_exclusive", () => {
 });
 
 describe("A2 file_write_atomic", () => {
+  it("creates missing parent directories when create_parents=true", async function () {
+    if (!existsSync(trustedNativeAddonPath())) {
+      this.skip();
+      return;
+    }
+    const root = await makeFixture();
+    const target = path.join(root, "nested", "atomic", "config.txt");
+
+    const result = await writeFileAtomic(
+      { path: target, content: "version=1\n", create_parents: true },
+      SESSION
+    );
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(await fs.readFile(target, "utf8"), "version=1\n");
+  });
+
   it("creates and then atomically overwrites with full content", async function () {
     if (!existsSync(trustedNativeAddonPath())) {
       this.skip();
