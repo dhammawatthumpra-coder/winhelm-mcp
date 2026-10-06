@@ -208,7 +208,7 @@ export function registerGovernedTools(server: McpServer): void {
       path: z
         .string()
         .optional()
-        .describe("Filter events to targets containing this filesystem path."),
+        .describe("Filter this session's invocation/audit projection to targets containing this filesystem path; use file_provenance_lookup for durable mutation attribution."),
       actions: z
         .array(z.enum(["create", "modify", "delete", "approve", "deny", "execute"]))
         .optional()

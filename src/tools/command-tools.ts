@@ -46,7 +46,7 @@ export function registerCommandTools(server: McpServer): void {
         .string()
         .min(1)
         .describe(
-          "Executable/package-manager command. Safe mode permits only npm, pnpm, yarn, or bun."
+          "Executable/package-manager command. In terminal mode safe, only npm, pnpm, yarn, or bun are permitted; ask/full modes permit governed direct executables subject to existing security gates."
         ),
       args: z
         .array(z.string())
