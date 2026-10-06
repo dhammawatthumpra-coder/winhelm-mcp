@@ -495,12 +495,31 @@ export function parseNumstat(text: string): GitDiffFileStat[] {
       path: entryPath,
       ...(oldPath !== undefined ? { old_path: oldPath } : {}),
       binary,
-      additions: binary ? null : Number.parseInt(addedRaw, 10),
-      deletions: binary ? null : Number.parseInt(deletedRaw, 10),
+      additions: binary ? null : parseNumstatCount(addedRaw, "additions"),
+      deletions: binary ? null : parseNumstatCount(deletedRaw, "deletions"),
     };
     files.push(stat);
   }
   return files;
+}
+
+/**
+ * A non-binary numstat count token must be one or more ASCII decimal digits
+ * and represent a safe non-negative integer. Anything else (empty, alphabetic,
+ * partially numeric, signed, fractional, whitespace-padded, or overflowing the
+ * safe-integer range) fails closed instead of being coerced into NaN, a
+ * partial number, or a null-by-serialization value.
+ */
+function parseNumstatCount(raw: string, field: "additions" | "deletions"): number {
+  if (!/^[0-9]+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+    gitError(
+      "GIT_DIFF_PARSE_FAILED",
+      "Git numstat output contained a malformed count token.",
+      "Retry the query; if it persists, report the parser issue.",
+      { field, token: JSON.stringify(raw) }
+    );
+  }
+  return Number(raw);
 }
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
