@@ -157,12 +157,18 @@ function scanBytes(
       }
     };
 
-    streamA.on("data", (chunk: Buffer) => {
-      bufferA = Buffer.concat([bufferA, chunk]);
+    streamA.on("data", (chunk: string | Buffer) => {
+      bufferA = Buffer.concat([
+        bufferA,
+        typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+      ]);
       step();
     });
-    streamB.on("data", (chunk: Buffer) => {
-      bufferB = Buffer.concat([bufferB, chunk]);
+    streamB.on("data", (chunk: string | Buffer) => {
+      bufferB = Buffer.concat([
+        bufferB,
+        typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+      ]);
       step();
     });
     streamA.on("error", failScan);
