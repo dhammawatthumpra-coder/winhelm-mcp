@@ -584,6 +584,7 @@ export function getDashboardHtml(
     <header>
       <div class="logo-area">
         <h2>⚡ WinHelm</h2>
+        <a href="/" style="text-decoration:none;font-size:12px;color:#93c5fd;background:rgba(59,130,246,0.15);padding:4px 8px;border-radius:4px;border:1px solid rgba(59,130,246,0.3);margin-left:8px;">← Product Shell</a>
         <span class="status-badge"><span class="pulse-dot"></span> LIVE MONITOR</span>
         <span class="status-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); text-transform: uppercase;">${escapeHtml(headerProfileText)}</span>
       </div>
