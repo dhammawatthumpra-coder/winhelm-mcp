@@ -198,6 +198,35 @@ describe("MCP tool metadata and annotations", () => {
       getToolMetadata("terminal_task_start").description,
       /long-running or interactive PowerShell task/i
     );
+    assert.match(
+      getToolMetadata("command_run").description,
+      /terminal mode safe is package-manager-only.*ask\/full permit governed direct executables/i
+    );
+    assert.match(
+      getToolMetadata("session_audit_search").description,
+      /this session.*invocation\/audit projection.*file_provenance_lookup/i
+    );
+  });
+
+  it("clarifies Safe command mode and durable provenance in public parameter descriptions", async () => {
+    await withRegisteredV13Tools((tools) => {
+      const commandDescription = String(
+        tools.command_run.inputSchema.shape.command._def.description
+      );
+      assert.match(
+        commandDescription,
+        /terminal mode safe.*npm, pnpm, yarn, or bun.*ask\/full modes permit governed direct executables/i
+      );
+
+      const auditPathDescription = String(
+        tools.session_audit_search.inputSchema.shape.path._def.description
+      );
+      assert.match(
+        auditPathDescription,
+        /invocation\/audit projection.*file_provenance_lookup.*durable mutation attribution/i
+      );
+      return undefined;
+    });
   });
 
   it("keeps both recovery tools read-only and closed-world", () => {

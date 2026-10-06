@@ -309,7 +309,7 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   command_run: metadata(
     "Run executable without a shell",
-    "Prefer this for direct executable invocation without a shell, including governed async runs; use terminal_run only when shell/PowerShell semantics are required.",
+    "Prefer this for direct executable invocation without a shell, including governed async runs; terminal mode safe is package-manager-only, while ask/full permit governed direct executables subject to existing gates. Use terminal_run only when shell/PowerShell semantics are required.",
     MUTATING_OPEN_WORLD
   ),
 
@@ -335,7 +335,7 @@ export const TOOL_METADATA: Record<V14ToolName, WinHelmToolMetadata> = {
   ),
   session_audit_search: metadata(
     "Search current session audit",
-    "Search this session's own audit projection only; other sessions' activity is never returned.",
+    "Search this session's own invocation/audit projection only; other sessions' activity is never returned. For durable path-scoped create/modify/delete attribution, use file_provenance_lookup.",
     READ_ONLY
   ),
   file_provenance_lookup: metadata(
