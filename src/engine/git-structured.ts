@@ -439,9 +439,12 @@ export async function readGitDiffStructured(
 }
 
 /**
- * Parse `git diff --numstat -z`. Records are NUL-separated; each record is
- * `"<added>\t<deleted>\t<path>"` and a rename record carries the original
- * path as the immediately following NUL field.
+ * Parse `git diff --numstat -z` by its real NUL-field grammar. Each record
+ * starts with `"<added>\t<deleted>\t"`; a normal record then carries its path
+ * inline up to the terminating NUL, while a rename/copy record has an empty
+ * inline path slot followed by `<old-path>\0<new-path>\0` as separate NUL
+ * fields (Git never emits an empty path, so the empty slot unambiguously
+ * selects the two-path form). Malformed or truncated records fail closed.
  */
 export function parseNumstat(text: string): GitDiffFileStat[] {
   if (text === "") return [];
@@ -450,10 +453,9 @@ export function parseNumstat(text: string): GitDiffFileStat[] {
   for (let i = 0; i < fields.length; i++) {
     const record = fields[i];
     if (record === undefined || record === "") continue;
-    // Record form: "<added>\t<deleted>\t<path>"; the path itself may
-    // contain tabs, so only the first two tab-separated tokens are counts.
-    const parts = record.split("\t");
-    if (parts.length < 3) {
+    const firstTab = record.indexOf("\t");
+    const secondTab = firstTab < 0 ? -1 : record.indexOf("\t", firstTab + 1);
+    if (firstTab < 0 || secondTab < 0) {
       throw new StructuredToolError(
         "GIT_DIFF_PARSE_FAILED",
         "Git numstat output contained a malformed record.",
@@ -461,27 +463,41 @@ export function parseNumstat(text: string): GitDiffFileStat[] {
         { record: JSON.stringify(record) }
       );
     }
-    const addedRaw = parts[0];
-    const deletedRaw = parts[1];
-    const entryPath = parts.slice(2).join("\t");
+    const addedRaw = record.slice(0, firstTab);
+    const deletedRaw = record.slice(firstTab + 1, secondTab);
+    const inlinePath = record.slice(secondTab + 1);
     const binary = addedRaw === "-" || deletedRaw === "-";
+    let entryPath = inlinePath;
+    let oldPath: string | undefined;
+    if (inlinePath === "") {
+      // Rename/copy form: the old and new paths follow as NUL fields; the
+      // counts apply to that same file. Refuse truncated sequences.
+      const oldField = fields[i + 1];
+      const newField = fields[i + 2];
+      if (
+        oldField === undefined ||
+        oldField === "" ||
+        newField === undefined ||
+        newField === ""
+      ) {
+        throw new StructuredToolError(
+          "GIT_DIFF_PARSE_FAILED",
+          "Git numstat rename record was truncated or malformed.",
+          "Retry the query; if it persists, report the parser issue.",
+          { record: JSON.stringify(record) }
+        );
+      }
+      entryPath = newField;
+      oldPath = oldField;
+      i += 2;
+    }
     const stat: GitDiffFileStat = {
       path: entryPath,
+      ...(oldPath !== undefined ? { old_path: oldPath } : {}),
       binary,
       additions: binary ? null : Number.parseInt(addedRaw, 10),
       deletions: binary ? null : Number.parseInt(deletedRaw, 10),
     };
-    // Rename detection: the following NUL field is the original path when it
-    // is not itself a counts record.
-    const next = fields[i + 1];
-    if (
-      next !== undefined &&
-      next !== "" &&
-      !/^(?:\d+|-)\t(?:\d+|-)\t/.test(next)
-    ) {
-      stat.old_path = next;
-      i += 1;
-    }
     files.push(stat);
   }
   return files;

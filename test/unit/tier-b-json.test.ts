@@ -318,4 +318,99 @@ test("Tier B deterministic JSON contract", async (t) => {
     );
     assert.equal(serialized.canonical_json, '{"e":1e-05,"f":2.0,"i":2}\n');
   });
+
+  await t.test("top-level __proto__ member is preserved as an own data property", () => {
+    const parsed = parseStrictJsonText('{"__proto__": 1, "after": 2}');
+    const value = parsed.value as Record<string, unknown>;
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(value, "__proto__"),
+      true,
+      "__proto__ must materialize as an own property"
+    );
+    assert.equal(value["__proto__"], 1n);
+    assert.equal(value["after"], 2n);
+    assert.deepEqual(Object.getOwnPropertyNames(value), ["__proto__", "after"]);
+    // Key/value/depth statistics must match the materialized structure.
+    assert.equal(parsed.stats.keys, 2);
+    assert.equal(parsed.stats.integers, 2);
+    assert.equal(parsed.stats.objects, 1);
+    // The parsed object's prototype must not be replaced as a side effect.
+    assert.equal(Object.getPrototypeOf(value), Object.prototype);
+  });
+
+  await t.test("nested __proto__ members are preserved", () => {
+    const parsed = parseStrictJsonText('{"outer": {"__proto__": {"x": 1}}}');
+    const outer = (parsed.value as Record<string, unknown>).outer as Record<
+      string,
+      unknown
+    >;
+    assert.equal(Object.prototype.hasOwnProperty.call(outer, "__proto__"), true);
+    const inner = outer["__proto__"] as Record<string, unknown>;
+    assert.equal(inner["x"], 1n);
+    assert.equal(Object.getPrototypeOf(outer), Object.prototype);
+    assert.equal(Object.getPrototypeOf(inner), Object.prototype);
+    assert.equal(parsed.stats.objects, 3);
+    assert.equal(parsed.stats.keys, 3);
+    assert.equal(parsed.stats.depth, 3);
+  });
+
+  await t.test("duplicate __proto__ keys are still rejected", () => {
+    assert.throws(
+      () => parseStrictJsonText('{"__proto__": 1, "__proto__": 2}'),
+      (err: unknown) => err instanceof JsonStrictParseError
+    );
+  });
+
+  await t.test("ordinary exotic keys keep their own-property semantics", () => {
+    const parsed = parseStrictJsonText(
+      '{"constructor": 1, "prototype": 2, "toString": 3}'
+    );
+    const value = parsed.value as Record<string, unknown>;
+    assert.equal(value["constructor"], 1n);
+    assert.equal(value["prototype"], 2n);
+    assert.equal(value["toString"], 3n);
+    assert.equal(parsed.stats.keys, 3);
+  });
+
+  await t.test("__proto__ vector matches the exact CPython canonical bytes", () => {
+    // CPython 3.13 reference:
+    // json.dumps(json.loads('{"__proto__": {"x": 1}, "after": 2}'),
+    //            ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+    //            allow_nan=False) + "\n"
+    const result = canonicalizeText(
+      '{"__proto__":{"x":1},"after":2}',
+      "python-sorted-json-v1"
+    );
+    assert.equal(result.canonical_json, '{"__proto__":{"x":1},"after":2}\n');
+    assert.equal(
+      result.canonical_sha256,
+      "6f521579d70e5fd7eadbec0e7083f58998b19549ecbd2cba955cf81d92a16b18"
+    );
+  });
+
+  await t.test("path source with a __proto__ member produces the same canonical hash", async () => {
+    await withTempFile('{"__proto__":{"x":1},"after":2}', async (filePath) => {
+      const fromPath = canonicalizeText(
+        await fs.readFile(filePath, "utf8"),
+        "python-sorted-json-v1"
+      );
+      const fromText = canonicalizeText(
+        '{"__proto__":{"x":1},"after":2}',
+        "python-sorted-json-v1"
+      );
+      assert.equal(fromPath.canonical_sha256, fromText.canonical_sha256);
+      assert.equal(
+        fromPath.canonical_sha256,
+        "6f521579d70e5fd7eadbec0e7083f58998b19549ecbd2cba955cf81d92a16b18"
+      );
+    });
+  });
+
+  await t.test("JCS preserves the __proto__ member instead of dropping it", () => {
+    const result = canonicalizeText(
+      '{"__proto__": "p", "after": "a"}',
+      "jcs-rfc8785"
+    );
+    assert.equal(result.canonical_json, '{"__proto__":"p","after":"a"}');
+  });
 });

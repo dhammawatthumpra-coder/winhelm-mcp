@@ -205,7 +205,16 @@ class Parser {
       if (this.advance() !== ":") {
         this.fail("expected ':' after object key", pointer);
       }
-      result[key] = this.parseValue(`${pointer}/${escapePointerToken(key)}`);
+      // Ordinary assignment would route the special name "__proto__" through
+      // the inherited prototype setter and silently lose the JSON member;
+      // an explicit own-property definition preserves every parsed member
+      // (including "__proto__") without touching any prototype.
+      Object.defineProperty(result, key, {
+        value: this.parseValue(`${pointer}/${escapePointerToken(key)}`),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
       this.skipWhitespace();
       const sep = this.advance();
       if (sep === "}") break;
