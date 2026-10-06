@@ -95,15 +95,18 @@ describe("Unified Gateway Server Integration", () => {
     assert.strictEqual(blockedRes.headers.get("access-control-allow-origin"), null);
   });
 
-  it("should serve Web Monitor Dashboard on / and /dashboard", async () => {
+  it("should serve Web Product Shell on / and preserve Web Monitor Dashboard on /dashboard", async () => {
     const res = await fetch(`${BASE_URL}/`);
     assert.strictEqual(res.status, 200);
     const html = await res.text();
-    assert.ok(html.includes("WinHelm | Monitor Dashboard"));
-    assert.ok(html.includes("LIVE MONITOR"));
+    assert.ok(html.includes("WinHelm"));
+    assert.ok(html.includes("PRODUCT SHELL"));
 
     const dashRes = await fetch(`${BASE_URL}/dashboard`);
     assert.strictEqual(dashRes.status, 200);
+    const dashHtml = await dashRes.text();
+    assert.ok(dashHtml.includes("WinHelm | Monitor Dashboard"));
+    assert.ok(dashHtml.includes("LIVE MONITOR"));
   });
 
   it("should provide monitor stats on /api/monitor/stats", async () => {

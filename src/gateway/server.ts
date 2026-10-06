@@ -13,6 +13,7 @@ import { RateLimiter } from "./rate-limiter.js";
 import { SessionManager } from "./session-manager.js";
 import { auditLogger } from "../utils/audit-logger.js";
 import { getDashboardHtml } from "./dashboard-html.js";
+import { getProductShellHtml } from "./product-shell-html.js";
 import { getFilePreviewHtml } from "./preview-html.js";
 import { getGpuInfo, getSystemInfo } from "../engine/system.js";
 import type { GpuInfoResult, SystemInfo } from "../types/index.js";
@@ -566,6 +567,27 @@ export function createServer(options: ServerOptions): {
     logger.info("Public network mode active (No auth token set)");
   }
 
+  const sendProductShell = (req: Request, res: Response): void => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'self';"
+    );
+    const activeProfile = configManager.getConfig().profile || "full";
+    const profileStatus = getProfileStatus(configManager);
+    const focusJobId = req.params?.jobId || null;
+    res.send(
+      getProductShellHtml(activeProfile, {
+        schemaMode: profileStatus.schemaMode,
+        preset: profileStatus.preset,
+        modified: profileStatus.modified,
+        terminalMode: profileStatus.terminalMode,
+        approvalMode: profileStatus.approvalMode,
+        focusJobId,
+      })
+    );
+  };
+
   const sendDashboard = (_req: Request, res: Response): void => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader(
@@ -584,12 +606,14 @@ export function createServer(options: ServerOptions): {
     );
   };
 
-  // Web Monitor Dashboard
-  app.get(["/", "/dashboard"], sendDashboard);
+  // Primary Web Product Shell
+  app.get("/", sendProductShell);
 
-  // Approval deep link opened by the Windows toast; the Approvals panel itself
-  // stays behind the local admin code.
-  app.get("/approvals/:jobId", sendDashboard);
+  // Preserved Engineering Dashboard
+  app.get("/dashboard", sendDashboard);
+
+  // Approval deep link opened by the Windows toast; deep links into Product Shell
+  app.get("/approvals/:jobId", sendProductShell);
 
   // Interactive File & Markdown Previewer
   app.get("/preview", async (req: Request, res: Response) => {
