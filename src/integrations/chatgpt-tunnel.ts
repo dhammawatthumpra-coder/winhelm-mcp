@@ -433,6 +433,50 @@ function creationTimeMatches(a: string, b: string): boolean {
   return Math.abs(ta - tb) <= PROCESS_CREATION_TOLERANCE_MS;
 }
 
+export interface ManagedIdentityProofInput {
+  observedExists: boolean;
+  observedExecutablePath?: string;
+  observedCreatedAtIso?: string;
+  persistedPid: number;
+  persistedExecutablePath?: string;
+  persistedProcessCreatedAt?: string;
+}
+
+/**
+ * Conjunctive managed-identity proof, fail closed. Identity is proven only
+ * when the PID is valid, the process row is observed, BOTH executable paths
+ * are present and match case-insensitively, and BOTH creation times are
+ * present, parseable, and equal within the accepted tolerance. A missing or
+ * malformed field on either side leaves identity UNPROVEN — "field
+ * unavailable" is never treated as "field matched".
+ */
+export function isManagedIdentityProven(input: ManagedIdentityProofInput): boolean {
+  if (
+    typeof input.persistedPid !== "number" ||
+    !Number.isInteger(input.persistedPid) ||
+    input.persistedPid <= 0
+  ) {
+    return false;
+  }
+  if (!input.observedExists) return false;
+  if (typeof input.persistedExecutablePath !== "string" || !input.persistedExecutablePath) {
+    return false;
+  }
+  if (typeof input.observedExecutablePath !== "string" || !input.observedExecutablePath) {
+    return false;
+  }
+  if (input.observedExecutablePath.toLowerCase() !== input.persistedExecutablePath.toLowerCase()) {
+    return false;
+  }
+  if (typeof input.persistedProcessCreatedAt !== "string" || !input.persistedProcessCreatedAt) {
+    return false;
+  }
+  if (typeof input.observedCreatedAtIso !== "string" || !input.observedCreatedAtIso) {
+    return false;
+  }
+  return creationTimeMatches(input.observedCreatedAtIso, input.persistedProcessCreatedAt);
+}
+
 /**
  * Proves that the process recorded in managed state is still the exact
  * process WinHelm started: same PID, same executable path, and matching
@@ -448,22 +492,14 @@ async function verifyManagedIdentity(state: ManagedTunnelState): Promise<boolean
     return false;
   }
   const identity = await queryProcessIdentity(state.pid);
-  if (!identity.exists) return false;
-  if (
-    identity.executablePath &&
-    state.executablePath &&
-    identity.executablePath.toLowerCase() !== state.executablePath.toLowerCase()
-  ) {
-    return false;
-  }
-  if (
-    identity.createdAtIso &&
-    state.processCreatedAt &&
-    !creationTimeMatches(identity.createdAtIso, state.processCreatedAt)
-  ) {
-    return false;
-  }
-  return true;
+  return isManagedIdentityProven({
+    observedExists: identity.exists,
+    observedExecutablePath: identity.executablePath,
+    observedCreatedAtIso: identity.createdAtIso,
+    persistedPid: state.pid,
+    persistedExecutablePath: state.executablePath,
+    persistedProcessCreatedAt: state.processCreatedAt,
+  });
 }
 
 async function taskkill(pid: number, force: boolean, tree: boolean): Promise<void> {
