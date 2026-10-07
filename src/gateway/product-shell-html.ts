@@ -93,6 +93,23 @@ export function getProductShellHtml(
     connCursorLabel: t("shell.connections.cursor.label"),
     connCursorType: t("shell.connections.cursor.type"),
     connChatgptLabel: t("shell.connections.chatgpt.label"),
+    connChatgptLifecycleTitle: t("shell.connections.chatgpt.lifecycle_title"),
+    connChatgptDependencyLabel: t("shell.connections.chatgpt.dependency_label"),
+    connChatgptProfileLabel: t("shell.connections.chatgpt.profile_label"),
+    connChatgptBackendLabel: t("shell.connections.chatgpt.backend_label"),
+    connChatgptStateLabel: t("shell.connections.chatgpt.state_label"),
+    connChatgptOwnershipLabel: t("shell.connections.chatgpt.ownership_label"),
+    connChatgptManaged: t("shell.connections.chatgpt.managed"),
+    connChatgptExternal: t("shell.connections.chatgpt.external_unmanaged"),
+    connChatgptActionStart: t("shell.connections.chatgpt.action_start"),
+    connChatgptActionStop: t("shell.connections.chatgpt.action_stop"),
+    connChatgptActionRestart: t("shell.connections.chatgpt.action_restart"),
+    connChatgptActionDoctor: t("shell.connections.chatgpt.action_doctor"),
+    connChatgptConfirmHint: t("shell.connections.chatgpt.confirm_hint"),
+    connChatgptConfirmPlaceholder: t("shell.connections.chatgpt.confirm_placeholder"),
+    connChatgptExternalNotice: t("shell.connections.chatgpt.external_notice"),
+    connChatgptConfigureHint: t("shell.connections.chatgpt.configure_hint"),
+    connChatgptRecoveryHint: t("shell.connections.chatgpt.recovery_hint"),
     connChatgptType: t("shell.connections.chatgpt.type"),
     connTailscaleLabel: t("shell.connections.tailscale.label"),
     connTailscaleType: t("shell.connections.tailscale.type"),
@@ -921,12 +938,43 @@ export function getProductShellHtml(
           <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <span style="font-size: 16px; font-weight: 700; color: #fff;">${escapeHtml(messages.connChatgptLabel)}</span>
-              <span class="badge badge-warning">${escapeHtml(messages.connChatgptType)}</span>
+              <span class="badge badge-primary">${escapeHtml(messages.connChatgptType)}</span>
             </div>
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Remote tunnel client support target. Full automated tunnel lifecycle is productized in milestone M3A.</p>
-            <div>
-              <span class="badge badge-neutral">Target Architecture</span>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">${escapeHtml(messages.connChatgptLifecycleTitle)}</p>
+            <div style="font-size: 13px; line-height: 1.9;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">${escapeHtml(messages.connChatgptDependencyLabel)}</span>
+                <span id="tunnelDependencyStatus" class="badge badge-neutral">…</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">${escapeHtml(messages.connChatgptProfileLabel)}</span>
+                <span id="tunnelProfileStatus" class="badge badge-neutral">…</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">${escapeHtml(messages.connChatgptBackendLabel)}</span>
+                <span id="tunnelBackendStatus" class="badge badge-neutral">…</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">${escapeHtml(messages.connChatgptStateLabel)}</span>
+                <span id="tunnelStateBadge" class="badge badge-neutral">…</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">${escapeHtml(messages.connChatgptOwnershipLabel)}</span>
+                <span id="tunnelOwnershipBadge" class="badge badge-neutral">…</span>
+              </div>
             </div>
+            <div id="tunnelDetail" style="font-size: 12px; color: var(--text-muted); margin-top: 10px; word-break: break-all;"></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-primary" onclick="handleTunnelStart()">${escapeHtml(messages.connChatgptActionStart)}</button>
+              <button class="btn btn-danger" onclick="handleTunnelStop()">${escapeHtml(messages.connChatgptActionStop)}</button>
+              <button class="btn btn-secondary" onclick="handleTunnelRestart()">${escapeHtml(messages.connChatgptActionRestart)}</button>
+              <button class="btn btn-secondary" onclick="handleTunnelDoctor()">${escapeHtml(messages.connChatgptActionDoctor)}</button>
+            </div>
+            <div id="tunnelConfirmGroup" style="display: none; margin-top: 10px;">
+              <div class="form-desc" style="margin-bottom: 6px;">${escapeHtml(messages.connChatgptConfirmHint)}</div>
+              <input type="text" id="tunnelConfirmInput" class="form-control" placeholder="${escapeHtml(messages.connChatgptConfirmPlaceholder)}" autocomplete="off">
+            </div>
+            <div id="tunnelActionResult" class="approval-text-preview" style="display: none; margin-top: 12px;"></div>
           </div>
 
           <!-- Tailscale HTTPS -->
@@ -1022,6 +1070,7 @@ export function getProductShellHtml(
     let lastProfile = null;
     let lastSessions = [];
     let lastClientStatus = [];
+    let lastTunnelStatus = null;
 
     function escapeHtml(str) {
       if (str === null || str === undefined) return '';
@@ -1248,6 +1297,7 @@ export function getProductShellHtml(
           lastClientStatus = clientStatusRes.clients;
         }
         renderSetup();
+        fetchTunnelStatus();
 
         const profileFolders = (profileRes && profileRes.profile && Array.isArray(profileRes.profile.folders))
           ? profileRes.profile.folders
@@ -1640,6 +1690,138 @@ export function getProductShellHtml(
         resBox.textContent = 'Client configured successfully.' + (body.backupPath ? ('\\nBackup created: ' + body.backupPath) : '') + '\\n' + SHELL_MESSAGES.connRestartHint;
       } catch (err) {
         resBox.textContent = 'Client configure error: ' + (err.message || String(err));
+      }
+    }
+
+    function tunnelBadgeClass(kind) {
+      if (kind === 'ok') return 'badge badge-success';
+      if (kind === 'warn') return 'badge badge-warning';
+      if (kind === 'bad') return 'badge badge-danger';
+      return 'badge badge-neutral';
+    }
+
+    function setTunnelBadge(id, kind, label) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = label;
+      el.className = tunnelBadgeClass(kind);
+    }
+
+    function renderTunnelStatus(status) {
+      if (!status) return;
+      const dep = status.dependency || {};
+      setTunnelBadge('tunnelDependencyStatus',
+        dep.state === 'qualified' ? 'ok' : (dep.state === 'unqualified' ? 'bad' : 'warn'),
+        dep.state || 'missing');
+      setTunnelBadge('tunnelProfileStatus',
+        status.profile && status.profile.state === 'ready' ? 'ok' : 'warn',
+        status.profile ? status.profile.state : 'missing');
+      setTunnelBadge('tunnelBackendStatus',
+        status.backend && status.backend.state === 'ready' ? 'ok' : (status.backend && status.backend.state === 'stale' ? 'bad' : 'warn'),
+        status.backend ? status.backend.state : 'attention');
+
+      const daemon = status.daemon || {};
+      const stateKind = daemon.state === 'managed_ready' ? 'ok'
+        : (daemon.state === 'managed_starting' || daemon.state === 'managed_degraded') ? 'warn'
+        : (daemon.state === 'external_running' ? 'ok' : 'neutral');
+      setTunnelBadge('tunnelStateBadge', stateKind, daemon.state || 'stopped');
+
+      const ownership = daemon.ownership || 'none';
+      const ownershipEl = document.getElementById('tunnelOwnershipBadge');
+      if (ownershipEl) {
+        if (ownership === 'managed') {
+          ownershipEl.textContent = SHELL_MESSAGES.connChatgptManaged;
+          ownershipEl.className = 'badge badge-primary';
+        } else if (ownership === 'external') {
+          ownershipEl.textContent = SHELL_MESSAGES.connChatgptExternal;
+          ownershipEl.className = 'badge badge-warning';
+        } else {
+          ownershipEl.textContent = '—';
+          ownershipEl.className = 'badge badge-neutral';
+        }
+      }
+
+      const detailEl = document.getElementById('tunnelDetail');
+      if (detailEl) {
+        const parts = [];
+        if (dep.state === 'qualified' && dep.version) parts.push('version: ' + dep.version);
+        if (dep.state === 'unqualified' && dep.observedVersion) parts.push('observed version: ' + dep.observedVersion);
+        if (status.backend && status.backend.reason) parts.push('backend: ' + status.backend.reason);
+        if (daemon.pid) parts.push('pid: ' + daemon.pid);
+        if (ownership === 'external') parts.push(SHELL_MESSAGES.connChatgptExternalNotice);
+        if (ownership === 'none' && status.configPresent !== true) parts.push(SHELL_MESSAGES.connChatgptConfigureHint);
+        if (ownership === 'none') parts.push(SHELL_MESSAGES.connChatgptRecoveryHint);
+        detailEl.textContent = parts.join(' · ');
+      }
+    }
+
+    async function fetchTunnelStatus() {
+      if (!isAdminUnlocked) return;
+      try {
+        const body = await apiRequest('/admin/tunnel/status');
+        if (body && body.status) {
+          lastTunnelStatus = body.status;
+          renderTunnelStatus(lastTunnelStatus);
+        }
+      } catch (e) {
+        console.warn('Tunnel status fetch error', e);
+      }
+    }
+
+    async function tunnelLifecycleAction(endpoint, confirmValue) {
+      const resBox = document.getElementById('tunnelActionResult');
+      resBox.style.display = 'block';
+      resBox.textContent = '…';
+      try {
+        const body = await apiRequest(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmation: confirmValue })
+        });
+        if (body && body.status) {
+          lastTunnelStatus = body.status;
+          renderTunnelStatus(lastTunnelStatus);
+        }
+        resBox.textContent = 'OK';
+        document.getElementById('tunnelConfirmInput').value = '';
+      } catch (err) {
+        resBox.textContent = err.message || String(err);
+      }
+      fetchTunnelStatus();
+    }
+
+    async function handleTunnelStart() {
+      if (!await ensureAdminUnlocked()) return;
+      document.getElementById('tunnelConfirmGroup').style.display = 'block';
+      await tunnelLifecycleAction('/admin/tunnel/start',
+        document.getElementById('tunnelConfirmInput').value.trim());
+    }
+
+    async function handleTunnelStop() {
+      if (!await ensureAdminUnlocked()) return;
+      document.getElementById('tunnelConfirmGroup').style.display = 'block';
+      await tunnelLifecycleAction('/admin/tunnel/stop',
+        document.getElementById('tunnelConfirmInput').value.trim());
+    }
+
+    async function handleTunnelRestart() {
+      if (!await ensureAdminUnlocked()) return;
+      document.getElementById('tunnelConfirmGroup').style.display = 'block';
+      await tunnelLifecycleAction('/admin/tunnel/restart',
+        document.getElementById('tunnelConfirmInput').value.trim());
+    }
+
+    async function handleTunnelDoctor() {
+      if (!await ensureAdminUnlocked()) return;
+      const resBox = document.getElementById('tunnelActionResult');
+      resBox.style.display = 'block';
+      resBox.textContent = '…';
+      try {
+        const body = await apiRequest('/admin/tunnel/doctor');
+        const checks = (body && body.checks) || [];
+        resBox.textContent = checks.map(c => (c.ok ? 'OK' : 'FAIL') + ' ' + c.name + (c.code ? ' [' + c.code + ']' : '') + ' — ' + c.detail).join('\\n');
+      } catch (err) {
+        resBox.textContent = err.message || String(err);
       }
     }
 

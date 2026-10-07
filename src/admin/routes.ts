@@ -42,6 +42,16 @@ import {
 } from "../config/client-connect.js";
 import { getAdminAuthManager } from "./runtime.js";
 import {
+  TunnelLifecycleError,
+  getTunnelDoctor,
+  getTunnelStatus,
+  redactTunnelSecrets,
+  restartManagedTunnel,
+  saveTunnelLifecycleConfig,
+  startManagedTunnel,
+  stopManagedTunnel,
+} from "../integrations/chatgpt-tunnel.js";
+import {
   isLoopbackOrigin,
   validateAdminLocality,
 } from "./loopback.js";
@@ -111,6 +121,94 @@ const PROFILE_PRESETS = new Set([
 ]);
 
 const APPROVAL_MODES = new Set(["manual", "smart", "trusted"]);
+
+const TUNNEL_CONFLICT_CODES = new Set([
+  "TUNNEL_DEPENDENCY_UNQUALIFIED",
+  "TUNNEL_PROFILE_MISSING",
+  "BACKEND_NOT_READY",
+  "MANAGED_ALREADY_RUNNING",
+  "MANAGED_IDENTITY_UNPROVEN",
+  "TUNNEL_NOT_MANAGED",
+]);
+
+function tunnelErrorStatus(err: unknown): {
+  status: number;
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+} {
+  if (err instanceof TunnelLifecycleError) {
+    let status = 500;
+    if (err.code === "TUNNEL_CONFIG_INVALID") {
+      status = 400;
+    } else if (TUNNEL_CONFLICT_CODES.has(err.code)) {
+      status = 409;
+    }
+    return {
+      status,
+      code: err.code,
+      message: err.message,
+      details: err.details,
+    };
+  }
+  return {
+    status: 500,
+    code: "TUNNEL_INTERNAL_ERROR",
+    message:
+      err instanceof Error && err.message
+        ? err.message
+        : "Tunnel lifecycle operation failed.",
+  };
+}
+
+function parseTunnelConfigureBody(body: unknown): {
+  executablePath?: string;
+  executableArgs?: string[];
+  profilePath?: string;
+  markerPath?: string;
+  healthUrl?: string;
+} {
+  if (body === undefined || body === null) return {};
+  if (typeof body !== "object" || Array.isArray(body)) {
+    throw new TunnelLifecycleError(
+      "TUNNEL_CONFIG_INVALID",
+      "Tunnel configure body must be a JSON object."
+    );
+  }
+  const input = body as Record<string, unknown>;
+  const out: {
+    executablePath?: string;
+    executableArgs?: string[];
+    profilePath?: string;
+    markerPath?: string;
+    healthUrl?: string;
+  } = {};
+  for (const key of ["executablePath", "profilePath", "markerPath", "healthUrl"] as const) {
+    const value = input[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "string" || !value.trim()) {
+      throw new TunnelLifecycleError(
+        "TUNNEL_CONFIG_INVALID",
+        `Tunnel configure field "${key}" must be a non-empty string.`
+      );
+    }
+    out[key] = value;
+  }
+  const exeArgs = input.executableArgs;
+  if (exeArgs !== undefined && exeArgs !== null) {
+    if (
+      !Array.isArray(exeArgs) ||
+      exeArgs.some((a) => typeof a !== "string")
+    ) {
+      throw new TunnelLifecycleError(
+        "TUNNEL_CONFIG_INVALID",
+        'Tunnel configure field "executableArgs" must be an array of strings.'
+      );
+    }
+    out.executableArgs = exeArgs as string[];
+  }
+  return out;
+}
 
 function parseProfileBody(body: unknown): ProfileApplyInput {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -1400,6 +1498,111 @@ export function registerAdminRoutes(app: Express): void {
       res.setHeader("Set-Cookie", clearAdminCookie());
       res.json({ success: true });
     }
+  );
+
+  // M3A-P2: ChatGPT/OpenAI Tunnel lifecycle. Read-only status/doctor are
+  // session-gated GETs; configure/start/stop/restart are state-changing Admin
+  // mutations requiring origin, session, CSRF, and — for start/stop/restart —
+  // an explicit typed local confirmation. There is deliberately no MCP tool
+  // surface for tunnel lifecycle. WinHelm never stops or restarts externally
+  // managed tunnel daemons.
+  router.get("/tunnel/status", requireAdminSession, async (_req, res) => {
+    try {
+      const status = await getTunnelStatus();
+      res.json(redactTunnelSecrets({ status }));
+    } catch (err) {
+      const mapped = tunnelErrorStatus(err);
+      structuredError(res, mapped.status, mapped.code, mapped.message, mapped.details);
+    }
+  });
+
+  router.get("/tunnel/doctor", requireAdminSession, async (_req, res) => {
+    try {
+      const doctor = await getTunnelDoctor();
+      res.json(redactTunnelSecrets(doctor));
+    } catch (err) {
+      const mapped = tunnelErrorStatus(err);
+      structuredError(res, mapped.status, mapped.code, mapped.message, mapped.details);
+    }
+  });
+
+  router.post(
+    "/tunnel/configure",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    async (req: Request, res: Response) => {
+      try {
+        const patch = parseTunnelConfigureBody(req.body);
+        const saved = await saveTunnelLifecycleConfig(patch);
+        res.json(redactTunnelSecrets({ success: true, config: saved }));
+      } catch (err) {
+        const mapped = tunnelErrorStatus(err);
+        structuredError(res, mapped.status, mapped.code, mapped.message, mapped.details);
+      }
+    }
+  );
+
+  const tunnelMutation =
+    (operation: () => Promise<unknown>, action: string) =>
+    async (req: Request, res: Response): Promise<void> => {
+      if (
+        !isValidLocalConfirmation(
+          (req.body as Record<string, unknown> | undefined)?.confirmation
+        )
+      ) {
+        structuredError(
+          res,
+          409,
+          "MANDATORY_CONFIRMATION_REQUIRED",
+          'Tunnel lifecycle mutations require an explicit local confirmation ("confirm" or "ยืนยัน").'
+        );
+        return;
+      }
+      try {
+        const result = await operation();
+        auditLogger.log({
+          event: "CHATGPT_TUNNEL_LIFECYCLE_MUTATION",
+          severity: "INFO",
+          actor: {
+            ip: req.ip,
+            authType: "session_cookie",
+            sessionId: res.locals.adminSessionId as string,
+          },
+          action,
+          resource: "chatgpt-tunnel",
+          outcome: "ALLOWED",
+          details: "Tunnel lifecycle mutation accepted by admin plane",
+        });
+        res.json(redactTunnelSecrets({ success: true, status: result }));
+      } catch (err) {
+        const mapped = tunnelErrorStatus(err);
+        structuredError(res, mapped.status, mapped.code, mapped.message, mapped.details);
+      }
+    };
+
+  router.post(
+    "/tunnel/start",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    tunnelMutation(startManagedTunnel, "POST /admin/tunnel/start")
+  );
+
+  router.post(
+    "/tunnel/stop",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    tunnelMutation(stopManagedTunnel, "POST /admin/tunnel/stop")
+  );
+
+  router.post(
+    "/tunnel/restart",
+    requireMutationOrigin,
+    requireAdminSession,
+    requireCsrf,
+    tunnelMutation(restartManagedTunnel, "POST /admin/tunnel/restart")
   );
 
   // Never fall through to the MCP Bearer/session middleware. Unknown admin

@@ -256,6 +256,40 @@ export const EN_MESSAGES = {
     "Connected",
   "shell.connections.not_connected":
     "Not Connected",
+  "shell.connections.chatgpt.lifecycle_title":
+    "ChatGPT / OpenAI Tunnel lifecycle",
+  "shell.connections.chatgpt.dependency_label":
+    "Tunnel client",
+  "shell.connections.chatgpt.profile_label":
+    "Tunnel profile",
+  "shell.connections.chatgpt.backend_label":
+    "Active backend",
+  "shell.connections.chatgpt.state_label":
+    "Tunnel state",
+  "shell.connections.chatgpt.ownership_label":
+    "Ownership",
+  "shell.connections.chatgpt.managed":
+    "WinHelm-managed",
+  "shell.connections.chatgpt.external_unmanaged":
+    "External / unmanaged",
+  "shell.connections.chatgpt.action_start":
+    "Start",
+  "shell.connections.chatgpt.action_stop":
+    "Stop",
+  "shell.connections.chatgpt.action_restart":
+    "Restart",
+  "shell.connections.chatgpt.action_doctor":
+    "Doctor",
+  "shell.connections.chatgpt.confirm_hint":
+    'Type "confirm" (or "ยืนยัน") to allow Start / Stop / Restart.',
+  "shell.connections.chatgpt.confirm_placeholder":
+    "confirm",
+  "shell.connections.chatgpt.external_notice":
+    "An externally managed tunnel daemon is running. WinHelm will not stop or restart it.",
+  "shell.connections.chatgpt.configure_hint":
+    "Configure the tunnel-client executable and profile with: winhelm tunnel configure",
+  "shell.connections.chatgpt.recovery_hint":
+    'Run "winhelm tunnel doctor" for detailed readiness and recovery guidance.',
   "shell.settings.title":
     "Settings",
   "shell.settings.profile":
@@ -598,6 +632,40 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "เชื่อมต่อแล้ว",
   "shell.connections.not_connected":
     "ไม่ได้เชื่อมต่อ",
+  "shell.connections.chatgpt.lifecycle_title":
+    "วงจรชีวิต ChatGPT / OpenAI Tunnel",
+  "shell.connections.chatgpt.dependency_label":
+    "ไคลเอนต์ทันเนล",
+  "shell.connections.chatgpt.profile_label":
+    "โพรไฟล์ทันเนล",
+  "shell.connections.chatgpt.backend_label":
+    "แบ็กเอนด์ที่ใช้งานอยู่",
+  "shell.connections.chatgpt.state_label":
+    "สถานะทันเนล",
+  "shell.connections.chatgpt.ownership_label":
+    "เจ้าของกระบวนการ",
+  "shell.connections.chatgpt.managed":
+    "WinHelm จัดการเอง",
+  "shell.connections.chatgpt.external_unmanaged":
+    "ภายนอก / ไม่ได้รับการจัดการ",
+  "shell.connections.chatgpt.action_start":
+    "เริ่ม",
+  "shell.connections.chatgpt.action_stop":
+    "หยุด",
+  "shell.connections.chatgpt.action_restart":
+    "รีสตาร์ต",
+  "shell.connections.chatgpt.action_doctor":
+    "ตรวจสอบ (Doctor)",
+  "shell.connections.chatgpt.confirm_hint":
+    'พิมพ์ "confirm" (หรือ "ยืนยัน") เพื่ออนุญาต เริ่ม / หยุด / รีสตาร์ต',
+  "shell.connections.chatgpt.confirm_placeholder":
+    "confirm",
+  "shell.connections.chatgpt.external_notice":
+    "มีดีมอนทันเนลที่จัดการจากภายนอกกำลังทำงานอยู่ WinHelm จะไม่หยุดหรือรีสตาร์ตกระบวนการนี้",
+  "shell.connections.chatgpt.configure_hint":
+    "กำหนดค่าไคลเอนต์ทันเนลและโพรไฟล์ด้วยคำสั่ง: winhelm tunnel configure",
+  "shell.connections.chatgpt.recovery_hint":
+    'รัน "winhelm tunnel doctor" เพื่อดูสถานะความพร้อมและแนวทางการกู้คืนอย่างละเอียด',
   "shell.settings.title":
     "การตั้งค่า",
   "shell.settings.profile":
