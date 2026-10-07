@@ -11,6 +11,7 @@ import { LocalControlServer } from "./cli/control-server.js";
 import { runControlCliCommand } from "./cli/commands.js";
 import { runSetupCliCommand } from "./cli/setup.js";
 import { runConnectCliCommand } from "./cli/connect.js";
+import { runTunnelCliCommand } from "./cli/tunnel.js";
 import { buildSchemaV2CliPermissionUpdates } from "./config/runtime-overrides.js";
 import { initializeApprovalPersistence } from "./approval/runtime.js";
 import { defaultApprovalJournalPath } from "./approval/journal.js";
@@ -56,6 +57,16 @@ Usage:
   winhelm connect <claude|cursor|all> [--config <path>] [--yes|--dry-run]
   winhelm setup [--preset <name>] [--folder <path>] [--answers <file.json>] [--yes] [--dry-run]
   winhelm setup --migrate-legacy [--folder <path>] [--yes|--dry-run]
+  winhelm tunnel status|doctor|configure|start|stop|restart
+
+ChatGPT/OpenAI Tunnel (local recovery surface):
+  winhelm tunnel status            Show dependency/profile/backend/daemon state (read-only)
+  winhelm tunnel doctor            Run read-only readiness checks
+  winhelm tunnel configure         Persist non-secret lifecycle paths (--exe --profile [--marker] [--health-url])
+  winhelm tunnel start|stop|restart
+                                   Manage the WinHelm-managed tunnel daemon only.
+                                   Tailscale Funnel / Serve remains an advanced, manual
+                                   integration and is never managed by these commands.
 
 Setup:
   --preset <name>       safe, balanced, power, minimal, core, dev, sysadmin, or full
@@ -106,6 +117,14 @@ async function main() {
     if (controlCli.output) console.log(controlCli.output);
     if (controlCli.error) console.error(controlCli.error);
     process.exitCode = controlCli.exitCode;
+    return;
+  }
+
+  const tunnelCli = await runTunnelCliCommand(args);
+  if (tunnelCli.handled) {
+    if (tunnelCli.output) console.log(tunnelCli.output);
+    if (tunnelCli.error) console.error(tunnelCli.error);
+    process.exitCode = tunnelCli.exitCode;
     return;
   }
 
