@@ -938,14 +938,91 @@ async function assertStartPreconditions(config: TunnelLifecycleConfig): Promise<
   }
 }
 
-async function killManagedChild(pid: number): Promise<void> {
-  // Only ever called for a PID produced by THIS start attempt.
-  await taskkill(pid, false, true);
-  const graceful = await waitForExit(pid, STOP_GRACEFUL_TIMEOUT_MS);
-  if (!graceful) {
-    await taskkill(pid, true, true);
-    await waitForExit(pid, STOP_FORCE_TIMEOUT_MS);
+export interface StartAttemptIdentity {
+  pid: number;
+  executablePath: string;
+  processCreatedAt: string;
+}
+
+export interface CleanupStartAttemptDeps {
+  queryIdentity?: (pid: number) => Promise<ProcessIdentity>;
+  isAlive?: (pid: number) => boolean;
+  taskkill?: (pid: number, force: boolean, tree: boolean) => Promise<void>;
+  waitForExit?: (pid: number, timeoutMs: number) => Promise<boolean>;
+  gracefulTimeoutMs?: number;
+  forceTimeoutMs?: number;
+}
+
+export async function cleanupManagedStartAttempt(
+  identity: StartAttemptIdentity,
+  deps?: CleanupStartAttemptDeps
+): Promise<{ gracefulKilled: boolean; forceKilled: boolean; skippedReason?: string }> {
+  const queryFn = deps?.queryIdentity ?? queryProcessIdentity;
+  const isAliveFn =
+    deps?.isAlive ??
+    ((pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  const taskkillFn = deps?.taskkill ?? taskkill;
+  const waitFn = deps?.waitForExit ?? waitForExit;
+  const gracefulTimeout = deps?.gracefulTimeoutMs ?? STOP_GRACEFUL_TIMEOUT_MS;
+  const forceTimeout = deps?.forceTimeoutMs ?? STOP_FORCE_TIMEOUT_MS;
+
+  // 1. Process must be alive
+  if (!isAliveFn(identity.pid)) {
+    return { gracefulKilled: false, forceKilled: false, skippedReason: "process_not_alive" };
   }
+
+  // 2. Initial identity proof before graceful taskkill
+  const observed1 = await queryFn(identity.pid);
+  const proven1 = isManagedIdentityProven({
+    observedExists: observed1.exists,
+    observedExecutablePath: observed1.executablePath,
+    observedCreatedAtIso: observed1.createdAtIso,
+    persistedPid: identity.pid,
+    persistedExecutablePath: identity.executablePath,
+    persistedProcessCreatedAt: identity.processCreatedAt,
+  });
+
+  if (!proven1) {
+    return { gracefulKilled: false, forceKilled: false, skippedReason: "initial_identity_unproven" };
+  }
+
+  // 3. Graceful cleanup kill (tree kill on proven PID)
+  await taskkillFn(identity.pid, false, true);
+  const exitedGracefully = await waitFn(identity.pid, gracefulTimeout);
+  if (exitedGracefully) {
+    return { gracefulKilled: true, forceKilled: false };
+  }
+
+  // 4. Before force-kill escalation, re-prove identity again
+  if (!isAliveFn(identity.pid)) {
+    return { gracefulKilled: true, forceKilled: false, skippedReason: "exited_before_force" };
+  }
+
+  const observed2 = await queryFn(identity.pid);
+  const proven2 = isManagedIdentityProven({
+    observedExists: observed2.exists,
+    observedExecutablePath: observed2.executablePath,
+    observedCreatedAtIso: observed2.createdAtIso,
+    persistedPid: identity.pid,
+    persistedExecutablePath: identity.executablePath,
+    persistedProcessCreatedAt: identity.processCreatedAt,
+  });
+
+  if (!proven2) {
+    return { gracefulKilled: true, forceKilled: false, skippedReason: "force_identity_unproven" };
+  }
+
+  // 5. Force cleanup kill (only still-proven exact start-attempt identity)
+  await taskkillFn(identity.pid, true, true);
+  await waitFn(identity.pid, forceTimeout);
+  return { gracefulKilled: true, forceKilled: true };
 }
 
 export async function startManagedTunnel(): Promise<TunnelStatus> {
@@ -1059,8 +1136,8 @@ export async function startManagedTunnel(): Promise<TunnelStatus> {
     failureReason = "Managed tunnel start timed out before /healthz and /readyz passed.";
   }
 
-  // Clean up ONLY the process created by this start attempt.
-  await killManagedChild(pid);
+  // Clean up ONLY the process created by this start attempt, proving identity first.
+  await cleanupManagedStartAttempt(state);
   await removeQuiet(stateFilePath(MANAGED_STATE_FILE));
   await removeQuiet(urlFile);
   throw new TunnelLifecycleError("TUNNEL_START_FAILED", failureReason, { pid });
