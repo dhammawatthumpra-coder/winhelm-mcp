@@ -282,6 +282,62 @@ export const EN_MESSAGES = {
     "Admin Unlocked",
   "shell.admin.status_locked":
     "Read-Only (Locked)",
+  "shell.nav.setup":
+    "Setup",
+  "shell.setup.title":
+    "Guided Setup",
+  "shell.setup.desc":
+    "Complete first-run configuration without editing JSON. This checklist derives its status from live backend state.",
+  "shell.setup.recheck":
+    "Recheck Status",
+  "shell.setup.locked":
+    "Unlock the admin session (top right) to load live setup status.",
+  "shell.setup.step.workspace":
+    "Workspace Folders",
+  "shell.setup.step.profile":
+    "Capability Profile",
+  "shell.setup.step.approval":
+    "Approval Mode",
+  "shell.setup.step.client":
+    "Connect Claude Desktop or Cursor",
+  "shell.setup.step.observe":
+    "Connection Observation",
+  "shell.setup.step.first_action":
+    "First Safe Action",
+  "shell.setup.step.orientation":
+    "Where Things Live",
+  "shell.setup.status.complete":
+    "Complete",
+  "shell.setup.status.incomplete":
+    "Incomplete",
+  "shell.setup.status.configured":
+    "Configured",
+  "shell.setup.status.needs_configuration":
+    "Needs Configuration",
+  "shell.setup.status.attention":
+    "Attention",
+  "shell.setup.status.active":
+    "Active Session Observed",
+  "shell.setup.status.not_observed":
+    "No Active Session Observed",
+  "shell.setup.current":
+    "Current",
+  "shell.setup.open_access":
+    "Open Access",
+  "shell.setup.open_settings":
+    "Open Settings",
+  "shell.setup.open_connections":
+    "Open Connections",
+  "shell.setup.open_approvals":
+    "Open Approvals",
+  "shell.setup.open_activity":
+    "Open Activity",
+  "shell.setup.first_action.body":
+    "In your connected client, ask: \u201cUse WinHelm to list the files in my workspace folder.\u201d This is instruction text only; the browser never executes MCP tools.",
+  "shell.setup.orientation.body":
+    "Approve or deny pending tool actions under Approvals. Review every tool call and security event under Activity.",
+  "shell.connections.restart_hint":
+    "If this client was running, restart it or reconnect so the new configuration is loaded.",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -568,6 +624,62 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "ปลดล็อกผู้ดูแลแล้ว",
   "shell.admin.status_locked":
     "อ่านอย่างเดียว (ล็อกอยู่)",
+  "shell.nav.setup":
+    "การตั้งค่าเริ่มต้น",
+  "shell.setup.title":
+    "การตั้งค่าแบบแนะนำ",
+  "shell.setup.desc":
+    "ทำการตั้งค่าครั้งแรกให้เสร็จโดยไม่ต้องแก้ไฟล์ JSON เอง รายการนี้อ่านสถานะจาก backend จริงเสมอ",
+  "shell.setup.recheck":
+    "ตรวจสถานะอีกครั้ง",
+  "shell.setup.locked":
+    "ปลดล็อกเซสชันผู้ดูแล (มุมขวาบน) เพื่อโหลดสถานะการตั้งค่าจริง",
+  "shell.setup.step.workspace":
+    "โฟลเดอร์เวิร์กสเปซ",
+  "shell.setup.step.profile":
+    "โพรไฟล์ความสามารถ",
+  "shell.setup.step.approval":
+    "โหมดการอนุมัติ",
+  "shell.setup.step.client":
+    "เชื่อมต่อ Claude Desktop หรือ Cursor",
+  "shell.setup.step.observe":
+    "การสังเกตการเชื่อมต่อ",
+  "shell.setup.step.first_action":
+    "การใช้งานปลอดภัยครั้งแรก",
+  "shell.setup.step.orientation":
+    "ส่วนต่าง ๆ อยู่ที่ไหน",
+  "shell.setup.status.complete":
+    "ครบถ้วน",
+  "shell.setup.status.incomplete":
+    "ยังไม่ครบถ้วน",
+  "shell.setup.status.configured":
+    "กำหนดค่าแล้ว",
+  "shell.setup.status.needs_configuration":
+    "ต้องกำหนดค่า",
+  "shell.setup.status.attention":
+    "ต้องตรวจสอบ",
+  "shell.setup.status.active":
+    "ตรวจพบเซสชันที่ใช้งานอยู่",
+  "shell.setup.status.not_observed":
+    "ยังไม่พบเซสชันที่ใช้งานอยู่",
+  "shell.setup.current":
+    "ปัจจุบัน",
+  "shell.setup.open_access":
+    "เปิดหน้าการเข้าถึง",
+  "shell.setup.open_settings":
+    "เปิดหน้าการตั้งค่า",
+  "shell.setup.open_connections":
+    "เปิดหน้าการเชื่อมต่อ",
+  "shell.setup.open_approvals":
+    "เปิดหน้าการอนุมัติ",
+  "shell.setup.open_activity":
+    "เปิดหน้ากิจกรรม",
+  "shell.setup.first_action.body":
+    "ในไคลเอนต์ที่เชื่อมต่อแล้ว ลองสั่งว่า \u201cใช้ WinHelm ลิสต์ไฟล์ในโฟลเดอร์เวิร์กสเปซของฉัน\u201d ข้อความนี้เป็นคำแนะนำเท่านั้น เบราว์เซอร์ไม่เรียกเครื่องมือ MCP เอง",
+  "shell.setup.orientation.body":
+    "อนุมัติหรือปฏิเสธการทำงานที่รออยู่ในหน้าการอนุมัติ และตรวจทุกการเรียกเครื่องมือรวมถึงเหตุการณ์ด้านความปลอดภัยในหน้ากิจกรรม",
+  "shell.connections.restart_hint":
+    "หากไคลเอนต์นี้เปิดค้างอยู่ ให้รีสตาร์ตหรือเชื่อมต่อใหม่เพื่อโหลดการกำหนดค่าใหม่",
 };
 
 export const MESSAGE_CATALOGS: Record<

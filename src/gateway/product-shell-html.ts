@@ -120,6 +120,34 @@ export function getProductShellHtml(
     tokenNew: t("dashboard.token.new"),
     tokenOnce: t("dashboard.token.once"),
     fullWarn: t("mode.full.warn"),
+    navSetup: t("shell.nav.setup"),
+    setupTitle: t("shell.setup.title"),
+    setupDesc: t("shell.setup.desc"),
+    setupRecheck: t("shell.setup.recheck"),
+    setupLocked: t("shell.setup.locked"),
+    setupStepWorkspace: t("shell.setup.step.workspace"),
+    setupStepProfile: t("shell.setup.step.profile"),
+    setupStepApproval: t("shell.setup.step.approval"),
+    setupStepClient: t("shell.setup.step.client"),
+    setupStepObserve: t("shell.setup.step.observe"),
+    setupStepFirstAction: t("shell.setup.step.first_action"),
+    setupStepOrientation: t("shell.setup.step.orientation"),
+    setupStatusComplete: t("shell.setup.status.complete"),
+    setupStatusIncomplete: t("shell.setup.status.incomplete"),
+    setupStatusConfigured: t("shell.setup.status.configured"),
+    setupStatusNeedsConfiguration: t("shell.setup.status.needs_configuration"),
+    setupStatusAttention: t("shell.setup.status.attention"),
+    setupStatusActive: t("shell.setup.status.active"),
+    setupStatusNotObserved: t("shell.setup.status.not_observed"),
+    setupCurrent: t("shell.setup.current"),
+    setupOpenAccess: t("shell.setup.open_access"),
+    setupOpenSettings: t("shell.setup.open_settings"),
+    setupOpenConnections: t("shell.setup.open_connections"),
+    setupOpenApprovals: t("shell.setup.open_approvals"),
+    setupOpenActivity: t("shell.setup.open_activity"),
+    setupFirstActionBody: t("shell.setup.first_action.body"),
+    setupOrientationBody: t("shell.setup.orientation.body"),
+    connRestartHint: t("shell.connections.restart_hint"),
   };
 
   const clientScriptMessages = JSON.stringify(messages).replace(/</g, "\\u003c");
@@ -574,6 +602,9 @@ export function getProductShellHtml(
       <button class="nav-item active" data-tab="overview" onclick="showTab('overview')">
         <span>${escapeHtml(messages.navOverview)}</span>
       </button>
+      <button class="nav-item" data-tab="setup" onclick="showTab('setup')">
+        <span>${escapeHtml(messages.navSetup)}</span>
+      </button>
       <button class="nav-item" data-tab="access" onclick="showTab('access')">
         <span>${escapeHtml(messages.navAccess)}</span>
       </button>
@@ -651,6 +682,96 @@ export function getProductShellHtml(
           <div class="card-label">${escapeHtml(messages.connectionsTitle)}</div>
           <div id="overviewConnectionsList" style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;">
             <div style="font-size: 13px; color: var(--text-muted);">Checking client sessions…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. SETUP PANEL (M3A Phase 1 guided first-run) -->
+      <section id="panel-setup" class="panel">
+        <div class="panel-header">
+          <h1 class="panel-title">${escapeHtml(messages.setupTitle)}</h1>
+          <p class="panel-desc">${escapeHtml(messages.setupDesc)}</p>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+          <button class="btn btn-secondary" onclick="refreshAllData()">${escapeHtml(messages.setupRecheck)}</button>
+        </div>
+
+        <div id="setupLockedNotice" class="banner banner-info" style="display:none;">
+          ${escapeHtml(messages.setupLocked)}
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">${escapeHtml(messages.setupStepWorkspace)}</span>
+            <span id="setupWorkspaceStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupWorkspaceDetail" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;"></div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-secondary" onclick="showTab('access')">${escapeHtml(messages.setupOpenAccess)}</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">${escapeHtml(messages.setupStepProfile)}</span>
+            <span id="setupProfileStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupProfileDetail" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;"></div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-secondary" onclick="showTab('access')">${escapeHtml(messages.setupOpenAccess)}</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">${escapeHtml(messages.setupStepApproval)}</span>
+            <span id="setupApprovalStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupApprovalDetail" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;"></div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-secondary" onclick="showTab('settings')">${escapeHtml(messages.setupOpenSettings)}</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">${escapeHtml(messages.setupStepClient)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+            <span id="setupClientClaudeName" style="font-size: 13px;">${escapeHtml(messages.connClaudeLabel)}</span>
+            <span id="setupClientClaudeStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupClientClaudeDetail" style="font-size: 12px; color: var(--text-muted); margin-top: 4px; word-break: break-all;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+            <span style="font-size: 13px;">${escapeHtml(messages.connCursorLabel)}</span>
+            <span id="setupClientCursorStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupClientCursorDetail" style="font-size: 12px; color: var(--text-muted); margin-top: 4px; word-break: break-all;"></div>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-secondary" onclick="showTab('connections')">${escapeHtml(messages.setupOpenConnections)}</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">${escapeHtml(messages.setupStepObserve)}</span>
+            <span id="setupSessionsStatus" class="badge badge-neutral">—</span>
+          </div>
+          <div id="setupSessionsDetail" style="font-size: 13px; color: var(--text-muted); margin-top: 8px;"></div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="card-label">${escapeHtml(messages.setupStepFirstAction)}</div>
+          <div style="font-size: 14px; margin-top: 8px;">${escapeHtml(messages.setupFirstActionBody)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="card-label">${escapeHtml(messages.setupStepOrientation)}</div>
+          <div style="font-size: 14px; margin-top: 8px;">${escapeHtml(messages.setupOrientationBody)}</div>
+          <div style="display: flex; gap: 12px; margin-top: 12px;">
+            <button class="btn btn-secondary" onclick="showTab('approvals')">${escapeHtml(messages.setupOpenApprovals)}</button>
+            <button class="btn btn-secondary" onclick="showTab('activity')">${escapeHtml(messages.setupOpenActivity)}</button>
           </div>
         </div>
       </section>
@@ -778,8 +899,8 @@ export function getProductShellHtml(
             </div>
             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">Direct local client connection via native config update.</p>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-secondary" onclick="handleClientPreview('claude-desktop')">Preview</button>
-              <button class="btn btn-primary" onclick="handleClientApply('claude-desktop')">${escapeHtml(messages.connConfigure)}</button>
+              <button class="btn btn-secondary" onclick="handleClientPreview('claude')">Preview</button>
+              <button class="btn btn-primary" onclick="handleClientApply('claude')">${escapeHtml(messages.connConfigure)}</button>
             </div>
           </div>
 
@@ -897,6 +1018,10 @@ export function getProductShellHtml(
     let activityCache = [];
     let currentActivityFilter = 'all';
     let pendingApprovalShortcuts = [];
+    let setupAutoSurfaced = false;
+    let lastProfile = null;
+    let lastSessions = [];
+    let lastClientStatus = [];
 
     function escapeHtml(str) {
       if (str === null || str === undefined) return '';
@@ -1101,23 +1226,130 @@ export function getProductShellHtml(
     async function fetchAdminData() {
       if (!isAdminUnlocked) return;
       try {
-        const [profileRes, approvalsRes, sessionsRes] = await Promise.all([
+        const [profileRes, approvalsRes, sessionsRes, clientStatusRes] = await Promise.all([
           apiRequest('/admin/profile').catch(() => null),
           apiRequest('/admin/approvals').catch(() => null),
-          apiRequest('/admin/sessions').catch(() => null)
+          apiRequest('/admin/sessions').catch(() => null),
+          apiRequest('/admin/clients/status').catch(() => null)
         ]);
 
         if (profileRes && profileRes.profile) {
+          lastProfile = profileRes.profile;
           renderProfileData(profileRes.profile);
         }
         if (approvalsRes && Array.isArray(approvalsRes.jobs)) {
           renderApprovals(approvalsRes.jobs);
         }
         if (sessionsRes && Array.isArray(sessionsRes.sessions)) {
+          lastSessions = sessionsRes.sessions;
           renderSessions(sessionsRes.sessions);
+        }
+        if (clientStatusRes && Array.isArray(clientStatusRes.clients)) {
+          lastClientStatus = clientStatusRes.clients;
+        }
+        renderSetup();
+
+        const profileFolders = (profileRes && profileRes.profile && Array.isArray(profileRes.profile.folders))
+          ? profileRes.profile.folders
+          : [];
+        if (!setupAutoSurfaced && profileFolders.length === 0) {
+          setupAutoSurfaced = true;
+          showTab('setup');
         }
       } catch (e) {
         console.warn('Admin fetch error', e);
+      }
+    }
+
+    function setupBadgeClass(status) {
+      if (status === 'complete' || status === 'configured' || status === 'active') return 'badge-success';
+      if (status === 'attention') return 'badge-danger';
+      if (status === 'needs_configuration' || status === 'incomplete') return 'badge-warning';
+      return 'badge-neutral';
+    }
+
+    function setSetupBadge(id, label, status) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = label;
+      el.className = 'badge ' + setupBadgeClass(status);
+    }
+
+    function renderSetupClientStatus(clientKey, statusId, detailId) {
+      const entry = (lastClientStatus || []).find(c => c.client === clientKey);
+      const statusEl = document.getElementById(statusId);
+      const detailEl = document.getElementById(detailId);
+      if (!statusEl || !detailEl) return;
+      if (!entry) {
+        statusEl.textContent = '—';
+        statusEl.className = 'badge badge-neutral';
+        detailEl.textContent = '';
+        return;
+      }
+      const labels = {
+        configured: SHELL_MESSAGES.setupStatusConfigured,
+        needs_configuration: SHELL_MESSAGES.setupStatusNeedsConfiguration,
+        attention: SHELL_MESSAGES.setupStatusAttention
+      };
+      statusEl.textContent = labels[entry.status] || entry.status;
+      statusEl.className = 'badge ' + setupBadgeClass(entry.status);
+      const detailParts = [];
+      if (entry.configPath) detailParts.push(entry.configPath);
+      if (entry.errorCode) detailParts.push(entry.errorCode);
+      if (entry.warningCount > 0) detailParts.push('warnings: ' + entry.warningCount);
+      detailEl.textContent = detailParts.join(' · ');
+    }
+
+    function renderSetup() {
+      const lockedNotice = document.getElementById('setupLockedNotice');
+      if (!lockedNotice) return;
+      if (!isAdminUnlocked) {
+        lockedNotice.style.display = 'block';
+        return;
+      }
+      lockedNotice.style.display = 'none';
+
+      const profile = lastProfile;
+      const folders = profile && Array.isArray(profile.folders) ? profile.folders : [];
+      const workspaceComplete = folders.length > 0;
+      setSetupBadge('setupWorkspaceStatus',
+        workspaceComplete ? SHELL_MESSAGES.setupStatusComplete : SHELL_MESSAGES.setupStatusIncomplete,
+        workspaceComplete ? 'complete' : 'incomplete');
+      const workspaceDetail = document.getElementById('setupWorkspaceDetail');
+      if (workspaceDetail) {
+        workspaceDetail.textContent = folders.map(f => f.path).join('; ');
+      }
+
+      const preset = profile ? (profile.preset || (profile.schemaMode === 'legacy' ? 'legacy' : '')) : '';
+      setSetupBadge('setupProfileStatus',
+        preset ? SHELL_MESSAGES.setupStatusComplete : SHELL_MESSAGES.setupStatusIncomplete,
+        preset ? 'complete' : 'incomplete');
+      const profileDetail = document.getElementById('setupProfileDetail');
+      if (profileDetail) {
+        profileDetail.textContent = SHELL_MESSAGES.setupCurrent + ': ' + (preset || '-');
+      }
+
+      const approvalMode = profile ? profile.approvalMode : '';
+      setSetupBadge('setupApprovalStatus',
+        approvalMode ? SHELL_MESSAGES.setupStatusComplete : SHELL_MESSAGES.setupStatusIncomplete,
+        approvalMode ? 'complete' : 'incomplete');
+      const approvalDetail = document.getElementById('setupApprovalDetail');
+      if (approvalDetail) {
+        approvalDetail.textContent = SHELL_MESSAGES.setupCurrent + ': ' + (approvalMode || '-');
+      }
+
+      renderSetupClientStatus('claude', 'setupClientClaudeStatus', 'setupClientClaudeDetail');
+      renderSetupClientStatus('cursor', 'setupClientCursorStatus', 'setupClientCursorDetail');
+
+      const activeCount = (lastSessions || []).length;
+      setSetupBadge('setupSessionsStatus',
+        activeCount > 0 ? SHELL_MESSAGES.setupStatusActive : SHELL_MESSAGES.setupStatusNotObserved,
+        activeCount > 0 ? 'active' : 'neutral');
+      const sessionsDetail = document.getElementById('setupSessionsDetail');
+      if (sessionsDetail) {
+        sessionsDetail.textContent = lastSessions
+          .map(s => ((s.clientInfo && s.clientInfo.name) || 'Client') + ' (' + (s.sessionId || 'n/a') + ')')
+          .join('; ');
       }
     }
 
@@ -1405,7 +1637,7 @@ export function getProductShellHtml(
       resBox.textContent = 'Configuring client…';
       try {
         const body = await apiRequest('/admin/clients/' + encodeURIComponent(clientName) + '/apply', { method: 'POST' });
-        resBox.textContent = 'Client configured successfully.' + (body.backupPath ? ('\\nBackup created: ' + body.backupPath) : '');
+        resBox.textContent = 'Client configured successfully.' + (body.backupPath ? ('\\nBackup created: ' + body.backupPath) : '') + '\\n' + SHELL_MESSAGES.connRestartHint;
       } catch (err) {
         resBox.textContent = 'Client configure error: ' + (err.message || String(err));
       }

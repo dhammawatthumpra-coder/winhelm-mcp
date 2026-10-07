@@ -1242,6 +1242,60 @@ export function registerAdminRoutes(app: Express): void {
     }
   );
 
+  // M3A Phase 1: read-only onboarding projection. Derives each supported
+  // client's configuration status from the same preview semantics the apply
+  // path uses; it never mutates client configuration and never exposes
+  // config file contents.
+  const CLIENT_STATUS_DISPLAY_NAMES: Record<SupportedMcpClient, string> = {
+    claude: "Claude Desktop",
+    cursor: "Cursor",
+  };
+
+  router.get(
+    "/clients/status",
+    requireAdminSession,
+    async (_req: Request, res: Response) => {
+      const manager = ConfigManager.getInstance();
+      const clients: SupportedMcpClient[] = ["claude", "cursor"];
+      const statuses = await Promise.all(
+        clients.map(async (client) => {
+          try {
+            const preview = await previewClientConnection(
+              client,
+              manager.getConfigFilePath()
+            );
+            return {
+              client,
+              displayName: preview.target.displayName,
+              status: preview.changed
+                ? ("needs_configuration" as const)
+                : ("configured" as const),
+              configPath: preview.target.configPath,
+              configFileExists: preview.target.configFileExists,
+              warningCount: preview.warnings.length,
+            };
+          } catch (err) {
+            if (err instanceof ClientConnectionError) {
+              return {
+                client,
+                displayName: CLIENT_STATUS_DISPLAY_NAMES[client],
+                status: "attention" as const,
+                errorCode: err.code,
+              };
+            }
+            return {
+              client,
+              displayName: CLIENT_STATUS_DISPLAY_NAMES[client],
+              status: "attention" as const,
+              errorCode: "INTERNAL_ERROR",
+            };
+          }
+        })
+      );
+      res.json({ clients: statuses });
+    }
+  );
+
   router.get(
     "/approvals",
     requireAdminSession,
