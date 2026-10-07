@@ -29,6 +29,10 @@ export interface FolderAccessOptions {
    * Protected config/data/audit/install paths override ordinary folder grants.
    */
   protectedPaths?: ProtectedPathRule[];
+  /**
+   * Pre-canonicalized authorization context for repeated batch checks.
+   */
+  preparedContext?: PreparedFolderAccessContext;
 }
 
 export type FolderAccessCode =
@@ -83,6 +87,73 @@ function isInsideOrEqual(root: string, target: string): boolean {
   const targetCmp = normalizeForCompare(target);
   const relative = path.relative(rootCmp, targetCmp);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+export function normalizePathForCompare(value: string): string {
+  return normalizeForCompare(value);
+}
+
+export function isInsideOrEqualPrecomputed(rootCmp: string, targetCmp: string): boolean {
+  const relative = path.relative(rootCmp, targetCmp);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+export interface PreparedFolderAccessCandidate {
+  configured: FolderPermission;
+  canonicalRoot: string;
+  normalizedRootForCompare: string;
+}
+
+export interface PreparedProtectedRule {
+  rule: ProtectedPathRule;
+  canonicalPath: string;
+  normalizedForCompare: string;
+}
+
+export interface PreparedFolderAccessContext {
+  preparedRules: PreparedProtectedRule[];
+  candidates: PreparedFolderAccessCandidate[];
+}
+
+export function prepareFolderAccessContext(
+  folders: FolderPermission[],
+  protectedPaths: ProtectedPathRule[] = []
+): PreparedFolderAccessContext {
+  const candidates: PreparedFolderAccessCandidate[] = [];
+  for (const configured of folders) {
+    try {
+      const canonicalRoot = canonicalizeExistingAware(configured.path);
+      candidates.push({
+        configured,
+        canonicalRoot,
+        normalizedRootForCompare: normalizeForCompare(canonicalRoot),
+      });
+    } catch {
+      // Invalid/inaccessible configured roots cannot grant permission.
+    }
+  }
+
+  // Most-specific folder wins when roots overlap.
+  candidates.sort((a, b) => b.canonicalRoot.length - a.canonicalRoot.length);
+
+  const preparedRules: PreparedProtectedRule[] = [];
+  for (const rule of protectedPaths) {
+    try {
+      const canonicalPath = canonicalizeExistingAware(rule.path);
+      preparedRules.push({
+        rule,
+        canonicalPath,
+        normalizedForCompare: normalizeForCompare(canonicalPath),
+      });
+    } catch {
+      // Malformed protected rule never grants access.
+    }
+  }
+
+  return {
+    preparedRules,
+    candidates,
+  };
 }
 
 function findReparseTraversal(inputPath: string): string | undefined {
@@ -187,6 +258,70 @@ export function checkFolderAccess(
       allowed: false,
       code: "PATH_INVALID",
       reason: `Unable to canonicalize path: ${rawPath}`,
+    };
+  }
+
+  if (options.preparedContext) {
+    const targetCmp = normalizeForCompare(canonicalPath);
+    for (const prep of options.preparedContext.preparedRules) {
+      const blocked =
+        prep.rule.kind === "tree"
+          ? isInsideOrEqualPrecomputed(prep.normalizedForCompare, targetCmp)
+          : prep.normalizedForCompare === targetCmp;
+
+      if (blocked) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Path is protected by WinHelm security policy: ${prep.rule.label || prep.rule.path}`,
+          canonicalPath,
+        };
+      }
+    }
+
+    const matched = options.preparedContext.candidates.find((c) =>
+      isInsideOrEqualPrecomputed(c.normalizedRootForCompare, targetCmp)
+    );
+
+    if (!matched) {
+      return {
+        allowed: false,
+        code: "FOLDER_NOT_APPROVED",
+        reason: `Path is outside configured schema-v2 folders: ${rawPath}`,
+        canonicalPath,
+      };
+    }
+
+    if (access === "write" && matched.configured.permission !== "readwrite") {
+      return {
+        allowed: false,
+        code: "FOLDER_READ_ONLY",
+        reason: `Folder "${matched.configured.alias || matched.configured.path}" is read-only.`,
+        canonicalPath,
+        matchedFolder: matched.configured,
+      };
+    }
+
+    if (
+      access === "write" &&
+      options.denyRootMutation === true &&
+      matched.normalizedRootForCompare === targetCmp
+    ) {
+      return {
+        allowed: false,
+        code: "FOLDER_ROOT_MUTATION",
+        reason: "The configured folder root cannot be deleted, moved, renamed, or replaced.",
+        canonicalPath,
+        matchedFolder: matched.configured,
+      };
+    }
+
+    return {
+      allowed: true,
+      code: "FOLDER_ALLOWED",
+      reason: "Folder permission allows this access.",
+      canonicalPath,
+      matchedFolder: matched.configured,
     };
   }
 

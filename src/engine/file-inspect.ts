@@ -292,6 +292,7 @@ export async function inspectFileBatch(
   }
 
   const started = Date.now();
+  const accessContext = manager.preparePathAccessContext("read");
   const items: FileInspectItem[] = [];
 
   for (const rawPath of paths) {
@@ -300,7 +301,7 @@ export async function inspectFileBatch(
 
     // Defense-in-depth authorization re-check; the M1 static/preapproval gate
     // already denied unapproved paths before the handler ran.
-    const pathCheck = manager.checkPathAccess(resolved, "read");
+    const pathCheck = accessContext.checkPathAccess(resolved);
     if (!pathCheck.allowed) {
       fail(
         pathCheck.code ?? "FOLDER_ACCESS_DENIED",

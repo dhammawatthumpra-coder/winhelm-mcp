@@ -22,6 +22,9 @@ import {
 import {
   canonicalizeExistingAwarePath,
   checkFolderAccess,
+  isInsideOrEqualPrecomputed,
+  normalizePathForCompare,
+  prepareFolderAccessContext,
   protectedRuleBlocksPath,
 } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
@@ -44,6 +47,15 @@ export function isWildcardAllowAll(dirs: string[] | undefined): boolean {
     const trimmed = d.trim().toLowerCase();
     return trimmed === "*" || trimmed === "all";
   });
+}
+
+export interface PreparedPathAccessContext {
+  readonly mode: ConfigMode;
+  readonly access: "read" | "write";
+  checkPathAccess(
+    targetPath: string,
+    options?: { denyRootMutation?: boolean; rejectReparseMutation?: boolean }
+  ): { allowed: boolean; reason?: string; code?: string };
 }
 
 export class ConfigManager {
@@ -782,6 +794,191 @@ export class ConfigManager {
   }
 
   /**
+   * Pre-canonicalize invariant authorization state for repeated batch checks.
+   * Scoped to the current configuration snapshot; does not maintain a global
+   * stale cache across updates or reloads.
+   */
+  public preparePathAccessContext(
+    access: "read" | "write" = "read",
+    options: { denyRootMutation?: boolean; rejectReparseMutation?: boolean } = {}
+  ): PreparedPathAccessContext {
+    const mode = this.configMode;
+
+    if (mode === "invalid") {
+      return {
+        mode,
+        access,
+        checkPathAccess: () => ({
+          allowed: false,
+          code: "CONFIG_INVALID",
+          reason: "WinHelm configuration is invalid; filesystem access is fail-closed.",
+        }),
+      };
+    }
+
+    if (mode === "v2") {
+      const installRootAccess =
+        this.config.development?.installRootAccess ?? "none";
+      const allowInstallRootAccess =
+        installRootAccess === "readwrite" ||
+        (access === "read" && installRootAccess === "read");
+      const protectedPaths = this.getProtectedPathRules({
+        includeInstallRoot: !allowInstallRootAccess,
+      });
+
+      const folderContext = prepareFolderAccessContext(
+        this.config.folders ?? [],
+        protectedPaths
+      );
+
+      const defaultDenyRootMutation = options.denyRootMutation;
+      const defaultRejectReparseMutation =
+        options.rejectReparseMutation ?? (access === "write");
+
+      return {
+        mode,
+        access,
+        checkPathAccess: (
+          targetPath: string,
+          callOptions: {
+            denyRootMutation?: boolean;
+            rejectReparseMutation?: boolean;
+          } = {}
+        ) => {
+          const result = checkFolderAccess(
+            targetPath,
+            access,
+            this.config.folders ?? [],
+            {
+              denyRootMutation:
+                callOptions.denyRootMutation ?? defaultDenyRootMutation,
+              rejectReparseMutation:
+                callOptions.rejectReparseMutation ?? defaultRejectReparseMutation,
+              preparedContext: folderContext,
+            }
+          );
+          return {
+            allowed: result.allowed,
+            reason: result.reason,
+            code: result.code,
+          };
+        },
+      };
+    }
+
+    // Legacy mode
+    const rules = this.getProtectedPathRules({ includeInstallRoot: false });
+    const preparedRules = rules
+      .map((r) => {
+        try {
+          const canonical = canonicalizeExistingAwarePath(r.path);
+          return {
+            rule: r,
+            canonical,
+            cmp: normalizePathForCompare(canonical),
+          };
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((p): p is { rule: (typeof rules)[0]; canonical: string; cmp: string } => Boolean(p));
+
+    const isWildcard = isWildcardAllowAll(this.config.allowedDirectories);
+    const noAllowedDirs =
+      !this.config.allowedDirectories ||
+      this.config.allowedDirectories.length === 0;
+
+    const preparedDirs: string[] = [];
+    if (!isWildcard && !noAllowedDirs) {
+      for (const dir of this.config.allowedDirectories ?? []) {
+        let cleanDir = dir.trim();
+        if (/^[a-zA-Z]:?[\\/]?$/.test(cleanDir)) {
+          cleanDir = cleanDir[0].toUpperCase() + ":\\";
+        }
+        let resolvedDir = path.resolve(cleanDir);
+        try {
+          if (existsSync(resolvedDir)) {
+            resolvedDir = realpathSync(resolvedDir);
+          }
+        } catch {
+          // fallback
+        }
+        let normDir = resolvedDir.toLowerCase();
+        if (!normDir.endsWith(path.sep)) {
+          normDir += path.sep;
+        }
+        preparedDirs.push(normDir);
+      }
+    }
+
+    return {
+      mode,
+      access,
+      checkPathAccess: (targetPath: string) => {
+        let canonicalTarget: string;
+        try {
+          canonicalTarget = canonicalizeExistingAwarePath(targetPath);
+        } catch {
+          try {
+            canonicalTarget = path.resolve(
+              String(targetPath).normalize("NFKC")
+            );
+          } catch {
+            return {
+              allowed: false,
+              reason: `Access to path "${targetPath}" is forbidden by allowedDirectories policy.`,
+            };
+          }
+        }
+
+        const targetCmp = normalizePathForCompare(canonicalTarget);
+        for (const p of preparedRules) {
+          const blocked =
+            p.rule.kind === "tree"
+              ? isInsideOrEqualPrecomputed(p.cmp, targetCmp)
+              : p.cmp === targetCmp;
+          if (blocked) {
+            return {
+              allowed: false,
+              code: "FOLDER_PROTECTED_PATH",
+              reason: `Path is protected by WinHelm security policy: ${p.rule.label || p.rule.path}`,
+            };
+          }
+        }
+
+        if (isWildcard) {
+          return { allowed: true };
+        }
+        if (noAllowedDirs) {
+          return {
+            allowed: false,
+            reason: `Access to path "${targetPath}" is blocked: no allowedDirectories configured. Set allowedDirectories to specific paths, or ["*"] to allow all (not recommended for public exposure).`,
+          };
+        }
+
+        const targetWithSep = targetCmp.endsWith(path.sep)
+          ? targetCmp
+          : targetCmp + path.sep;
+
+        const isAllowed = preparedDirs.some(
+          (normDir) =>
+            targetWithSep.startsWith(normDir) ||
+            targetCmp === normDir.slice(0, -1)
+        );
+
+        if (!isAllowed) {
+          return {
+            allowed: false,
+            reason: `Access to path "${targetPath}" is forbidden by allowedDirectories policy. Allowed roots: ${this.config.allowedDirectories?.join(", ")}`,
+          };
+        }
+
+        return { allowed: true };
+      },
+    };
+  }
+
+  /**
    * Unified filesystem authorization bridge.
    *
    * Legacy mode preserves v1.2.1 allowedDirectories behavior.
@@ -791,8 +988,16 @@ export class ConfigManager {
   public checkPathAccess(
     targetPath: string,
     access: "read" | "write" = "read",
-    options: { denyRootMutation?: boolean; rejectReparseMutation?: boolean } = {}
+    options: {
+      denyRootMutation?: boolean;
+      rejectReparseMutation?: boolean;
+      preparedContext?: PreparedPathAccessContext;
+    } = {}
   ): { allowed: boolean; reason?: string; code?: string } {
+    if (options.preparedContext) {
+      return options.preparedContext.checkPathAccess(targetPath, options);
+    }
+
     if (this.configMode === "invalid") {
       return {
         allowed: false,
