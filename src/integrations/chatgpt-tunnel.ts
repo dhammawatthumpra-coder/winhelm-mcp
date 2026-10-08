@@ -26,7 +26,7 @@ import { spawn, execFile } from "node:child_process";
  */
 
 export const QUALIFIED_TUNNEL_CLIENT_VERSION =
-  "0.0.15+a390c168ff1b2d14e73a95991c186c6aba3ff5a0";
+  "0.0.16+5f99daabd4aa4a77049e6d81d54a0d8c18335397";
 
 const LIFECYCLE_CONFIG_FILE = "lifecycle-config.json";
 const MANAGED_STATE_FILE = "managed-state.json";
@@ -36,6 +36,7 @@ const VERSION_PROBE_TIMEOUT_MS = 8_000;
 const GIT_TIMEOUT_MS = 10_000;
 const IDENTITY_PROBE_TIMEOUT_MS = 8_000;
 const HEALTH_PROBE_TIMEOUT_MS = 2_000;
+const CONTROL_PLANE_HEALTH_TIMEOUT_MS = 5_000;
 const START_READINESS_TIMEOUT_MS = 20_000;
 const START_POLL_INTERVAL_MS = 250;
 const STOP_GRACEFUL_TIMEOUT_MS = 3_000;
@@ -397,6 +398,73 @@ async function probeDaemonHealth(healthUrl: string): Promise<{
   return { live: healthz.ok, ready: readyz.ok, version };
 }
 
+export interface ManagedHealthCommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+export interface ManagedReadinessProbeDeps {
+  run?: (
+    command: string,
+    args: string[],
+    options: { timeoutMs: number; cwd?: string }
+  ) => Promise<ManagedHealthCommandResult>;
+  timeoutMs?: number;
+}
+
+/**
+ * Runs the exact v0.0.16 structured control-plane readiness command against
+ * the configured executable and managed process identity. All command and
+ * schema failures are non-ready observations.
+ */
+export async function probeManagedControlPlaneReadiness(
+  executablePath: string,
+  executableArgs: string[] | undefined,
+  healthUrl: string,
+  pid: number,
+  deps: ManagedReadinessProbeDeps = {}
+): Promise<boolean> {
+  if (!executablePath || !healthUrl || !Number.isInteger(pid) || pid <= 0) return false;
+  const args = [
+    ...(executableArgs ?? []),
+    "health",
+    "--json",
+    "--url",
+    healthUrl,
+    "--pid",
+    String(pid),
+    "--require-control-plane-poll",
+  ];
+  try {
+    const result = await (deps.run ?? runBounded)(executablePath, args, {
+      timeoutMs: deps.timeoutMs ?? CONTROL_PLANE_HEALTH_TIMEOUT_MS,
+      cwd: path.dirname(executablePath),
+    });
+    if (result.timedOut || result.code !== 0) return false;
+    const parsed: unknown = JSON.parse(result.stdout);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+    const health = parsed as {
+      process?: { pid?: unknown; running?: unknown };
+      healthz?: { ok?: unknown };
+      readyz?: { ok?: unknown };
+      control_plane_poll?: { ok?: unknown };
+      result?: unknown;
+    };
+    return (
+      health.process?.pid === pid &&
+      health.process.running === true &&
+      health.healthz?.ok === true &&
+      health.readyz?.ok === true &&
+      health.control_plane_poll?.ok === true &&
+      health.result === "ok"
+    );
+  } catch {
+    return false;
+  }
+}
+
 interface ProcessIdentity {
   exists: boolean;
   executablePath?: string;
@@ -712,7 +780,23 @@ async function projectDaemon(
       status.daemon.ownership = "managed";
       status.daemon.pid = managed.state.pid;
       status.daemon.healthUrl = managed.state.healthUrl;
-      if (health.live && health.ready && managed.state.status === "ready") {
+      const runtimeQualified = health.version === QUALIFIED_TUNNEL_CLIENT_VERSION;
+      const controlPlaneReady =
+        managed.state.status === "ready" &&
+        runtimeQualified &&
+        (await probeManagedControlPlaneReadiness(
+          managed.state.executablePath,
+          managed.state.executableArgs,
+          managed.state.healthUrl,
+          managed.state.pid
+        ));
+      if (
+        health.live &&
+        health.ready &&
+        runtimeQualified &&
+        controlPlaneReady &&
+        managed.state.status === "ready"
+      ) {
         status.daemon.state = "managed_ready";
         status.daemon.stopRestartAvailable = true;
       } else if (health.live && managed.state.status === "starting") {
@@ -1021,8 +1105,81 @@ export async function cleanupManagedStartAttempt(
 
   // 5. Force cleanup kill (only still-proven exact start-attempt identity)
   await taskkillFn(identity.pid, true, true);
-  await waitFn(identity.pid, forceTimeout);
+  if (!(await waitFn(identity.pid, forceTimeout))) {
+    return { gracefulKilled: true, forceKilled: true, skippedReason: "force_timeout" };
+  }
   return { gracefulKilled: true, forceKilled: true };
+}
+
+export interface StopManagedIdentityDeps {
+  queryIdentity?: (pid: number) => Promise<ProcessIdentity>;
+  isAlive?: (pid: number) => boolean;
+  taskkill?: (pid: number, force: boolean, tree: boolean) => Promise<void>;
+  waitForExit?: (pid: number, timeoutMs: number) => Promise<boolean>;
+  gracefulTimeoutMs?: number;
+  forceTimeoutMs?: number;
+}
+
+/** Stops only the exact managed process, re-proving identity before force. */
+export async function stopManagedProcessSafely(
+  identity: StartAttemptIdentity,
+  deps: StopManagedIdentityDeps = {}
+): Promise<void> {
+  const queryFn = deps.queryIdentity ?? queryProcessIdentity;
+  const isAliveFn =
+    deps.isAlive ??
+    ((pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  const taskkillFn = deps.taskkill ?? taskkill;
+  const waitFn = deps.waitForExit ?? waitForExit;
+  const gracefulTimeout = deps.gracefulTimeoutMs ?? STOP_GRACEFUL_TIMEOUT_MS;
+  const forceTimeout = deps.forceTimeoutMs ?? STOP_FORCE_TIMEOUT_MS;
+  const isExactIdentity = async (): Promise<boolean> => {
+    if (!isAliveFn(identity.pid)) return false;
+    const observed = await queryFn(identity.pid);
+    return isManagedIdentityProven({
+      observedExists: observed.exists,
+      observedExecutablePath: observed.executablePath,
+      observedCreatedAtIso: observed.createdAtIso,
+      persistedPid: identity.pid,
+      persistedExecutablePath: identity.executablePath,
+      persistedProcessCreatedAt: identity.processCreatedAt,
+    });
+  };
+
+  if (!(await isExactIdentity())) {
+    throw new TunnelLifecycleError(
+      "MANAGED_IDENTITY_UNPROVEN",
+      "Managed identity could not be proven before graceful stop; no process was stopped.",
+      { pid: identity.pid, stage: "initial" }
+    );
+  }
+
+  await taskkillFn(identity.pid, false, false);
+  if (await waitFn(identity.pid, gracefulTimeout)) return;
+  if (!isAliveFn(identity.pid)) return;
+
+  if (!(await isExactIdentity())) {
+    throw new TunnelLifecycleError(
+      "MANAGED_IDENTITY_UNPROVEN",
+      "Managed identity could not be re-proven before force escalation; force stop was not issued.",
+      { pid: identity.pid, stage: "force_escalation" }
+    );
+  }
+
+  await taskkillFn(identity.pid, true, false);
+  if (await waitFn(identity.pid, forceTimeout)) return;
+  throw new TunnelLifecycleError(
+    "TUNNEL_STOP_FAILED",
+    `Managed tunnel process ${identity.pid} did not exit within the bounded stop window.`,
+    { pid: identity.pid }
+  );
 }
 
 export async function startManagedTunnel(): Promise<TunnelStatus> {
@@ -1111,9 +1268,34 @@ export async function startManagedTunnel(): Promise<TunnelStatus> {
     }
     const health = await probeDaemonHealth(healthUrl);
     if (health.live && health.ready) {
-      if (health.version && health.version !== QUALIFIED_TUNNEL_CLIENT_VERSION) {
+      if (health.version === undefined) {
+        // No readiness promotion without the exact observed daemon version.
+        // Missing metadata may be transient; keep polling within the bounded
+        // startup window and use identity-safe cleanup on terminal failure.
+        await new Promise((r) => setTimeout(r, START_POLL_INTERVAL_MS));
+        continue;
+      }
+      if (health.version !== QUALIFIED_TUNNEL_CLIENT_VERSION) {
         failureReason = `Started daemon reported unqualified runtime version ${health.version}.`;
         break;
+      }
+      const stronglyReady = await probeManagedControlPlaneReadiness(
+        config.executablePath,
+        config.executableArgs,
+        healthUrl,
+        pid
+      );
+      if (!stronglyReady) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          failureReason = "Started tunnel-client process exited before control-plane readiness.";
+          break;
+        }
+        // A transient control-plane probe failure is not authority to stop or
+        // restart the start-attempt child. Keep polling until ready or deadline.
+        await new Promise((r) => setTimeout(r, START_POLL_INTERVAL_MS));
+        continue;
       }
       const readyState: ManagedTunnelState = {
         ...state,
@@ -1133,11 +1315,25 @@ export async function startManagedTunnel(): Promise<TunnelStatus> {
   }
 
   if (!failureReason) {
-    failureReason = "Managed tunnel start timed out before /healthz and /readyz passed.";
+    failureReason =
+      "Managed tunnel start timed out before explicit control-plane readiness passed.";
   }
 
   // Clean up ONLY the process created by this start attempt, proving identity first.
-  await cleanupManagedStartAttempt(state);
+  const cleanup = await cleanupManagedStartAttempt(state);
+  if (
+    cleanup.skippedReason &&
+    cleanup.skippedReason !== "process_not_alive" &&
+    cleanup.skippedReason !== "exited_before_force"
+  ) {
+    const identityUnproven = cleanup.skippedReason === "initial_identity_unproven" ||
+      cleanup.skippedReason === "force_identity_unproven";
+    throw new TunnelLifecycleError(
+      identityUnproven ? "MANAGED_IDENTITY_UNPROVEN" : "TUNNEL_STOP_FAILED",
+      "Managed start failed and bounded cleanup did not confirm safe child exit; failed-start evidence was preserved.",
+      { pid, cleanupSkippedReason: cleanup.skippedReason }
+    );
+  }
   await removeQuiet(stateFilePath(MANAGED_STATE_FILE));
   await removeQuiet(urlFile);
   throw new TunnelLifecycleError("TUNNEL_START_FAILED", failureReason, { pid });
@@ -1163,30 +1359,27 @@ export async function stopManagedTunnel(): Promise<TunnelStatus> {
       "No WinHelm-managed tunnel state exists; WinHelm never stops externally managed tunnel daemons."
     );
   }
-  const proven = await verifyManagedIdentity(managed.state);
-  if (!proven) {
-    // Stale managed state: clear it without killing any process.
-    await clearManagedState();
-    throw new TunnelLifecycleError(
-      "MANAGED_IDENTITY_UNPROVEN",
-      "Managed identity could not be proven; stale state was cleared and no process was stopped.",
-      { staleStateCleared: true }
-    );
-  }
-
-  const pid = managed.state.pid;
-  await taskkill(pid, false, false);
-  let exited = await waitForExit(pid, STOP_GRACEFUL_TIMEOUT_MS);
-  if (!exited) {
-    await taskkill(pid, true, false);
-    exited = await waitForExit(pid, STOP_FORCE_TIMEOUT_MS);
-  }
-  if (!exited) {
-    throw new TunnelLifecycleError(
-      "TUNNEL_STOP_FAILED",
-      `Managed tunnel process ${pid} did not exit within the bounded stop window.`,
-      { pid }
-    );
+  try {
+    await stopManagedProcessSafely({
+      pid: managed.state.pid,
+      executablePath: managed.state.executablePath,
+      processCreatedAt: managed.state.processCreatedAt,
+    });
+  } catch (err) {
+    if (
+      err instanceof TunnelLifecycleError &&
+      err.code === "MANAGED_IDENTITY_UNPROVEN" &&
+      err.details?.stage === "initial"
+    ) {
+      // Preserve the prior stale-state policy only for the initial proof.
+      await clearManagedState();
+      throw new TunnelLifecycleError(
+        "MANAGED_IDENTITY_UNPROVEN",
+        "Managed identity could not be proven; stale state was cleared and no process was stopped.",
+        { pid: managed.state.pid, staleStateCleared: true, stage: "initial" }
+      );
+    }
+    throw err;
   }
   await clearManagedState();
   return getTunnelStatus();
@@ -1198,7 +1391,8 @@ export async function restartManagedTunnel(): Promise<TunnelStatus> {
   } catch (err) {
     if (
       err instanceof TunnelLifecycleError &&
-      (err.code === "TUNNEL_NOT_MANAGED" || err.code === "MANAGED_IDENTITY_UNPROVEN")
+      (err.code === "TUNNEL_NOT_MANAGED" ||
+        (err.code === "MANAGED_IDENTITY_UNPROVEN" && err.details?.stage === "initial"))
     ) {
       // Nothing safely stoppable; proceed to a fresh managed start.
     } else {

@@ -386,6 +386,80 @@ describe("M3A P2: ChatGPT tunnel lifecycle service", () => {
     assert.strictEqual(stopped.daemon.state, "stopped");
   });
 
+  it("degrades managed status when the current control-plane poll is not ready", async () => {
+    const backend = await makeFakeBackend(scratch);
+    const profile = path.join(scratch, "profile.yaml");
+    await fs.writeFile(profile, "fake: profile\n", "utf8");
+    await writeLifecycleConfig(fakeExeConfig(backend.markerPath, profile));
+    const previous = process.env.FAKE_TUNNEL_CONTROL_PLANE_OK;
+
+    await startManagedTunnel();
+    try {
+      process.env.FAKE_TUNNEL_CONTROL_PLANE_OK = "0";
+      const status = await getTunnelStatus();
+      assert.strictEqual(status.daemon.ownership, "managed");
+      assert.strictEqual(status.daemon.state, "managed_degraded");
+      assert.strictEqual(status.daemon.stopRestartAvailable, true);
+    } finally {
+      if (previous === undefined) delete process.env.FAKE_TUNNEL_CONTROL_PLANE_OK;
+      else process.env.FAKE_TUNNEL_CONTROL_PLANE_OK = previous;
+      await stopManagedTunnel();
+    }
+  });
+
+  it("does not project managed_ready when the observed daemon version is missing or mismatched", async () => {
+    const backend = await makeFakeBackend(scratch);
+    const profile = path.join(scratch, "profile.yaml");
+    const versionFile = path.join(scratch, "daemon-version.txt");
+    await fs.writeFile(profile, "fake: profile\n", "utf8");
+    await fs.writeFile(versionFile, QUALIFIED_TUNNEL_CLIENT_VERSION, "utf8");
+    const previous = process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE;
+    process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE = versionFile;
+    await writeLifecycleConfig(fakeExeConfig(backend.markerPath, profile));
+
+    const started = await startManagedTunnel();
+    assert.strictEqual(started.daemon.state, "managed_ready");
+    try {
+      for (const version of ["0.0.16+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "__missing__"]) {
+        await fs.writeFile(versionFile, version, "utf8");
+        const status = await getTunnelStatus();
+        assert.strictEqual(status.daemon.ownership, "managed");
+        assert.strictEqual(status.daemon.state, "managed_degraded");
+        assert.strictEqual(status.daemon.pid, started.daemon.pid);
+        assert.strictEqual(status.daemon.stopRestartAvailable, true);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE;
+      else process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE = previous;
+      await stopManagedTunnel();
+    }
+  });
+
+  it("never persists managed ready when startup daemon version is missing", async () => {
+    const backend = await makeFakeBackend(scratch);
+    const profile = path.join(scratch, "profile.yaml");
+    const versionFile = path.join(scratch, "startup-version.txt");
+    await fs.writeFile(profile, "fake: profile\n", "utf8");
+    await fs.writeFile(versionFile, "__missing__", "utf8");
+    await writeLifecycleConfig(fakeExeConfig(backend.markerPath, profile));
+
+    const previous = process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE;
+    process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE = versionFile;
+    try {
+      await assert.rejects(
+        startManagedTunnel(),
+        (err: unknown) =>
+          err instanceof TunnelLifecycleError &&
+          (err.code === "TUNNEL_START_FAILED" || err.code === "MANAGED_IDENTITY_UNPROVEN")
+      );
+      const state = loadManagedTunnelState();
+      assert.notStrictEqual(state.state?.status, "ready");
+    } finally {
+      if (previous === undefined) delete process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE;
+      else process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE = previous;
+    }
+  });
+
   it("rejects duplicate managed start while a managed daemon is live", async () => {
     const backend = await makeFakeBackend(scratch);
     const profile = path.join(scratch, "profile.yaml");
