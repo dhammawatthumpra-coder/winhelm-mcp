@@ -1,6 +1,7 @@
 // Deterministic fake tunnel-client fixture for M3A-P2 lifecycle tests.
 // Contract mirrors the qualified reference binary:
 //   fake --version
+//   fake health --json --url <healthUrl> --pid <pid> --require-control-plane-poll
 //   fake run --config <profile> --health.listen-addr 127.0.0.1:0 --health.url-file <file>
 // Behavior is controlled via FAKE_TUNNEL_* environment variables. It never
 // touches any real tunnel-client process, profile, or marker.
@@ -9,7 +10,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 
-const QUALIFIED = "0.0.15+a390c168ff1b2d14e73a95991c186c6aba3ff5a0";
+const QUALIFIED = "0.0.16+5f99daabd4aa4a77049e6d81d54a0d8c18335397";
 
 const args = process.argv.slice(2);
 
@@ -22,6 +23,40 @@ if (args.includes("--version")) {
   const version = process.env.FAKE_TUNNEL_VERSION || QUALIFIED;
   const sha = version.split("+")[1] || "0000000000000000000000000000000000000000";
   process.stdout.write(`${version} (git sha: ${sha})\n`);
+  process.exit(0);
+}
+
+if (args[0] === "health") {
+  const pid = Number(argValue("--pid"));
+  const healthUrl = argValue("--url");
+  if (
+    !args.includes("--json") ||
+    !args.includes("--require-control-plane-poll") ||
+    !healthUrl ||
+    !Number.isInteger(pid) ||
+    pid <= 0
+  ) {
+    process.stderr.write("fake tunnel-client: invalid health invocation\n");
+    process.exit(2);
+  }
+  const exitCode = Number(process.env.FAKE_TUNNEL_HEALTH_EXIT_CODE || 0);
+  if (exitCode !== 0) process.exit(exitCode);
+  const delayMs = Number(process.env.FAKE_TUNNEL_HEALTH_DELAY_MS || 0);
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (process.env.FAKE_TUNNEL_HEALTH_MALFORMED === "1") {
+    process.stdout.write("{not json\n");
+    process.exit(0);
+  }
+  const controlPlaneOk = process.env.FAKE_TUNNEL_CONTROL_PLANE_OK !== "0";
+  const payload = {
+    process: { pid, running: process.env.FAKE_TUNNEL_PROCESS_RUNNING !== "0" },
+    healthz: { ok: process.env.FAKE_TUNNEL_HEALTHZ_OK !== "0" },
+    readyz: { ok: process.env.FAKE_TUNNEL_READYZ_OK !== "0" },
+    control_plane_poll: { ok: controlPlaneOk },
+    result: process.env.FAKE_TUNNEL_HEALTH_RESULT || (controlPlaneOk ? "ok" : "not_ready"),
+  };
+  if (process.env.FAKE_TUNNEL_HEALTH_PID_MISMATCH === "1") payload.process.pid += 1;
+  process.stdout.write(`${JSON.stringify(payload)}\n`);
   process.exit(0);
 }
 
@@ -102,12 +137,18 @@ const server = http.createServer((req, res) => {
   }
   if (url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({
-        status: "ok",
-        version: process.env.FAKE_TUNNEL_VERSION || QUALIFIED,
-      })
-    );
+    let version = process.env.FAKE_TUNNEL_VERSION || QUALIFIED;
+    const versionFile = process.env.FAKE_TUNNEL_HEALTH_VERSION_FILE;
+    if (versionFile) {
+      try {
+        version = fs.readFileSync(versionFile, "utf8").trim();
+      } catch {
+        // Keep the qualified default when no test override has been written.
+      }
+    }
+    const health = { status: "ok" };
+    if (version !== "__missing__") health.version = version;
+    res.end(JSON.stringify(health));
     return;
   }
   res.writeHead(404);
