@@ -17,6 +17,7 @@ import type {
 } from "../types/index.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { runPowerShell } from "./powershell-runner.js";
+import { appendFileProvenanceRecord } from "../approval/file-provenance.js";
 
 export const DEFAULT_EXCLUDED_DIRS = new Set([
   "node_modules",
@@ -133,7 +134,8 @@ export async function writeFileContent(
 export async function editFileContent(
   filePath: string,
   oldText: string,
-  newText: string
+  newText: string,
+  sessionId?: string
 ): Promise<FileEditResult> {
   const configManager = ConfigManager.getInstance();
   if (configManager.isReadOnly()) {
@@ -146,7 +148,8 @@ export async function editFileContent(
   }
 
   const resolved = path.resolve(filePath);
-  const content = await fs.readFile(resolved, "utf-8");
+  const raw = await fs.readFile(resolved);
+  const content = raw.toString("utf-8");
 
   const occurrences = content.split(oldText).length - 1;
   if (occurrences === 0) {
@@ -159,7 +162,35 @@ export async function editFileContent(
   }
 
   const updated = content.replace(oldText, newText);
-  await fs.writeFile(resolved, updated, "utf-8");
+  if (updated === content) {
+    return { success: true, filePath: resolved };
+  }
+
+  const beforeSha256 = createHash("sha256").update(raw).digest("hex");
+  const updatedBytes = Buffer.from(updated, "utf-8");
+  const afterSha256 = createHash("sha256").update(updatedBytes).digest("hex");
+
+  await fs.writeFile(resolved, updatedBytes);
+
+  if (sessionId) {
+    try {
+      await appendFileProvenanceRecord({
+        session_id: sessionId,
+        tool: "file_edit",
+        action: "modify",
+        path: resolved,
+        before_sha256: beforeSha256,
+        after_sha256: afterSha256,
+        operator: "AI_AGENT",
+      });
+    } catch (err) {
+      console.error(
+        `[WinHelm] File provenance journal write failed for ${resolved}:`,
+        (err as Error).message
+      );
+    }
+  }
+
   return { success: true, filePath: resolved };
 }
 
