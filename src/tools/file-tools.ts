@@ -24,6 +24,7 @@ import {
 import { registerTracedTool } from "./tool-wrapper.js";
 import { isFolderListingRequest } from "../permissions/request-paths.js";
 import type { RipgrepSearchResult } from "../types/index.js";
+import { approvalSessionKey } from "../approval/provenance.js";
 
 export function renderRipgrepSearchSummary(res: RipgrepSearchResult): string {
   const renderedMatches = res.matches.flatMap((m) => [
@@ -112,9 +113,14 @@ export function registerFileTools(server: McpServer): void {
       old_text: z.string().describe("Exact string to replace (must appear uniquely in the file)"),
       new_text: z.string().describe("Replacement string"),
     },
-    async ({ path: filePath, old_text, new_text }) => {
+    async ({ path: filePath, old_text, new_text }, extra) => {
       try {
-        const res = await editFileContent(filePath, old_text, new_text);
+        const res = await editFileContent(
+          filePath,
+          old_text,
+          new_text,
+          approvalSessionKey(extra?.sessionId)
+        );
         return {
           content: [{ type: "text", text: `Successfully updated ${res.filePath}` }],
         };

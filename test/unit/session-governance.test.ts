@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { ConfigManager } from "../../src/config/config-manager.js";
 import { buildPresetConfig } from "../../src/permissions/presets.js";
 import { writeFileAtomic } from "../../src/engine/atomic-file.js";
+import { editFileContent } from "../../src/engine/filesystem.js";
 import {
   describeCurrentSession,
   lookupFileProvenanceStatus,
@@ -196,6 +197,66 @@ describe("A3 file_provenance_lookup", () => {
     assert.strictEqual(result.last_mutation?.action, "create");
     assert.strictEqual(result.last_mutation?.after_sha256, sha256Of("verified-body\n"));
     assert.strictEqual(result.history[0].session_id, "producer-session");
+  });
+
+  it("keeps provenance verified after governed file_edit", async () => {
+    const root = await makeFixture();
+    const target = path.join(root, "edited.txt");
+    await writeFileAtomic({ path: target, content: "version=1\n" }, "creator-session");
+
+    await editFileContent(target, "version=1", "version=2", "editor-session");
+
+    const result = await lookupFileProvenanceStatus({ path: target }, "reviewer-session");
+    assert.strictEqual(result.provenance_status, "WINHELM_VERIFIED");
+    assert.strictEqual(result.total_attributions, 2);
+    assert.strictEqual(result.last_mutation?.session_id, "editor-session");
+    assert.strictEqual(result.last_mutation?.action, "modify");
+    assert.strictEqual(result.last_mutation?.before_sha256, sha256Of("version=1\n"));
+    assert.strictEqual(result.last_mutation?.after_sha256, sha256Of("version=2\n"));
+    assert.strictEqual(await fs.readFile(target, "utf8"), "version=2\n");
+  });
+
+  it("keeps sequential file_edit mutations attributable", async () => {
+    const root = await makeFixture();
+    const target = path.join(root, "sequential.txt");
+    await writeFileAtomic({ path: target, content: "alpha beta gamma\n" }, "creator-session");
+
+    await editFileContent(target, "beta", "BETA", "editor-a");
+    await editFileContent(target, "gamma", "GAMMA", "editor-b");
+
+    const result = await lookupFileProvenanceStatus({ path: target }, "reviewer-session");
+    assert.strictEqual(result.provenance_status, "WINHELM_VERIFIED");
+    assert.strictEqual(result.total_attributions, 3);
+    assert.deepStrictEqual(
+      result.history.map((entry) => [entry.action, entry.session_id]),
+      [
+        ["create", "creator-session"],
+        ["modify", "editor-a"],
+        ["modify", "editor-b"],
+      ]
+    );
+    assert.strictEqual(
+      result.last_mutation?.after_sha256,
+      sha256Of("alpha BETA GAMMA\n")
+    );
+  });
+
+  it("does not record failed or no-op file_edit attempts", async () => {
+    const root = await makeFixture();
+    const target = path.join(root, "no-false-provenance.txt");
+    await writeFileAtomic({ path: target, content: "same\n" }, "creator-session");
+
+    await editFileContent(target, "same", "same", "noop-session");
+    await assert.rejects(
+      editFileContent(target, "missing", "replacement", "failed-session"),
+      /old_text not found/
+    );
+
+    const result = await lookupFileProvenanceStatus({ path: target }, "reviewer-session");
+    assert.strictEqual(result.provenance_status, "WINHELM_VERIFIED");
+    assert.strictEqual(result.total_attributions, 1);
+    assert.strictEqual(result.last_mutation?.session_id, "creator-session");
+    assert.strictEqual(await fs.readFile(target, "utf8"), "same\n");
   });
 
   it("reports UNATTRIBUTED_EXTERNAL_CHANGE after an external edit", async () => {
