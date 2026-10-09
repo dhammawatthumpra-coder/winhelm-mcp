@@ -25,6 +25,8 @@ function policySummary(policy: Record<string, unknown> | undefined): {
   return summary;
 }
 
+import { inspectPolicyCoverage } from "../permissions/policy-coverage.js";
+
 export function buildRuntimeStatusSnapshot(
   manager = ConfigManager.getInstance()
 ): Record<string, unknown> {
@@ -39,9 +41,25 @@ export function buildRuntimeStatusSnapshot(
       job.state === "running"
   ).length;
 
+  const coverage = manager.getPolicyCoverage() ?? inspectPolicyCoverage(config);
+
   return {
     version: getPackageVersion(),
     schemaMode: mode,
+    canonicalRegisteredToolCount: coverage.registered_public_tool_count,
+    registered_public_tool_count: coverage.registered_public_tool_count,
+    policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+    missing_policy_tools: [...coverage.missing_policy_tools],
+    policyCoverage: {
+      registered_public_tool_count: coverage.registered_public_tool_count,
+      policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+      missing_policy_tools: [...coverage.missing_policy_tools],
+      explicit_policy_tools: [...coverage.explicit_policy_tools],
+      backfilled_policy_tools: [...coverage.backfilled_policy_tools],
+      separately_governed_terminal_tools: [...coverage.separately_governed_terminal_tools],
+      unresolved_missing_tools: [...coverage.unresolved_missing_tools],
+      status: coverage.status,
+    },
     profilePreset: config.profilePreset ?? null,
     profile: {
       preset: profile.preset,
@@ -91,10 +109,15 @@ export function buildRuntimeStatusSnapshot(
       })(),
     },
     config: {
-      valid: mode !== "invalid",
-      validationErrors: [...manager.getConfigValidationErrors()],
+      valid: mode !== "invalid" && coverage.missing_policy_tools.length === 0,
+      validationErrors: [
+        ...manager.getConfigValidationErrors(),
+        ...(coverage.missing_policy_tools.length > 0
+          ? [`Missing deliberate policy coverage for registered tools: ${coverage.missing_policy_tools.join(", ")}`]
+          : []),
+      ],
       userAction:
-        mode === "invalid"
+        mode === "invalid" || coverage.missing_policy_tools.length > 0
           ? t("action.config.repair")
           : null,
     },
