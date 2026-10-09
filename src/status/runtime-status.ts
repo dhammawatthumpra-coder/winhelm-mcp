@@ -57,6 +57,7 @@ export function buildRuntimeStatusSnapshot(
       explicit_policy_tools: [...coverage.explicit_policy_tools],
       backfilled_policy_tools: [...coverage.backfilled_policy_tools],
       separately_governed_terminal_tools: [...coverage.separately_governed_terminal_tools],
+      implicit_fail_closed_tools: [...coverage.implicit_fail_closed_tools],
       unresolved_missing_tools: [...coverage.unresolved_missing_tools],
       status: coverage.status,
     },

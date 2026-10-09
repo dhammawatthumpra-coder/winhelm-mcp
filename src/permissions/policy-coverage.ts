@@ -3,13 +3,18 @@
  * Single Source of Truth for tool-policy coverage inspection, normalization,
  * and profile-consistent backfill of registered public MCP tools.
  */
-import { ALL_V14_TOOL_NAMES } from "../tools/registry.js";
+import {
+  ALL_V14_TOOL_NAMES,
+  SPEC_34_TIER_B_TOOL_NAMES,
+} from "../tools/registry.js";
 import type {
   ProfilePreset,
   SchemaV2PermissionConfig,
   ToolPolicy,
 } from "../config/schema-v2.js";
 import { R5_TOOLS, buildToolPolicyForPreset } from "./presets.js";
+
+const CANONICAL_TIER_B_SET = new Set<string>(SPEC_34_TIER_B_TOOL_NAMES);
 
 export type PolicyCoverageStatus = "complete" | "backfilled" | "incomplete";
 
@@ -20,6 +25,7 @@ export interface PolicyCoverageReport {
   readonly explicit_policy_tools: string[];
   readonly backfilled_policy_tools: string[];
   readonly separately_governed_terminal_tools: string[];
+  readonly implicit_fail_closed_tools: string[];
   readonly unresolved_missing_tools: string[];
   readonly profilePreset: ProfilePreset | null;
   readonly status: PolicyCoverageStatus;
@@ -94,7 +100,7 @@ export function normalizeToolPolicyCoverageWithReport(
 
   const normalizedPolicy: Record<string, ToolPolicy> = {};
 
-  // Copy existing entries without mutation (Rule 1 & Rule 3: explicit policy preserved)
+  // Copy existing valid entries without mutation (Rule 1 & Rule 3: explicit policy preserved)
   for (const [key, value] of Object.entries(rawPolicy)) {
     if (typeof value === "string" && (value === "auto" || value === "ask" || value === "off")) {
       normalizedPolicy[key] = value as ToolPolicy;
@@ -104,37 +110,57 @@ export function normalizeToolPolicyCoverageWithReport(
   const explicit_policy_tools: string[] = [];
   const backfilled_policy_tools: string[] = [];
   const separately_governed_terminal_tools: string[] = [];
+  const implicit_fail_closed_tools: string[] = [];
   const unresolved_missing_tools: string[] = [];
 
-  const knownPreset = isKnownPreset(profilePreset);
-  const presetPolicy = knownPreset ? buildToolPolicyForPreset(profilePreset) : null;
+  const isProduct = isKnownProductPreset(profilePreset);
+  const isLegacy = isKnownLegacyPreset(profilePreset);
+  const isKnown = isProduct || isLegacy;
+  const presetPolicy = isKnown ? buildToolPolicyForPreset(profilePreset) : null;
 
   for (const tool of registeredToolNames) {
+    // Category A: Separately governed terminal tools
     if (R5_TOOLS.has(tool)) {
-      // Governed by terminal.mode + Approval Mode
       separately_governed_terminal_tools.push(tool);
       continue;
     }
 
+    // Category B: Explicit policy in rawPolicy
     if (Object.prototype.hasOwnProperty.call(rawPolicy, tool)) {
       explicit_policy_tools.push(tool);
       continue;
     }
 
     // Missing key from rawPolicy
-    if (presetPolicy && tool in presetPolicy) {
-      // Safe backfill from active profile semantics
-      normalizedPolicy[tool] = presetPolicy[tool];
-      backfilled_policy_tools.push(tool);
+    if (CANONICAL_TIER_B_SET.has(tool)) {
+      if (isProduct) {
+        // Category C: Missing canonical Tier-B under Safe/Balanced/Power -> backfilled auto
+        normalizedPolicy[tool] = "auto";
+        backfilled_policy_tools.push(tool);
+      } else if (isLegacy && presetPolicy && tool in presetPolicy) {
+        // Category C (legacy): Safe legacy Tier-B mapping (resolves to "off")
+        normalizedPolicy[tool] = presetPolicy[tool];
+        backfilled_policy_tools.push(tool);
+      } else {
+        // Category E: Unknown/invalid/absent profile Tier-B gap -> unresolved fail-closed
+        unresolved_missing_tools.push(tool);
+      }
     } else {
-      // Unknown or absent profile semantics: fail-closed, cannot infer authority
-      unresolved_missing_tools.push(tool);
+      // Category D: Missing non-Tier-B
+      // Do NOT materialize preset value! Retain runtime fail-closed / POLICY_OFF.
+      if (isKnown) {
+        implicit_fail_closed_tools.push(tool);
+      } else {
+        // Unknown/absent profile -> non-terminal tool is unresolved missing
+        unresolved_missing_tools.push(tool);
+      }
     }
   }
 
   explicit_policy_tools.sort();
   backfilled_policy_tools.sort();
   separately_governed_terminal_tools.sort();
+  implicit_fail_closed_tools.sort();
   unresolved_missing_tools.sort();
 
   const missing_policy_tools = [...unresolved_missing_tools];
@@ -156,6 +182,7 @@ export function normalizeToolPolicyCoverageWithReport(
     explicit_policy_tools,
     backfilled_policy_tools,
     separately_governed_terminal_tools,
+    implicit_fail_closed_tools,
     unresolved_missing_tools,
     profilePreset,
     status,
@@ -184,9 +211,12 @@ export function inspectPolicyCoverage(
   const explicit_policy_tools: string[] = [];
   const backfilled_policy_tools: string[] = [];
   const separately_governed_terminal_tools: string[] = [];
+  const implicit_fail_closed_tools: string[] = [];
   const unresolved_missing_tools: string[] = [];
 
-  const knownPreset = isKnownPreset(profilePreset);
+  const isProduct = isKnownProductPreset(profilePreset);
+  const isLegacy = isKnownLegacyPreset(profilePreset);
+  const isKnown = isProduct || isLegacy;
 
   for (const tool of registered) {
     if (R5_TOOLS.has(tool)) {
@@ -197,20 +227,34 @@ export function inspectPolicyCoverage(
     if (rawPolicy !== undefined) {
       if (Object.prototype.hasOwnProperty.call(rawPolicy, tool)) {
         explicit_policy_tools.push(tool);
-      } else if (Object.prototype.hasOwnProperty.call(currentPolicy, tool)) {
-        backfilled_policy_tools.push(tool);
-      } else if (knownPreset) {
-        backfilled_policy_tools.push(tool);
+      } else if (CANONICAL_TIER_B_SET.has(tool)) {
+        if (isKnown) {
+          backfilled_policy_tools.push(tool);
+        } else {
+          unresolved_missing_tools.push(tool);
+        }
       } else {
-        unresolved_missing_tools.push(tool);
+        if (isKnown) {
+          implicit_fail_closed_tools.push(tool);
+        } else {
+          unresolved_missing_tools.push(tool);
+        }
       }
     } else {
       if (Object.prototype.hasOwnProperty.call(currentPolicy, tool)) {
         explicit_policy_tools.push(tool);
-      } else if (knownPreset) {
-        backfilled_policy_tools.push(tool);
+      } else if (CANONICAL_TIER_B_SET.has(tool)) {
+        if (isKnown) {
+          backfilled_policy_tools.push(tool);
+        } else {
+          unresolved_missing_tools.push(tool);
+        }
       } else {
-        unresolved_missing_tools.push(tool);
+        if (isKnown) {
+          implicit_fail_closed_tools.push(tool);
+        } else {
+          unresolved_missing_tools.push(tool);
+        }
       }
     }
   }
@@ -218,6 +262,7 @@ export function inspectPolicyCoverage(
   explicit_policy_tools.sort();
   backfilled_policy_tools.sort();
   separately_governed_terminal_tools.sort();
+  implicit_fail_closed_tools.sort();
   unresolved_missing_tools.sort();
 
   const missing_policy_tools = [...unresolved_missing_tools];
@@ -239,6 +284,7 @@ export function inspectPolicyCoverage(
     explicit_policy_tools,
     backfilled_policy_tools,
     separately_governed_terminal_tools,
+    implicit_fail_closed_tools,
     unresolved_missing_tools,
     profilePreset,
     status,

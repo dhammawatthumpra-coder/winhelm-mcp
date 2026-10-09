@@ -492,4 +492,228 @@ describe("Work Order D2 — Tier-B Policy Coverage & Persisted-Config Backfill C
     assert.ok(errorPayload.error);
     assert.strictEqual(errorPayload.error.code, "RUN_NOT_FOUND");
   });
+
+  it("15. Least-privilege invariant: missing non-Tier-B tools (R1..R4) and terminal tools are NOT materialized", async () => {
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-tier-b-lp-"));
+    const configFile = path.join(tempRoot, "winhelm.config.json");
+
+    // Sparse balanced config: ONLY system_info is explicit
+    const sparseConfig = {
+      schemaVersion: 2,
+      profilePreset: "balanced",
+      folders: [{ path: tempRoot, permission: "readwrite" }],
+      terminal: { mode: "ask" },
+      toolPolicy: { system_info: "auto" },
+    };
+    await fs.writeFile(configFile, JSON.stringify(sparseConfig, null, 2), "utf8");
+
+    const manager = ConfigManager.resetInstance(configFile);
+    await manager.init(configFile);
+
+    const config = manager.getConfig();
+    const normalizedPolicy = config.toolPolicy;
+
+    // All 6 Tier-B tools are backfilled to auto
+    for (const tool of SPEC_34_TIER_B_TOOL_NAMES) {
+      assert.strictEqual(normalizedPolicy[tool], "auto", `${tool} must be backfilled to auto`);
+    }
+
+    // NON-Tier-B tools MUST NOT be materialized from the preset:
+    assert.strictEqual(normalizedPolicy.file_write, undefined, "missing R1 file_write must not be materialized");
+    assert.strictEqual(normalizedPolicy.http_request, undefined, "missing R2 http_request must not be materialized");
+    assert.strictEqual(normalizedPolicy.screen_capture, undefined, "missing R3 screen_capture must not be materialized");
+    assert.strictEqual(normalizedPolicy.service_control, undefined, "missing R4 service_control must not be materialized");
+    assert.strictEqual(normalizedPolicy.process_kill, undefined, "missing R4 process_kill must not be materialized");
+    assert.strictEqual(normalizedPolicy.command_run, undefined, "terminal command_run must not be in toolPolicy");
+    assert.strictEqual(normalizedPolicy.terminal_run, undefined, "terminal terminal_run must not be in toolPolicy");
+
+    // Risk calculation stays at R0
+    const snapshot = buildRuntimeStatusSnapshot(manager);
+    const riskState = snapshot.riskState as any;
+    assert.strictEqual(riskState.available, true);
+    assert.strictEqual(riskState.maxAutoPolicyRisk, "R0", "Sparse balanced config must remain maxAutoPolicyRisk R0");
+
+    // Tool policy evaluation confirms missing tools are POLICY_OFF
+    const svcPolicy = evaluateToolPolicy(normalizedPolicy.service_control);
+    assert.strictEqual(svcPolicy.decision, "deny");
+    assert.strictEqual(svcPolicy.code, "POLICY_OFF");
+
+    const writePolicy = evaluateToolPolicy(normalizedPolicy.file_write);
+    assert.strictEqual(writePolicy.decision, "deny");
+    assert.strictEqual(writePolicy.code, "POLICY_OFF");
+
+    // Runtime access evaluation on missing non-Tier-B tool also denies execution
+    const svcEval = evaluateSchemaV2ToolAccess("service_control", { serviceName: "test" }, config as any);
+    assert.strictEqual(svcEval.decision, "deny");
+
+    const writeEval = evaluateSchemaV2ToolAccess("file_write", { path: path.join(tempRoot, "out.txt"), content: "hi" }, config as any);
+    assert.strictEqual(writeEval.decision, "deny");
+  });
+
+  it("16. 56-tool closed accounting invariant: disjoint classes partition canonical registered tools", () => {
+    for (const preset of ["safe", "balanced", "power"] as const) {
+      const sparse = {
+        schemaVersion: 2,
+        profilePreset: preset,
+        toolPolicy: { system_info: "auto" as const },
+      };
+
+      const { coverage } = normalizeToolPolicyCoverageWithReport(sparse);
+
+      const explicitSet = new Set(coverage.explicit_policy_tools);
+      const backfilledSet = new Set(coverage.backfilled_policy_tools);
+      const terminalSet = new Set(coverage.separately_governed_terminal_tools);
+      const implicitSet = new Set(coverage.implicit_fail_closed_tools);
+      const unresolvedSet = new Set(coverage.unresolved_missing_tools);
+
+      // Verify mutual exclusivity (pairwise disjointness)
+      for (const tool of explicitSet) {
+        assert.ok(!backfilledSet.has(tool), `${tool} must not be in backfilled`);
+        assert.ok(!terminalSet.has(tool), `${tool} must not be in terminal`);
+        assert.ok(!implicitSet.has(tool), `${tool} must not be in implicit`);
+        assert.ok(!unresolvedSet.has(tool), `${tool} must not be in unresolved`);
+      }
+      for (const tool of backfilledSet) {
+        assert.ok(!terminalSet.has(tool), `${tool} must not be in terminal`);
+        assert.ok(!implicitSet.has(tool), `${tool} must not be in implicit`);
+        assert.ok(!unresolvedSet.has(tool), `${tool} must not be in unresolved`);
+      }
+      for (const tool of terminalSet) {
+        assert.ok(!implicitSet.has(tool), `${tool} must not be in implicit`);
+        assert.ok(!unresolvedSet.has(tool), `${tool} must not be in unresolved`);
+      }
+      for (const tool of implicitSet) {
+        assert.ok(!unresolvedSet.has(tool), `${tool} must not be in unresolved`);
+      }
+
+      // Exact counts for sparse config (1 explicit, 6 Tier-B backfilled, 5 terminal, 44 implicit, 0 unresolved)
+      assert.strictEqual(explicitSet.size, 1);
+      assert.strictEqual(backfilledSet.size, 6);
+      assert.strictEqual(terminalSet.size, 5);
+      assert.strictEqual(implicitSet.size, 44);
+      assert.strictEqual(unresolvedSet.size, 0);
+
+      // Sum of disjoint sizes equals canonical registered count (56)
+      const sum =
+        explicitSet.size +
+        backfilledSet.size +
+        terminalSet.size +
+        implicitSet.size +
+        unresolvedSet.size;
+      assert.strictEqual(sum, ALL_V14_TOOL_NAMES.length);
+      assert.strictEqual(sum, 56);
+
+      // Policy covered equals 56 because implicit fail-closed is a deliberate outcome
+      assert.strictEqual(coverage.policy_covered_public_tool_count, 56);
+      assert.deepStrictEqual(coverage.missing_policy_tools, []);
+      assert.strictEqual(coverage.status, "backfilled");
+    }
+  });
+
+  it("17. Truthfulness: backfilled tools are never reported as explicit, and raw config remains pristine", async () => {
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-tier-b-truth-"));
+    const configFile = path.join(tempRoot, "winhelm.config.json");
+
+    const rawInput = {
+      schemaVersion: 2,
+      profilePreset: "balanced",
+      folders: [{ path: tempRoot, permission: "readwrite" }],
+      terminal: { mode: "ask" },
+      toolPolicy: {
+        system_info: "auto",
+        git_diff_structured: "ask", // explicit Tier-B
+      },
+    };
+    await fs.writeFile(configFile, JSON.stringify(rawInput, null, 2), "utf8");
+
+    const manager = ConfigManager.resetInstance(configFile);
+    await manager.init(configFile);
+
+    const coverage = manager.getPolicyCoverage()!;
+    assert.ok(coverage);
+
+    // explicit includes system_info and git_diff_structured
+    assert.ok(coverage.explicit_policy_tools.includes("system_info"));
+    assert.ok(coverage.explicit_policy_tools.includes("git_diff_structured"));
+    assert.strictEqual(coverage.explicit_policy_tools.length, 2);
+
+    // backfilled includes the other 5 Tier-B tools, NOT git_diff_structured
+    assert.ok(!coverage.backfilled_policy_tools.includes("git_diff_structured"));
+    assert.strictEqual(coverage.backfilled_policy_tools.length, 5);
+
+    // rawConfig in ConfigManager has NOT materialized backfilled tools
+    const rawInManager = manager.getRawConfig();
+    assert.strictEqual(rawInManager.toolPolicy.json_parse_strict, undefined);
+    assert.strictEqual(rawInManager.toolPolicy.memory_info, undefined);
+    assert.strictEqual(rawInManager.toolPolicy.git_diff_structured, "ask");
+
+    // File on disk was NOT mutated by loading config
+    const diskContent = JSON.parse(await fs.readFile(configFile, "utf8"));
+    assert.strictEqual(diskContent.toolPolicy.json_parse_strict, undefined);
+    assert.strictEqual(diskContent.toolPolicy.service_control, undefined);
+  });
+
+  it("18. Invalid reload clears stale coverage state in ConfigManager", async () => {
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-tier-b-reload-"));
+    const configFile = path.join(tempRoot, "winhelm.config.json");
+
+    // First load valid config
+    const validConfig = {
+      schemaVersion: 2,
+      profilePreset: "balanced",
+      folders: [{ path: tempRoot, permission: "readwrite" }],
+      terminal: { mode: "full" },
+      toolPolicy: { system_info: "auto" },
+    };
+    await fs.writeFile(configFile, JSON.stringify(validConfig, null, 2), "utf8");
+
+    const manager = ConfigManager.resetInstance(configFile);
+    await manager.init(configFile);
+    assert.strictEqual(manager.getConfigMode(), "v2");
+    assert.ok(manager.getPolicyCoverage() !== undefined);
+
+    // Overwrite with invalid config (schemaVersion: 3) and re-initialize
+    await fs.writeFile(
+      configFile,
+      JSON.stringify({ schemaVersion: 3, profilePreset: "balanced" }, null, 2),
+      "utf8"
+    );
+    await manager.init(configFile);
+
+    assert.strictEqual(manager.getConfigMode(), "invalid");
+    assert.strictEqual(manager.getPolicyCoverage(), undefined, "Stale coverage must be cleared on invalid reload");
+  });
+
+  it("19. Adversarial explicit Tier-B auto/ask/off preserved across all product profiles", () => {
+    for (const preset of ["safe", "balanced", "power"] as const) {
+      const explicitTierBConfig = {
+        schemaVersion: 2,
+        profilePreset: preset,
+        folders: [{ path: "D:\\Workspace", permission: "readwrite" as const }],
+        terminal: { mode: "ask" as const },
+        toolPolicy: {
+          json_parse_strict: "off" as const,
+          git_status_structured: "ask" as const,
+          memory_info: "auto" as const,
+        },
+      };
+
+      const validation = validateSchemaV2Config(explicitTierBConfig);
+      assert.strictEqual(validation.valid, true);
+
+      const pol = validation.value.toolPolicy;
+      assert.strictEqual(pol.json_parse_strict, "off", "explicit off must stay off");
+      assert.strictEqual(pol.git_status_structured, "ask", "explicit ask must stay ask");
+      assert.strictEqual(pol.memory_info, "auto", "explicit auto must stay auto");
+
+      // Remaining 3 Tier-B tools missing from rawPolicy are backfilled to auto
+      assert.strictEqual(pol.json_canonical_hash, "auto");
+      assert.strictEqual(pol.process_resource_monitor, "auto");
+      assert.strictEqual(pol.git_diff_structured, "auto");
+
+      // Non-Tier-B missing tools are not materialized
+      assert.strictEqual(pol.service_control, undefined);
+      assert.strictEqual(pol.file_write, undefined);
+    }
+  });
 });

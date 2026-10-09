@@ -126,6 +126,7 @@ export class ConfigManager {
     if (detectedMode === "legacy") {
       this.configMode = "legacy";
       this.configValidationErrors = [];
+      this.policyCoverage = undefined;
       this.config = { ...this.rawConfig };
       setConfiguredLocale(this.config.ui?.language);
       return;
@@ -136,6 +137,7 @@ export class ConfigManager {
       this.configValidationErrors = [
         `Unsupported schemaVersion "${String(this.rawConfig.schemaVersion)}"; expected 2 or omit schemaVersion for legacy mode`,
       ];
+      this.policyCoverage = undefined;
       this.config = {
         ...this.rawConfig,
         folders: [],
@@ -530,6 +532,10 @@ export class ConfigManager {
 
   public getPolicyCoverage(): PolicyCoverageReport | undefined {
     return this.policyCoverage;
+  }
+
+  public getRawConfig(): ServerConfig {
+    return { ...this.rawConfig };
   }
 
   public setRuntimeEffectivePort(port: number | undefined): void {
