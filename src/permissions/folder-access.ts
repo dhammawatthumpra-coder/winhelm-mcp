@@ -14,6 +14,36 @@ export interface ProtectedPathRule {
   label?: string;
 }
 
+/**
+ * Authoritative closed-world runtime validator for protected-rule kinds.
+ *
+ * This is the single source of truth for "what counts as a valid protected
+ * rule kind". Only the exact strings "file" and "tree" are valid; anything
+ * else (missing, null, numeric, wrong case, surrounding whitespace, "bogus",
+ * objects, arrays) is malformed. A malformed kind must NEVER be silently
+ * treated as file semantics: every consumer below fails closed on it.
+ */
+export function isValidProtectedRuleKind(kind: unknown): kind is "file" | "tree" {
+  return kind === "file" || kind === "tree";
+}
+
+/**
+ * Throwing assertion variant of the closed-world kind validator. Call sites
+ * that already convert rule-shape failures into FOLDER_PROTECTED_PATH
+ * denials use this so a malformed kind flows through the same fail-closed
+ * path as a malformed rule path.
+ */
+export function assertValidProtectedRuleKind(
+  rule: Pick<ProtectedPathRule, "kind"> | null | undefined
+): void {
+  const kind = (rule as { kind?: unknown } | null | undefined)?.kind;
+  if (!isValidProtectedRuleKind(kind)) {
+    throw new Error(
+      `Invalid protected path rule kind: ${JSON.stringify(kind)} (expected exactly "file" | "tree"); failing closed.`
+    );
+  }
+}
+
 export interface FolderAccessOptions {
   /**
    * True when the operation can delete/rename/replace the configured folder
@@ -152,6 +182,9 @@ export function prepareFolderAccessContext(
       if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
         throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
       }
+      // Closed-world kind validation: a malformed kind marks the rule failed
+      // so the whole prepared evaluation fails closed (hasFailedProtectedRule).
+      assertValidProtectedRuleKind(rule);
       const canonicalPath = canonicalizeExistingAware(rule.path);
       preparedRules.push({
         rule,
@@ -241,6 +274,9 @@ export function protectedRuleBlocksPath(
   if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
     throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
   }
+  // Closed-world kind validation: anything but exactly "file" | "tree" throws
+  // instead of silently degrading to file semantics (fail-open).
+  assertValidProtectedRuleKind(rule);
   const protectedCanonical = canonicalizeExistingAware(rule.path);
   return rule.kind === "tree"
     ? isInsideOrEqual(protectedCanonical, canonicalPath)
@@ -309,6 +345,18 @@ export function checkFolderAccess(
           allowed: false,
           code: "FOLDER_PROTECTED_PATH",
           reason: `Protected path rule preparation failed: ${prep.rule.label || prep.rule.path}`,
+          canonicalPath,
+        };
+      }
+
+      // Closed-world kind validation at evaluation time as well, so a
+      // hand-built prepared context carrying a malformed kind cannot fail
+      // open through the kind === "tree" ? ... : file-equality branch below.
+      if (!isValidProtectedRuleKind(prep.rule?.kind)) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Malformed protected path rule kind ${JSON.stringify(prep.rule?.kind)} (expected "file" | "tree"); failing closed.`,
           canonicalPath,
         };
       }

@@ -20,12 +20,14 @@ import {
   type ConfigMode,
 } from "./schema-v2.js";
 import {
+  assertValidProtectedRuleKind,
   canonicalizeExistingAwarePath,
   checkFolderAccess,
   isInsideOrEqualPrecomputed,
   normalizePathForCompare,
   prepareFolderAccessContext,
   protectedRuleBlocksPath,
+  type ProtectedPathRule,
 } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
 import { setConfiguredLocale } from "../i18n/messages.js";
@@ -660,6 +662,33 @@ export class ConfigManager {
     });
   }
 
+  /**
+   * Snapshot of the protected-path rules enforced for read access under the
+   * current configuration snapshot. Used by the ripgrep pre-authorized
+   * search-domain carving (Security R2 S1) so the rg child process is never
+   * offered protected paths.
+   *
+   * The returned set is exactly the rule set that checkPathAccess(path,
+   * "read") enforces: schema-v2 rules (with install-root handling matching
+   * checkPathAccess), legacy config/data/log rules, and [] when the
+   * configuration is invalid (fail-closed upstream).
+   */
+  public getProtectedPathRulesSnapshot(): ProtectedPathRule[] {
+    if (this.configMode === "invalid") {
+      return [];
+    }
+    if (this.configMode === "v2") {
+      const installRootAccess =
+        this.config.development?.installRootAccess ?? "none";
+      const allowInstallRootAccess =
+        installRootAccess === "readwrite" || installRootAccess === "read";
+      return this.getProtectedPathRules({
+        includeInstallRoot: !allowInstallRootAccess,
+      });
+    }
+    return this.getProtectedPathRules({ includeInstallRoot: false });
+  }
+
   private protectedPathDenial(
     targetPath: string
   ): { allowed: false; code: string; reason: string } | undefined {
@@ -868,20 +897,28 @@ export class ConfigManager {
 
     // Legacy mode
     const rules = this.getProtectedPathRules({ includeInstallRoot: false });
-    const preparedRules = rules
-      .map((r) => {
-        try {
-          const canonical = canonicalizeExistingAwarePath(r.path);
-          return {
-            rule: r,
-            canonical,
-            cmp: normalizePathForCompare(canonical),
-          };
-        } catch {
-          return undefined;
-        }
-      })
-      .filter((p): p is { rule: (typeof rules)[0]; canonical: string; cmp: string } => Boolean(p));
+    const preparedRules = rules.map((r) => {
+      try {
+        // Closed-world kind validation: a malformed kind marks the prepared
+        // rule failed so the legacy evaluation below fails closed instead of
+        // silently degrading to file-equality semantics (fail-open).
+        assertValidProtectedRuleKind(r);
+        const canonical = canonicalizeExistingAwarePath(r.path);
+        return {
+          rule: r,
+          canonical,
+          cmp: normalizePathForCompare(canonical),
+          failed: false as const,
+        };
+      } catch {
+        return {
+          rule: r,
+          canonical: "",
+          cmp: "",
+          failed: true as const,
+        };
+      }
+    });
 
     const isWildcard = isWildcardAllowAll(this.config.allowedDirectories);
     const noAllowedDirs =
@@ -933,6 +970,13 @@ export class ConfigManager {
 
         const targetCmp = normalizePathForCompare(canonicalTarget);
         for (const p of preparedRules) {
+          if (p.failed) {
+            return {
+              allowed: false,
+              code: "FOLDER_PROTECTED_PATH",
+              reason: `Malformed protected path rule (${p.rule.label || p.rule.path}); failing closed.`,
+            };
+          }
           const blocked =
             p.rule.kind === "tree"
               ? isInsideOrEqualPrecomputed(p.cmp, targetCmp)
