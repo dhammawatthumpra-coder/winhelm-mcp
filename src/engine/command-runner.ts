@@ -678,6 +678,7 @@ export interface GovernedCommandRunInput {
   stderr_file?: string;
   stderr_mode?: StreamSinkMode;
   sessionId: string;
+  principalId?: string;
 }
 
 export interface GovernedSinkPlan {
@@ -923,6 +924,7 @@ export async function runCommandGoverned(
 
   const run: LiveRun = manager.registerLaunch({
     sessionId: input.sessionId,
+    principalId: input.principalId,
     command: prepared.displayCommand,
     native,
   });

@@ -113,12 +113,13 @@ export type ResourceMonitorResult =
 
 export function monitorGovernedRun(
   runId: string,
-  sessionKey: string
+  sessionKey: string,
+  principalId?: string
 ): ResourceMonitorResult {
   const manager = getRunManager();
   // Ownership is enforced for live AND terminal records alike; cross-session
   // run_ids are denied with RUN_PERMISSION_DENIED, unknown with RUN_NOT_FOUND.
-  const owned = manager.requireOwnedRun(runId, sessionKey);
+  const owned = manager.requireOwnedRun(runId, sessionKey, principalId);
 
   const live = manager.getLive(runId);
   if (live && owned === live) {

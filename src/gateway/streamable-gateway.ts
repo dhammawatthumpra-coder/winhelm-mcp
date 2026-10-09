@@ -13,6 +13,8 @@ import {
   setSessionClientInfo,
   type McpServerRuntimeContext,
 } from "./session-context.js";
+import { extractTrustedPrincipal } from "./durable-principal.js";
+import { ConfigManager } from "../config/config-manager.js";
 
 interface StreamableSession {
   transport: StreamableHTTPServerTransport;
@@ -32,10 +34,16 @@ export class StreamableGateway {
   private cleanupTimer: NodeJS.Timeout | null = null;
   private idleTimeoutMs: number;
   private maxSessions: number;
+  private authTokenResolver?: () => string | null | undefined;
 
-  constructor(idleTimeoutMs = 45 * 60 * 1000, maxSessions = 100) {
+  constructor(
+    idleTimeoutMs = 45 * 60 * 1000,
+    maxSessions = 100,
+    authTokenResolver?: () => string | null | undefined
+  ) {
     this.idleTimeoutMs = idleTimeoutMs;
     this.maxSessions = maxSessions;
+    this.authTokenResolver = authTokenResolver;
 
     // Check periodically for idle sessions; unref timer so it doesn't prevent process exit
     const intervalMs = Math.min(60000, Math.max(1000, Math.floor(this.idleTimeoutMs / 2)));
@@ -45,6 +53,17 @@ export class StreamableGateway {
     if (this.cleanupTimer && this.cleanupTimer.unref) {
       this.cleanupTimer.unref();
     }
+  }
+
+  private resolveAuthToken(): string | undefined {
+    if (this.authTokenResolver) {
+      const token = this.authTokenResolver();
+      if (token) return token;
+    }
+    return (
+      ConfigManager.getInstance().getRuntimeAuthToken() ??
+      (ConfigManager.getInstance().getConfig().authToken as string | undefined)
+    );
   }
 
   private createMcpServerInstance(
@@ -125,6 +144,34 @@ export class StreamableGateway {
           return;
         }
 
+        // Stale transport session cannot act as another principal or change principal binding
+        const authToken = this.resolveAuthToken();
+        const principalCheck = extractTrustedPrincipal(req.headers as any, authToken);
+        if (!principalCheck.ok && principalCheck.reason !== "NO_PRINCIPAL_HEADER" && principalCheck.reason !== "NO_AUTH_TOKEN") {
+          res.status(403).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: `Principal rejected: ${principalCheck.reason}`,
+            },
+            id: null,
+          });
+          return;
+        }
+
+        const effectiveRequestPrincipal = principalCheck.ok ? principalCheck.principalId : undefined;
+        if (session.runtimeContext.durablePrincipalId !== effectiveRequestPrincipal) {
+          res.status(403).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Principal mismatch for active session lease",
+            },
+            id: null,
+          });
+          return;
+        }
+
         session.lastActivityAt = Date.now();
         await session.transport.handleRequest(req, res);
         return;
@@ -132,7 +179,23 @@ export class StreamableGateway {
 
       // Create a new session for initialize requests. clientInfo is
       // read from the SDK after initialization so the raw MCP stream remains untouched.
-      const runtimeContext: McpServerRuntimeContext = {};
+      const authToken = this.resolveAuthToken();
+      const principalCheck = extractTrustedPrincipal(req.headers as any, authToken);
+      if (!principalCheck.ok && principalCheck.reason !== "NO_PRINCIPAL_HEADER" && principalCheck.reason !== "NO_AUTH_TOKEN") {
+        res.status(403).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: `Principal rejected: ${principalCheck.reason}`,
+          },
+          id: null,
+        });
+        return;
+      }
+
+      const runtimeContext: McpServerRuntimeContext = {
+        durablePrincipalId: principalCheck.ok ? principalCheck.principalId : undefined,
+      };
       const mcpServer = this.createMcpServerInstance(runtimeContext);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),

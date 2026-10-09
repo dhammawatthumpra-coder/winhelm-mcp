@@ -253,7 +253,7 @@ export function registerTierBTools(server: McpServer): void {
     async ({ run_id }, extra) => {
       try {
         const sessionKey = approvalSessionKey(extra?.sessionId);
-        const result = monitorGovernedRun(run_id, sessionKey);
+        const result = monitorGovernedRun(run_id, sessionKey, extra?.principalId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
