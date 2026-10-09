@@ -445,10 +445,9 @@ export async function copyFileOrDir(
 
   const srcStat = await fs.stat(resolvedSource);
   if (srcStat.isDirectory()) {
-    const registry = getProtectedObjectRegistry(
-      configManager.getProtectedPathRulesSnapshot()
-    );
-    if (registry.hasAnyLinkedProtectedObjects) {
+    const rules = configManager.getProtectedPathRulesSnapshot();
+    if (rules.length > 0) {
+      const registry = getProtectedObjectRegistry(rules);
       const aliases = findHardlinkAliasesInDirectory(resolvedSource, registry);
       if (aliases.length > 0) {
         throw new Error(
@@ -494,10 +493,9 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
     throw new Error(`Source path not found: ${sourceDir}`);
   }
 
-  const registry = getProtectedObjectRegistry(
-    configManager.getProtectedPathRulesSnapshot()
-  );
-  if (registry.hasAnyLinkedProtectedObjects) {
+  const rules = configManager.getProtectedPathRulesSnapshot();
+  if (rules.length > 0) {
+    const registry = getProtectedObjectRegistry(rules);
     const aliases = findHardlinkAliasesInDirectory(resolvedSource, registry);
     if (aliases.length > 0) {
       throw new Error(
