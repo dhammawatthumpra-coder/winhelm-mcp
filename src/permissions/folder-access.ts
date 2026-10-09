@@ -5,6 +5,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { FolderPermission } from "../config/schema-v2.js";
+import {
+  getProtectedObjectRegistry,
+  type ProtectedObjectRegistry,
+} from "./object-identity.js";
 
 export type FolderAccessKind = "read" | "write";
 
@@ -150,6 +154,7 @@ export interface PreparedFolderAccessContext {
   candidates: PreparedFolderAccessCandidate[];
   hasFailedProtectedRule?: boolean;
   failedProtectedRuleReason?: string;
+  objectRegistry?: ProtectedObjectRegistry;
 }
 
 export function prepareFolderAccessContext(
@@ -207,11 +212,24 @@ export function prepareFolderAccessContext(
     }
   }
 
+  let objectRegistry: ProtectedObjectRegistry | undefined;
+  if (!hasFailedProtectedRule) {
+    try {
+      objectRegistry = getProtectedObjectRegistry(protectedPaths);
+    } catch (err: any) {
+      hasFailedProtectedRule = true;
+      if (!failedProtectedRuleReason) {
+        failedProtectedRuleReason = `Protected object identity registry initialization failed: ${err?.message || err}`;
+      }
+    }
+  }
+
   return {
     preparedRules,
     candidates,
     hasFailedProtectedRule,
     failedProtectedRuleReason,
+    objectRegistry,
   };
 }
 
@@ -413,6 +431,24 @@ export function checkFolderAccess(
       };
     }
 
+    const registry =
+      options.preparedContext.objectRegistry ??
+      getProtectedObjectRegistry(
+        options.preparedContext.preparedRules.map((r) => r.rule)
+      );
+    const objMatch = registry.checkFileObjectId(canonicalPath);
+    if (objMatch.matched) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          objMatch.reason ||
+          `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+        canonicalPath,
+        matchedFolder: matched.configured,
+      };
+    }
+
     return {
       allowed: true,
       code: "FOLDER_ALLOWED",
@@ -476,6 +512,20 @@ export function checkFolderAccess(
       allowed: false,
       code: "FOLDER_ROOT_MUTATION",
       reason: "The configured folder root cannot be deleted, moved, renamed, or replaced.",
+      canonicalPath,
+      matchedFolder: matched.configured,
+    };
+  }
+
+  const registry = getProtectedObjectRegistry(options.protectedPaths ?? []);
+  const objMatch = registry.checkFileObjectId(canonicalPath);
+  if (objMatch.matched) {
+    return {
+      allowed: false,
+      code: "FOLDER_PROTECTED_PATH",
+      reason:
+        objMatch.reason ||
+        `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
       canonicalPath,
       matchedFolder: matched.configured,
     };
