@@ -212,19 +212,30 @@ export async function searchCodebase(
 
     const lines = stdout.split(/\r?\n/).filter(Boolean);
     const allMatches: RipgrepMatch[] = [];
+    const pathAccessCache = new Map<string, boolean>();
+
+    const isPathAllowed = (filePath: string): boolean => {
+      let allowed = pathAccessCache.get(filePath);
+      if (allowed === undefined) {
+        allowed = configManager.checkPathAccess(filePath, "read").allowed;
+        pathAccessCache.set(filePath, allowed);
+      }
+      return allowed;
+    };
 
     for (const line of lines) {
       // Format: <filepath>:<line>:<column>:<text>
       // Note: Windows file paths begin with drive letter like D:\path\...
       // Regex matches: Drive:\... or relative path, followed by :line:column:
+      let parsedMatch: RipgrepMatch | undefined;
       const match = line.match(/^([a-zA-Z]:[^\:]+|\.?[^:]+):(\d+):(\d+):(.*)$/);
       if (match) {
-        allMatches.push({
+        parsedMatch = {
           file: match[1],
           line: parseInt(match[2], 10),
           column: parseInt(match[3], 10),
           text: match[4].trim(),
-        });
+        };
       } else {
         // Fallback split for unconventional paths
         const parts = line.split(":");
@@ -234,14 +245,18 @@ export async function searchCodebase(
           const colNum = parseInt(parts[parts.length - 2], 10);
           const textPart = parts[parts.length - 1];
           if (!isNaN(lineNum) && !isNaN(colNum)) {
-            allMatches.push({
+            parsedMatch = {
               file: filePart,
               line: lineNum,
               column: colNum,
               text: textPart.trim(),
-            });
+            };
           }
         }
+      }
+
+      if (parsedMatch && isPathAllowed(parsedMatch.file)) {
+        allMatches.push(parsedMatch);
       }
     }
 

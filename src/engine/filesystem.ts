@@ -285,9 +285,17 @@ export async function searchInFiles(
       }
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        const dirCheck = configManager.checkPathAccess(full, "read");
+        if (!dirCheck.allowed) {
+          continue;
+        }
         await walk(full, depth + 1);
       } else {
         if (filePattern && !entry.name.includes(filePattern.replace("*", ""))) {
+          continue;
+        }
+        const fileCheck = configManager.checkPathAccess(full, "read");
+        if (!fileCheck.allowed) {
           continue;
         }
         try {
