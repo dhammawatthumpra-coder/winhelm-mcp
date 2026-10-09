@@ -54,6 +54,9 @@ export interface FolderAccessResult {
 }
 
 function canonicalizeExistingAware(inputPath: string): string {
+  if (typeof inputPath !== "string" || inputPath.trim() === "") {
+    throw new Error(`A non-empty filesystem path is required for canonicalization: ${String(inputPath)}`);
+  }
   const normalized = inputPath.normalize("NFKC");
   const resolved = path.resolve(normalized);
 
@@ -108,11 +111,15 @@ export interface PreparedProtectedRule {
   rule: ProtectedPathRule;
   canonicalPath: string;
   normalizedForCompare: string;
+  failed?: boolean;
+  error?: string;
 }
 
 export interface PreparedFolderAccessContext {
   preparedRules: PreparedProtectedRule[];
   candidates: PreparedFolderAccessCandidate[];
+  hasFailedProtectedRule?: boolean;
+  failedProtectedRuleReason?: string;
 }
 
 export function prepareFolderAccessContext(
@@ -137,22 +144,41 @@ export function prepareFolderAccessContext(
   candidates.sort((a, b) => b.canonicalRoot.length - a.canonicalRoot.length);
 
   const preparedRules: PreparedProtectedRule[] = [];
+  let hasFailedProtectedRule = false;
+  let failedProtectedRuleReason: string | undefined;
+
   for (const rule of protectedPaths) {
     try {
+      if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
+        throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
+      }
       const canonicalPath = canonicalizeExistingAware(rule.path);
       preparedRules.push({
         rule,
         canonicalPath,
         normalizedForCompare: normalizeForCompare(canonicalPath),
       });
-    } catch {
-      // Malformed protected rule never grants access.
+    } catch (err: any) {
+      // Malformed/inaccessible protected rule must fail closed across prepared evaluations.
+      hasFailedProtectedRule = true;
+      if (!failedProtectedRuleReason) {
+        failedProtectedRuleReason = `Protected path rule preparation failed: ${rule?.label || rule?.path || "malformed rule"}`;
+      }
+      preparedRules.push({
+        rule,
+        canonicalPath: "",
+        normalizedForCompare: "",
+        failed: true,
+        error: String(err?.message || err),
+      });
     }
   }
 
   return {
     preparedRules,
     candidates,
+    hasFailedProtectedRule,
+    failedProtectedRuleReason,
   };
 }
 
@@ -212,6 +238,9 @@ export function protectedRuleBlocksPath(
   rule: ProtectedPathRule,
   canonicalPath: string
 ): boolean {
+  if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
+    throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
+  }
   const protectedCanonical = canonicalizeExistingAware(rule.path);
   return rule.kind === "tree"
     ? isInsideOrEqual(protectedCanonical, canonicalPath)
@@ -262,8 +291,28 @@ export function checkFolderAccess(
   }
 
   if (options.preparedContext) {
+    if (options.preparedContext.hasFailedProtectedRule) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          options.preparedContext.failedProtectedRuleReason ||
+          "Protected path policy evaluation failed closed due to malformed or inaccessible rule.",
+        canonicalPath,
+      };
+    }
+
     const targetCmp = normalizeForCompare(canonicalPath);
     for (const prep of options.preparedContext.preparedRules) {
+      if (prep.failed) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Protected path rule preparation failed: ${prep.rule.label || prep.rule.path}`,
+          canonicalPath,
+        };
+      }
+
       const blocked =
         prep.rule.kind === "tree"
           ? isInsideOrEqualPrecomputed(prep.normalizedForCompare, targetCmp)
@@ -335,10 +384,14 @@ export function checkFolderAccess(
           canonicalPath,
         };
       }
-    } catch {
-      // A malformed protected rule never grants access. Continue evaluating
-      // ordinary folder permissions; runtime rule construction is separately
-      // validated before enforcement is activated.
+    } catch (err: any) {
+      // A malformed or inaccessible protected rule must fail closed.
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason: `Failed to evaluate protected path rule: ${protectedRule.label || protectedRule.path}`,
+        canonicalPath,
+      };
     }
   }
 

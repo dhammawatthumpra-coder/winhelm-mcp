@@ -482,7 +482,7 @@ describe("Task 5 Hardening - URL Auth Token & Session Absolute Lifetime", () => 
   describe("Server URL Query Token Protocol Isolation", () => {
     let serverInstance: any;
     let runningServer: any;
-    const testPort = 18791; // Ground rules: Do NOT bind to 8788
+    const testPort = 18891; // Ground rules: Do NOT bind to 8788 or 18791 (public ingress)
     const testAuthToken = "test-secret-hardening-v121";
 
     before(async () => {
