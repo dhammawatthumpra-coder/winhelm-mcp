@@ -492,5 +492,59 @@ describe("D1 Defect Reproduction & Continuity Corrective Verification", () => {
       assert.strictEqual(getBody()?.error?.message, "Principal mismatch for active session lease");
       await gateway.closeAll();
     });
+
+    it("StreamableGateway rejects request when principal header is missing on principal-bound lease with 403", async () => {
+      const gateway = new StreamableGateway(60000, 10, () => authToken);
+      const sessionId = "active-test-session-bound";
+      gateway.registerSessionForTest(sessionId, {
+        runtimeContext: {
+          sessionId,
+          durablePrincipalId: "principal-alice",
+        },
+      });
+      const { req, res, getStatus, getBody } = mockHttp({ "mcp-session-id": sessionId });
+      await gateway.handleRequest(req, res);
+      assert.strictEqual(getStatus(), 403);
+      assert.strictEqual(getBody()?.error?.message, "Principal mismatch for active session lease");
+      await gateway.closeAll();
+    });
+
+    it("StreamableGateway accepts same principal across multiple requests on same lease", async () => {
+      const gateway = new StreamableGateway(60000, 10, () => authToken);
+      const sessionId = "active-test-session-same";
+      let transportHandled = 0;
+      gateway.registerSessionForTest(sessionId, {
+        runtimeContext: {
+          sessionId,
+          durablePrincipalId: "principal-alice",
+        },
+        transport: {
+          handleRequest: async () => { transportHandled++; },
+        },
+      });
+      const aliceHeaders = createTrustedPrincipalHeaders("principal-alice", authToken);
+      aliceHeaders["mcp-session-id"] = sessionId;
+      const { req, res, getStatus } = mockHttp(aliceHeaders);
+      await gateway.handleRequest(req, res);
+      assert.strictEqual(getStatus(), 200);
+      assert.strictEqual(transportHandled, 1);
+      await gateway.closeAll();
+    });
+
+    it("SseGateway rejects request when principal header is missing on principal-bound lease with 403", async () => {
+      const gateway = new SseGateway(60000, 10, () => authToken);
+      const sessionId = "active-sse-session-bound";
+      gateway.registerSessionForTest(sessionId, {
+        runtimeContext: {
+          sessionId,
+          durablePrincipalId: "principal-alice",
+        },
+      });
+      const { req, res, getStatus, getBody } = mockHttp({}, { sessionId });
+      await gateway.handlePostMessage(req, res);
+      assert.strictEqual(getStatus(), 403);
+      assert.strictEqual(getBody()?.error?.message, "Principal mismatch for active session lease");
+      await gateway.closeAll();
+    });
   });
 });
