@@ -386,9 +386,9 @@ export function computeAuthorizedSearchRoots(
     );
   }
 
-  // 2. If any protected object currently has hardlink aliases (nlink > 1),
-  // find all hardlink aliases inside the target and treat them as denied file regions.
-  if (registry.hasAnyLinkedProtectedObjects) {
+  // 2. Detect hardlink aliases to protected objects inside the search target
+  // and treat them as denied file regions to carve them out of the ripgrep domain.
+  if (rules.length > 0) {
     const aliases = findHardlinkAliasesInDirectory(canonicalTarget, registry);
     for (const aliasPath of aliases) {
       const aliasCanonical = canonicalizeExistingAwarePath(aliasPath);

@@ -98,7 +98,6 @@ export class ProtectedObjectRegistry {
     string,
     { rule: ProtectedPathRule; sourcePath: string; dev: bigint }
   >();
-  private _hasAnyLinkedProtectedObjects = false;
   private readonly rules: ProtectedPathRule[];
 
   constructor(rules: ProtectedPathRule[] = []) {
@@ -106,13 +105,63 @@ export class ProtectedObjectRegistry {
     this.build();
   }
 
+  public get hasProtectedRules(): boolean {
+    return this.rules.length > 0;
+  }
+
   /**
-   * True if any protected file or file in a protected tree currently has nlink > 1.
-   * If false, no hardlink alias can physically exist anywhere on the filesystem,
-   * allowing search traversal to take the optimal fast path.
+   * Evaluates whether any protected file or tree-contained file currently has nlink > 1.
+   * Dynamic and runtime-fresh: never caches a negative fact across filesystem mutations.
    */
   public get hasAnyLinkedProtectedObjects(): boolean {
-    return this._hasAnyLinkedProtectedObjects;
+    return this.refreshHasAnyLinkedProtectedObjects();
+  }
+
+  public refreshHasAnyLinkedProtectedObjects(): boolean {
+    // 1. Refresh protected file rules and check current link counts
+    for (const rule of this.rules) {
+      if (rule.kind === "file") {
+        try {
+          const canonical = canonicalizeExistingAwarePath(rule.path);
+          const id = getFilesystemObjectId(canonical);
+          if (id && id.isFile) {
+            this.protectedFiles.set(id.key, {
+              key: id.key,
+              dev: id.dev,
+              ino: id.ino,
+              rule,
+              canonicalPath: canonical,
+              nlink: id.nlink,
+            });
+            if (id.nlink > 1n) {
+              return true;
+            }
+          }
+        } catch {
+          // ignore inaccessible rule
+        }
+      } else if (rule.kind === "tree") {
+        try {
+          const canonical = canonicalizeExistingAwarePath(rule.path);
+          const dirId = getFilesystemObjectId(canonical);
+          if (dirId && dirId.isDirectory) {
+            this.scanTree(canonical, rule);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 2. Check if any file in protected trees has nlink > 1
+    for (const entry of this.treeFileObjectKeys.values()) {
+      const stat = getFilesystemObjectId(entry.sourcePath);
+      if (stat && stat.isFile && stat.nlink > 1n) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -122,7 +171,6 @@ export class ProtectedObjectRegistry {
     this.protectedFiles.clear();
     this.protectedTrees.length = 0;
     this.treeFileObjectKeys.clear();
-    this._hasAnyLinkedProtectedObjects = false;
 
     for (const rule of this.rules) {
       assertValidProtectedRuleKind(rule);
@@ -145,9 +193,6 @@ export class ProtectedObjectRegistry {
             canonicalPath: canonical,
             nlink: id.nlink,
           });
-          if (id.nlink > 1n) {
-            this._hasAnyLinkedProtectedObjects = true;
-          }
         }
       } else if (rule.kind === "tree") {
         const dirId = getFilesystemObjectId(canonical);
@@ -184,9 +229,6 @@ export class ProtectedObjectRegistry {
               sourcePath: full,
               dev: id.dev,
             });
-            if (id.nlink > 1n) {
-              this._hasAnyLinkedProtectedObjects = true;
-            }
           }
         }
       }
@@ -220,7 +262,34 @@ export class ProtectedObjectRegistry {
     }
 
     // 1. Direct match with protected file rules
-    const fileMatch = this.protectedFiles.get(stat.key);
+    let fileMatch = this.protectedFiles.get(stat.key);
+    if (!fileMatch) {
+      // Refresh protected file rules in case a protected file was created or replaced at runtime
+      for (const rule of this.rules) {
+        if (rule.kind === "file") {
+          try {
+            const canonical = canonicalizeExistingAwarePath(rule.path);
+            const id = getFilesystemObjectId(canonical);
+            if (id && id.isFile) {
+              this.protectedFiles.set(id.key, {
+                key: id.key,
+                dev: id.dev,
+                ino: id.ino,
+                rule,
+                canonicalPath: canonical,
+                nlink: id.nlink,
+              });
+              if (id.key === stat.key) {
+                fileMatch = this.protectedFiles.get(stat.key);
+                break;
+              }
+            }
+          } catch {
+            // ignore inaccessible rule
+          }
+        }
+      }
+    }
     if (fileMatch) {
       return {
         matched: true,
@@ -231,7 +300,7 @@ export class ProtectedObjectRegistry {
     }
 
     // 2. Match with files in protected tree rules
-    const treeMatch = this.treeFileObjectKeys.get(stat.key);
+    let treeMatch = this.treeFileObjectKeys.get(stat.key);
     if (treeMatch) {
       return {
         matched: true,
@@ -265,13 +334,13 @@ export class ProtectedObjectRegistry {
 
 /**
  * Find all files inside a directory that are hardlink aliases to protected objects.
- * When hasAnyLinkedProtectedObjects is false, returns [] immediately without scanning.
+ * When no protected rules exist, returns [] immediately without scanning.
  */
 export function findHardlinkAliasesInDirectory(
   directory: string,
   registry: ProtectedObjectRegistry
 ): string[] {
-  if (!registry.hasAnyLinkedProtectedObjects) {
+  if (!registry.hasProtectedRules) {
     return [];
   }
 
