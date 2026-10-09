@@ -207,8 +207,16 @@ export function createServer(options: ServerOptions): {
     });
   }
 
-  const sseGateway = new SseGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
-  const streamableGateway = new StreamableGateway(config.sessionIdleTimeoutMs, config.maxConcurrentSessions);
+  const sseGateway = new SseGateway(
+    config.sessionIdleTimeoutMs,
+    config.maxConcurrentSessions,
+    currentAuthToken
+  );
+  const streamableGateway = new StreamableGateway(
+    config.sessionIdleTimeoutMs,
+    config.maxConcurrentSessions,
+    currentAuthToken
+  );
   const rateLimiter = new RateLimiter();
   const sessionManager = new SessionManager(15);
 

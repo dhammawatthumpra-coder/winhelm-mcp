@@ -141,6 +141,7 @@ export function registerCommandTools(server: McpServer): void {
           stderr_file: args.stderr_file,
           stderr_mode: args.stderr_mode,
           sessionId: approvalSessionKey(extra?.sessionId),
+          principalId: extra?.principalId,
         });
 
         if (result.status === "running") {
@@ -198,7 +199,7 @@ export function registerCommandTools(server: McpServer): void {
         const manager = getRunManager();
         const sessionKey = approvalSessionKey(extra?.sessionId);
         // Ownership is enforced for live AND terminal records alike.
-        const owned = manager.requireOwnedRun(run_id, sessionKey);
+        const owned = manager.requireOwnedRun(run_id, sessionKey, extra?.principalId);
         const live = manager.getLive(run_id);
 
         if (!live) {

@@ -25,6 +25,7 @@ export type RunState = "running" | "exited" | "timed_out" | "aborted";
 export interface RunRecord {
   run_id: string;
   session_id: string;
+  principal_id?: string;
   command: string;
   started_at_utc: string;
   state: RunState;
@@ -143,6 +144,7 @@ export class RunManager {
 
   registerLaunch(input: {
     sessionId: string;
+    principalId?: string;
     command: string;
     native: GovernedContainedProcess;
   }): LiveRun {
@@ -157,6 +159,7 @@ export class RunManager {
     const record: RunRecord = {
       run_id: runId,
       session_id: input.sessionId,
+      ...(input.principalId ? { principal_id: input.principalId } : {}),
       command: input.command,
       started_at_utc: startedAtUtc,
       state: "running",
@@ -201,22 +204,41 @@ export class RunManager {
     return this.finished.get(runId);
   }
 
-  requireOwnedRun(runId: string, sessionId: string): LiveRun | RunRecord {
+  requireOwnedRun(
+    runId: string,
+    sessionId: string,
+    principalId?: string
+  ): LiveRun | RunRecord {
     const live = this.live.get(runId);
     if (live) {
-      if (live.session_id !== sessionId) {
-        throw new RunOwnershipError();
-      }
+      this.checkRunOwnership(live, sessionId, principalId);
       return live;
     }
     const finished = this.finished.get(runId);
     if (finished) {
-      if (finished.session_id !== sessionId) {
-        throw new RunOwnershipError();
-      }
+      this.checkRunOwnership(finished, sessionId, principalId);
       return finished;
     }
     throw new RunNotFoundError();
+  }
+
+  private checkRunOwnership(
+    record: RunRecord,
+    sessionId: string,
+    principalId?: string
+  ): void {
+    if (record.principal_id) {
+      // The run was launched under an authenticated durable principal.
+      // Continuous access requires the exact same durable principal.
+      if (!principalId || record.principal_id !== principalId) {
+        throw new RunOwnershipError();
+      }
+    } else {
+      // Direct local session without a durable principal: fallback to transport lease isolation.
+      if (record.session_id !== sessionId) {
+        throw new RunOwnershipError();
+      }
+    }
   }
 
   /**
@@ -232,6 +254,7 @@ export class RunManager {
     const record: RunRecord = {
       run_id: run.run_id,
       session_id: run.session_id,
+      ...(run.principal_id ? { principal_id: run.principal_id } : {}),
       command: run.command,
       started_at_utc: run.started_at_utc,
       state: timedOut ? "timed_out" : "exited",
