@@ -12,6 +12,10 @@ import {
   normalizePathForCompare,
   type ProtectedPathRule,
 } from "../permissions/folder-access.js";
+import {
+  findHardlinkAliasesInDirectory,
+  getProtectedObjectRegistry,
+} from "../permissions/object-identity.js";
 import { searchInFiles } from "./filesystem.js";
 import type { RipgrepMatch, RipgrepSearchResult } from "../types/index.js";
 
@@ -370,6 +374,31 @@ export function computeAuthorizedSearchRoots(
   const canonicalTarget = canonicalizeExistingAwarePath(targetPath);
   const targetCmp = normalizePathForCompare(canonicalTarget);
   const regions = deniedRegionsForTarget(targetCmp, rules);
+
+  // Protected filesystem-object identity: detect hardlink aliases to protected objects.
+  const registry = getProtectedObjectRegistry(rules);
+
+  // 1. If the target path itself is an alias to a protected object, fail closed.
+  const targetObjMatch = registry.checkFileObjectId(canonicalTarget);
+  if (targetObjMatch.matched) {
+    throw new Error(
+      `Search target is a hardlink alias to protected object "${targetObjMatch.rule?.label || targetObjMatch.rule?.path}"; failing closed.`
+    );
+  }
+
+  // 2. If any protected object currently has hardlink aliases (nlink > 1),
+  // find all hardlink aliases inside the target and treat them as denied file regions.
+  if (registry.hasAnyLinkedProtectedObjects) {
+    const aliases = findHardlinkAliasesInDirectory(canonicalTarget, registry);
+    for (const aliasPath of aliases) {
+      const aliasCanonical = canonicalizeExistingAwarePath(aliasPath);
+      const aliasCmp = normalizePathForCompare(aliasCanonical);
+      if (!regions.some((r) => r.cmp === aliasCmp)) {
+        regions.push({ canonical: aliasCanonical, cmp: aliasCmp, kind: "file" });
+      }
+    }
+  }
+
   if (regions.length === 0) {
     return [targetPath];
   }

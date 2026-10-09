@@ -30,6 +30,10 @@ import {
   type ProtectedPathRule,
 } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
+import {
+  getProtectedObjectRegistry,
+  resetProtectedObjectRegistryCache,
+} from "../permissions/object-identity.js";
 import { setConfiguredLocale } from "../i18n/messages.js";
 import { atomicWriteUtf8 } from "./atomic-write.js";
 
@@ -215,6 +219,7 @@ export class ConfigManager {
   }
 
   public static resetInstance(customConfigPath?: string): ConfigManager {
+    resetProtectedObjectRegistryCache();
     ConfigManager.instance?.stopWatchingConfig();
     ConfigManager.instance = new ConfigManager(customConfigPath);
     return ConfigManager.instance;
@@ -656,9 +661,10 @@ export class ConfigManager {
         : this.getSchemaV2InstallRoot();
     return buildProtectedPathRules({
       configFilePath: this.configFilePath,
-      dataDir: path.join(os.homedir(), ".winhelm"),
-      logDir: path.resolve(process.cwd(), "logs"),
+      dataDir: (this.config as any).dataDir ?? path.join(os.homedir(), ".winhelm"),
+      logDir: (this.config as any).logDir ?? path.resolve(process.cwd(), "logs"),
       ...(installRoot ? { installRoot } : {}),
+      additionalRules: (this.config as any).protectedPaths,
     });
   }
 
@@ -723,6 +729,18 @@ export class ConfigManager {
       } catch {
         // A malformed protected rule never grants access.
       }
+    }
+
+    const registry = getProtectedObjectRegistry(rules);
+    const objMatch = registry.checkFileObjectId(canonicalTarget);
+    if (objMatch.matched) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          objMatch.reason ||
+          `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+      };
     }
 
     return undefined;
@@ -988,6 +1006,18 @@ export class ConfigManager {
               reason: `Path is protected by WinHelm security policy: ${p.rule.label || p.rule.path}`,
             };
           }
+        }
+
+        const legacyRegistry = getProtectedObjectRegistry(rules);
+        const objMatch = legacyRegistry.checkFileObjectId(canonicalTarget);
+        if (objMatch.matched) {
+          return {
+            allowed: false,
+            code: "FOLDER_PROTECTED_PATH",
+            reason:
+              objMatch.reason ||
+              `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+          };
         }
 
         if (isWildcard) {
