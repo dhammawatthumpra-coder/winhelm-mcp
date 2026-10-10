@@ -20,14 +20,20 @@ import {
   type ConfigMode,
 } from "./schema-v2.js";
 import {
+  assertValidProtectedRuleKind,
   canonicalizeExistingAwarePath,
   checkFolderAccess,
   isInsideOrEqualPrecomputed,
   normalizePathForCompare,
   prepareFolderAccessContext,
   protectedRuleBlocksPath,
+  type ProtectedPathRule,
 } from "../permissions/folder-access.js";
 import { buildProtectedPathRules } from "../permissions/protected-paths.js";
+import {
+  getProtectedObjectRegistry,
+  resetProtectedObjectRegistryCache,
+} from "../permissions/object-identity.js";
 import { setConfiguredLocale } from "../i18n/messages.js";
 import { atomicWriteUtf8 } from "./atomic-write.js";
 
@@ -213,6 +219,7 @@ export class ConfigManager {
   }
 
   public static resetInstance(customConfigPath?: string): ConfigManager {
+    resetProtectedObjectRegistryCache();
     ConfigManager.instance?.stopWatchingConfig();
     ConfigManager.instance = new ConfigManager(customConfigPath);
     return ConfigManager.instance;
@@ -654,10 +661,38 @@ export class ConfigManager {
         : this.getSchemaV2InstallRoot();
     return buildProtectedPathRules({
       configFilePath: this.configFilePath,
-      dataDir: path.join(os.homedir(), ".winhelm"),
-      logDir: path.resolve(process.cwd(), "logs"),
+      dataDir: (this.config as any).dataDir ?? path.join(os.homedir(), ".winhelm"),
+      logDir: (this.config as any).logDir ?? path.resolve(process.cwd(), "logs"),
       ...(installRoot ? { installRoot } : {}),
+      additionalRules: (this.config as any).protectedPaths,
     });
+  }
+
+  /**
+   * Snapshot of the protected-path rules enforced for read access under the
+   * current configuration snapshot. Used by the ripgrep pre-authorized
+   * search-domain carving (Security R2 S1) so the rg child process is never
+   * offered protected paths.
+   *
+   * The returned set is exactly the rule set that checkPathAccess(path,
+   * "read") enforces: schema-v2 rules (with install-root handling matching
+   * checkPathAccess), legacy config/data/log rules, and [] when the
+   * configuration is invalid (fail-closed upstream).
+   */
+  public getProtectedPathRulesSnapshot(): ProtectedPathRule[] {
+    if (this.configMode === "invalid") {
+      return [];
+    }
+    if (this.configMode === "v2") {
+      const installRootAccess =
+        this.config.development?.installRootAccess ?? "none";
+      const allowInstallRootAccess =
+        installRootAccess === "readwrite" || installRootAccess === "read";
+      return this.getProtectedPathRules({
+        includeInstallRoot: !allowInstallRootAccess,
+      });
+    }
+    return this.getProtectedPathRules({ includeInstallRoot: false });
   }
 
   private protectedPathDenial(
@@ -694,6 +729,18 @@ export class ConfigManager {
       } catch {
         // A malformed protected rule never grants access.
       }
+    }
+
+    const registry = getProtectedObjectRegistry(rules);
+    const objMatch = registry.checkFileObjectId(canonicalTarget);
+    if (objMatch.matched) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          objMatch.reason ||
+          `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+      };
     }
 
     return undefined;
@@ -868,20 +915,28 @@ export class ConfigManager {
 
     // Legacy mode
     const rules = this.getProtectedPathRules({ includeInstallRoot: false });
-    const preparedRules = rules
-      .map((r) => {
-        try {
-          const canonical = canonicalizeExistingAwarePath(r.path);
-          return {
-            rule: r,
-            canonical,
-            cmp: normalizePathForCompare(canonical),
-          };
-        } catch {
-          return undefined;
-        }
-      })
-      .filter((p): p is { rule: (typeof rules)[0]; canonical: string; cmp: string } => Boolean(p));
+    const preparedRules = rules.map((r) => {
+      try {
+        // Closed-world kind validation: a malformed kind marks the prepared
+        // rule failed so the legacy evaluation below fails closed instead of
+        // silently degrading to file-equality semantics (fail-open).
+        assertValidProtectedRuleKind(r);
+        const canonical = canonicalizeExistingAwarePath(r.path);
+        return {
+          rule: r,
+          canonical,
+          cmp: normalizePathForCompare(canonical),
+          failed: false as const,
+        };
+      } catch {
+        return {
+          rule: r,
+          canonical: "",
+          cmp: "",
+          failed: true as const,
+        };
+      }
+    });
 
     const isWildcard = isWildcardAllowAll(this.config.allowedDirectories);
     const noAllowedDirs =
@@ -933,6 +988,13 @@ export class ConfigManager {
 
         const targetCmp = normalizePathForCompare(canonicalTarget);
         for (const p of preparedRules) {
+          if (p.failed) {
+            return {
+              allowed: false,
+              code: "FOLDER_PROTECTED_PATH",
+              reason: `Malformed protected path rule (${p.rule.label || p.rule.path}); failing closed.`,
+            };
+          }
           const blocked =
             p.rule.kind === "tree"
               ? isInsideOrEqualPrecomputed(p.cmp, targetCmp)
@@ -944,6 +1006,18 @@ export class ConfigManager {
               reason: `Path is protected by WinHelm security policy: ${p.rule.label || p.rule.path}`,
             };
           }
+        }
+
+        const legacyRegistry = getProtectedObjectRegistry(rules);
+        const objMatch = legacyRegistry.checkFileObjectId(canonicalTarget);
+        if (objMatch.matched) {
+          return {
+            allowed: false,
+            code: "FOLDER_PROTECTED_PATH",
+            reason:
+              objMatch.reason ||
+              `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+          };
         }
 
         if (isWildcard) {

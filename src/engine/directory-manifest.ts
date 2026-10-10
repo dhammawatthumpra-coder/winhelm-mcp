@@ -225,6 +225,14 @@ export async function buildDirectoryManifest(
         );
       }
 
+      const fileCheck = manager.checkPathAccess(full, "read");
+      if (!fileCheck.allowed) {
+        fail(
+          fileCheck.code ?? "FOLDER_PROTECTED_PATH",
+          `Manifest entry is protected or an alias to protected object (fail-closed): ${relative}`
+        );
+      }
+
       let sha256: string | null = null;
       if (hashFiles) {
         try {
