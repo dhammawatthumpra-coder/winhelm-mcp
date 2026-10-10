@@ -202,7 +202,6 @@ export class ProtectedObjectRegistry {
             canonicalRoot: canonical,
             dev: dirId.dev,
           });
-          this.scanTree(canonical, rule);
         }
       }
     }
