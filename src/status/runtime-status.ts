@@ -4,6 +4,8 @@ import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import { getApprovalEngine, getApprovalPersistenceStatus } from "../approval/runtime.js";
 import { summarizeRuntimeRisk } from "../permissions/risk.js";
 import { getPackageVersion } from "../utils/version.js";
+import { ALL_V14_TOOL_NAMES } from "../tools/registry.js";
+import { R5_TOOLS, productProfileAllowsTool } from "../permissions/presets.js";
 import {
   getRuntimeLocale,
   translate as t,
@@ -39,9 +41,30 @@ export function buildRuntimeStatusSnapshot(
       job.state === "running"
   ).length;
 
+  const explicitPolicyKeys = new Set(Object.keys(config.toolPolicy ?? {}));
+  const terminalTools = ALL_V14_TOOL_NAMES.filter((t) => R5_TOOLS.has(t)).sort();
+  const unmappedTools = ALL_V14_TOOL_NAMES.filter(
+    (t) => !R5_TOOLS.has(t) && !explicitPolicyKeys.has(t)
+  ).sort();
+
+  let profileAllowedCount: number | null = null;
+  let profileDisallowedCount: number | null = null;
+  if (profile.preset) {
+    let allowed = 0;
+    let disallowed = 0;
+    for (const tool of ALL_V14_TOOL_NAMES) {
+      const isAllowed = productProfileAllowsTool(profile.preset, tool);
+      if (isAllowed === true) allowed += 1;
+      else if (isAllowed === false) disallowed += 1;
+    }
+    profileAllowedCount = allowed;
+    profileDisallowedCount = disallowed;
+  }
+
   return {
     version: getPackageVersion(),
     schemaMode: mode,
+    canonicalRegisteredToolCount: ALL_V14_TOOL_NAMES.length,
     profilePreset: config.profilePreset ?? null,
     profile: {
       preset: profile.preset,
@@ -56,6 +79,20 @@ export function buildRuntimeStatusSnapshot(
     terminalMode: config.terminal?.mode ?? null,
     uiLanguage: getRuntimeLocale(),
     toolPolicySummary: policySummary(config.toolPolicy),
+    toolGovernance: {
+      canonicalRegisteredToolCount: ALL_V14_TOOL_NAMES.length,
+      explicitToolPolicyCount: explicitPolicyKeys.size,
+      explicitPolicySummary: policySummary(config.toolPolicy),
+      separatelyGovernedTerminalTools: terminalTools,
+      terminalGoverningMechanism: "terminal.mode + Approval Mode",
+      unmappedToolCount: unmappedTools.length,
+      unmappedTools,
+      profileEnvelope: {
+        preset: profile.preset,
+        allowedToolCount: profileAllowedCount,
+        disallowedToolCount: profileDisallowedCount,
+      },
+    },
     riskState:
       mode === "v2"
         ? summarizeRuntimeRisk(
