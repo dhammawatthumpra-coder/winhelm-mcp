@@ -61,7 +61,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "dev:type-check": "tsc --noEmit --watch",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx scripts/run-canonical-qualification.ts",
     "type-check": "tsc --noEmit",
     "lint:tools": "tsx scripts/lint-tool-metadata.ts",
     "service:install": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action install",

@@ -98,10 +98,18 @@ export interface ApprovalValidationResult {
   value: ApprovalConfig;
 }
 
+import {
+  inspectPolicyCoverage,
+  normalizeToolPolicyCoverage,
+  normalizeToolPolicyCoverageWithReport,
+  type PolicyCoverageReport,
+} from "../permissions/policy-coverage.js";
+
 export interface SchemaV2ValidationResult {
   valid: boolean;
   errors: string[];
   value: SchemaV2PermissionConfig;
+  policyCoverage?: PolicyCoverageReport;
 }
 
 const PROFILE_PRESETS = new Set<ProfilePreset>([
@@ -331,7 +339,16 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
 
   const folders = validateFolders(input.folders, errors);
   const terminal = validateTerminal(input.terminal, errors);
-  const toolPolicy = validateToolPolicy(input.toolPolicy, errors);
+  const rawToolPolicy = validateToolPolicy(input.toolPolicy, errors);
+
+  const { normalizedPolicy, coverage: policyCoverage } =
+    normalizeToolPolicyCoverageWithReport({
+      ...input,
+      profilePreset,
+      toolPolicy: rawToolPolicy,
+    });
+
+  const toolPolicy = profilePreset ? normalizedPolicy : rawToolPolicy;
 
   const rawApproval =
     input.approval && typeof input.approval === "object" && !Array.isArray(input.approval)
@@ -402,6 +419,26 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
   }
 
   const valid = errors.length === 0;
+
+  let normalizedProfileState: ProfileState | undefined;
+  if (valid && input.profileState && typeof input.profileState === "object") {
+    const rawState = input.profileState as ProfileState;
+    const normalizedSnapshotPolicy = normalizeToolPolicyCoverage({
+      profilePreset: rawState.preset ?? profilePreset,
+      toolPolicy: rawState.appliedSnapshot?.toolPolicy ?? {},
+    }).toolPolicy;
+
+    normalizedProfileState = {
+      ...rawState,
+      appliedSnapshot: {
+        ...rawState.appliedSnapshot,
+        folders: rawState.appliedSnapshot?.folders?.map((f) => ({ ...f })) ?? [],
+        terminal: { ...(rawState.appliedSnapshot?.terminal ?? { mode: "off" }) },
+        toolPolicy: normalizedSnapshotPolicy,
+      },
+    };
+  }
+
   return {
     valid,
     errors,
@@ -415,9 +452,33 @@ export function validateSchemaV2Config(input: Record<string, unknown>): SchemaV2
       network: valid ? network : { ...DEFAULT_NETWORK_CONFIG },
       ...(ui ? { ui } : {}),
       ...(development ? { development } : {}),
-      ...(valid && input.profileState && typeof input.profileState === "object"
-        ? { profileState: input.profileState as unknown as ProfileState }
-        : {}),
+      ...(normalizedProfileState
+        ? { profileState: normalizedProfileState }
+        : valid && input.profileState && typeof input.profileState === "object"
+          ? { profileState: input.profileState as unknown as ProfileState }
+          : {}),
     },
+    policyCoverage,
+  };
+}
+
+/**
+ * Machine-testable validation helper for registered-tool policy coverage.
+ */
+export function validatePolicyCoverage(
+  config: Partial<SchemaV2PermissionConfig> | Record<string, unknown>,
+  options?: { registeredToolNames?: readonly string[] }
+): { valid: boolean; errors: string[]; coverage: PolicyCoverageReport } {
+  const coverage = inspectPolicyCoverage(config, options);
+  const errors: string[] = [];
+  if (coverage.missing_policy_tools.length > 0) {
+    errors.push(
+      `Missing deliberate policy coverage for registered tools: ${coverage.missing_policy_tools.join(", ")}`
+    );
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    coverage,
   };
 }
