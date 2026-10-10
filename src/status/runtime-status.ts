@@ -42,7 +42,23 @@ export function buildRuntimeStatusSnapshot(
       job.state === "running"
   ).length;
 
-  const explicitPolicyKeys = new Set(Object.keys(config.toolPolicy ?? {}));
+  const rawConfig = manager.getRawConfig?.() ?? config;
+  const rawPolicy = (rawConfig.toolPolicy ?? {}) as Record<string, unknown>;
+  const coverage = manager.getPolicyCoverage() ?? inspectPolicyCoverage(config, { rawToolPolicy: rawPolicy });
+
+  const explicitPolicyKeys = new Set(
+    coverage ? coverage.explicit_policy_tools : Object.keys(rawPolicy)
+  );
+
+  const explicitPolicyMap: Record<string, unknown> = {};
+  for (const key of explicitPolicyKeys) {
+    if (key in rawPolicy) {
+      explicitPolicyMap[key] = rawPolicy[key];
+    } else if (config.toolPolicy && key in config.toolPolicy) {
+      explicitPolicyMap[key] = (config.toolPolicy as Record<string, unknown>)[key];
+    }
+  }
+
   const terminalTools = ALL_V14_TOOL_NAMES.filter((t) => R5_TOOLS.has(t)).sort();
   const unmappedTools = ALL_V14_TOOL_NAMES.filter(
     (t) => !R5_TOOLS.has(t) && !explicitPolicyKeys.has(t)
@@ -61,8 +77,6 @@ export function buildRuntimeStatusSnapshot(
     profileAllowedCount = allowed;
     profileDisallowedCount = disallowed;
   }
-
-  const coverage = manager.getPolicyCoverage() ?? inspectPolicyCoverage(config);
 
   return {
     version: getPackageVersion(),
@@ -99,7 +113,7 @@ export function buildRuntimeStatusSnapshot(
     toolGovernance: {
       canonicalRegisteredToolCount: ALL_V14_TOOL_NAMES.length,
       explicitToolPolicyCount: explicitPolicyKeys.size,
-      explicitPolicySummary: policySummary(config.toolPolicy),
+      explicitPolicySummary: policySummary(explicitPolicyMap),
       separatelyGovernedTerminalTools: terminalTools,
       terminalGoverningMechanism: "terminal.mode + Approval Mode",
       unmappedToolCount: unmappedTools.length,
