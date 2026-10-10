@@ -92,11 +92,14 @@ export function registerTracedTool(
     const runtimeContext = getServerRuntimeContext(server);
     const effectiveSessionId =
       extra?.sessionId ?? runtimeContext?.sessionId;
+    const effectivePrincipalId =
+      extra?.principalId ?? runtimeContext?.durablePrincipalId;
     const sessionKey = approvalSessionKey(effectiveSessionId);
-    const baseExecutionExtra =
-      effectiveSessionId && extra?.sessionId !== effectiveSessionId
-        ? { ...extra, sessionId: effectiveSessionId }
-        : extra;
+    const baseExecutionExtra = {
+      ...extra,
+      ...(effectiveSessionId ? { sessionId: effectiveSessionId } : {}),
+      ...(effectivePrincipalId ? { principalId: effectivePrincipalId } : {}),
+    };
 
     const executeAndRecord = async (executionExtra: any) => {
       try {
