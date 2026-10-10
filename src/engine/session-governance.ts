@@ -41,7 +41,14 @@ export type SessionAuditAction =
   | "read";
 
 export interface SessionCurrentResult {
+  /** Ephemeral transport/MCP session lease identity. */
   session_id: string;
+  /** Explicit alias for transport/MCP session lease identity. */
+  transport_session_id: string;
+  /** Trusted durable principal identity if established, else null. */
+  durable_principal_id: string | null;
+  /** Authoritative principal identity used for durable job ownership. Equals durable_principal_id when present, else falls back to session_id. */
+  principal_id: string;
   client_info: {
     name: string | null;
     version: string | null;
@@ -54,16 +61,22 @@ export interface SessionCurrentResult {
 }
 
 export function describeCurrentSession(
-  rawSessionId: string | undefined
+  rawSessionId: string | undefined,
+  rawPrincipalId?: string
 ): SessionCurrentResult {
   const sessionId = approvalSessionKey(rawSessionId);
   const client = getSessionClientInfo(sessionId);
   const isStdio = sessionId.startsWith("local-process-");
   const config = ConfigManager.getInstance().getConfig() as Record<string, unknown>;
   const terminal = (config.terminal ?? {}) as { mode?: string };
+  const durablePrincipalId = rawPrincipalId ?? null;
+  const principalId = durablePrincipalId ?? sessionId;
 
   return {
     session_id: sessionId,
+    transport_session_id: sessionId,
+    durable_principal_id: durablePrincipalId,
+    principal_id: principalId,
     client_info: {
       name: client?.name ?? null,
       version: client?.version ?? null,

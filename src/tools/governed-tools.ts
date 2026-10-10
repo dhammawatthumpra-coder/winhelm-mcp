@@ -191,7 +191,7 @@ export function registerGovernedTools(server: McpServer): void {
     },
     async (_args, extra) => {
       try {
-        const result = describeCurrentSession(extra?.sessionId);
+        const result = describeCurrentSession(extra?.sessionId, extra?.principalId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
