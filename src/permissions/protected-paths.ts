@@ -7,6 +7,7 @@ export interface ProtectedPathBuildOptions {
   dataDir?: string;
   logDir?: string;
   installRoot?: string;
+  additionalRules?: ProtectedPathRule[];
 }
 
 function keyFor(rule: ProtectedPathRule): string {
@@ -53,6 +54,17 @@ export function buildProtectedPathRules(
       kind: "tree",
       label: "WinHelm installation directory",
     });
+  }
+
+  if (options.additionalRules) {
+    for (const rule of options.additionalRules) {
+      if (rule && typeof rule.path === "string") {
+        rules.push({
+          ...rule,
+          path: path.resolve(rule.path),
+        });
+      }
+    }
   }
 
   const seen = new Set<string>();

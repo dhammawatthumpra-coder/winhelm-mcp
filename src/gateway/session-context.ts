@@ -7,6 +7,7 @@ export interface McpClientInfo {
 
 export interface McpServerRuntimeContext {
   sessionId?: string;
+  durablePrincipalId?: string;
   clientInfo?: McpClientInfo;
 }
 

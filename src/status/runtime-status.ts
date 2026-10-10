@@ -4,6 +4,9 @@ import type { SchemaV2PermissionConfig } from "../config/schema-v2.js";
 import { getApprovalEngine, getApprovalPersistenceStatus } from "../approval/runtime.js";
 import { summarizeRuntimeRisk } from "../permissions/risk.js";
 import { getPackageVersion } from "../utils/version.js";
+import { ALL_V14_TOOL_NAMES } from "../tools/registry.js";
+import { R5_TOOLS, productProfileAllowsTool } from "../permissions/presets.js";
+import { inspectPolicyCoverage } from "../permissions/policy-coverage.js";
 import {
   getRuntimeLocale,
   translate as t,
@@ -39,9 +42,60 @@ export function buildRuntimeStatusSnapshot(
       job.state === "running"
   ).length;
 
+  const rawConfig = manager.getRawConfig?.() ?? config;
+  const rawPolicy = (rawConfig.toolPolicy ?? {}) as Record<string, unknown>;
+  const coverage = manager.getPolicyCoverage() ?? inspectPolicyCoverage(config, { rawToolPolicy: rawPolicy });
+
+  const explicitPolicyKeys = new Set(
+    coverage ? coverage.explicit_policy_tools : Object.keys(rawPolicy)
+  );
+
+  const explicitPolicyMap: Record<string, unknown> = {};
+  for (const key of explicitPolicyKeys) {
+    if (key in rawPolicy) {
+      explicitPolicyMap[key] = rawPolicy[key];
+    } else if (config.toolPolicy && key in config.toolPolicy) {
+      explicitPolicyMap[key] = (config.toolPolicy as Record<string, unknown>)[key];
+    }
+  }
+
+  const terminalTools = ALL_V14_TOOL_NAMES.filter((t) => R5_TOOLS.has(t)).sort();
+  const unmappedTools = ALL_V14_TOOL_NAMES.filter(
+    (t) => !R5_TOOLS.has(t) && !explicitPolicyKeys.has(t)
+  ).sort();
+
+  let profileAllowedCount: number | null = null;
+  let profileDisallowedCount: number | null = null;
+  if (profile.preset) {
+    let allowed = 0;
+    let disallowed = 0;
+    for (const tool of ALL_V14_TOOL_NAMES) {
+      const isAllowed = productProfileAllowsTool(profile.preset, tool);
+      if (isAllowed === true) allowed += 1;
+      else if (isAllowed === false) disallowed += 1;
+    }
+    profileAllowedCount = allowed;
+    profileDisallowedCount = disallowed;
+  }
+
   return {
     version: getPackageVersion(),
     schemaMode: mode,
+    canonicalRegisteredToolCount: coverage.registered_public_tool_count,
+    registered_public_tool_count: coverage.registered_public_tool_count,
+    policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+    missing_policy_tools: [...coverage.missing_policy_tools],
+    policyCoverage: {
+      registered_public_tool_count: coverage.registered_public_tool_count,
+      policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+      missing_policy_tools: [...coverage.missing_policy_tools],
+      explicit_policy_tools: [...coverage.explicit_policy_tools],
+      backfilled_policy_tools: [...coverage.backfilled_policy_tools],
+      separately_governed_terminal_tools: [...coverage.separately_governed_terminal_tools],
+      implicit_fail_closed_tools: [...coverage.implicit_fail_closed_tools],
+      unresolved_missing_tools: [...coverage.unresolved_missing_tools],
+      status: coverage.status,
+    },
     profilePreset: config.profilePreset ?? null,
     profile: {
       preset: profile.preset,
@@ -56,6 +110,20 @@ export function buildRuntimeStatusSnapshot(
     terminalMode: config.terminal?.mode ?? null,
     uiLanguage: getRuntimeLocale(),
     toolPolicySummary: policySummary(config.toolPolicy),
+    toolGovernance: {
+      canonicalRegisteredToolCount: ALL_V14_TOOL_NAMES.length,
+      explicitToolPolicyCount: explicitPolicyKeys.size,
+      explicitPolicySummary: policySummary(explicitPolicyMap),
+      separatelyGovernedTerminalTools: terminalTools,
+      terminalGoverningMechanism: "terminal.mode + Approval Mode",
+      unmappedToolCount: unmappedTools.length,
+      unmappedTools,
+      profileEnvelope: {
+        preset: profile.preset,
+        allowedToolCount: profileAllowedCount,
+        disallowedToolCount: profileDisallowedCount,
+      },
+    },
     riskState:
       mode === "v2"
         ? summarizeRuntimeRisk(
@@ -91,10 +159,15 @@ export function buildRuntimeStatusSnapshot(
       })(),
     },
     config: {
-      valid: mode !== "invalid",
-      validationErrors: [...manager.getConfigValidationErrors()],
+      valid: mode !== "invalid" && coverage.missing_policy_tools.length === 0,
+      validationErrors: [
+        ...manager.getConfigValidationErrors(),
+        ...(coverage.missing_policy_tools.length > 0
+          ? [`Missing deliberate policy coverage for registered tools: ${coverage.missing_policy_tools.join(", ")}`]
+          : []),
+      ],
       userAction:
-        mode === "invalid"
+        mode === "invalid" || coverage.missing_policy_tools.length > 0
           ? t("action.config.repair")
           : null,
     },

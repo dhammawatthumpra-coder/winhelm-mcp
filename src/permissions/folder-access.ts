@@ -5,6 +5,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { FolderPermission } from "../config/schema-v2.js";
+import {
+  getProtectedObjectRegistry,
+  type ProtectedObjectRegistry,
+} from "./object-identity.js";
 
 export type FolderAccessKind = "read" | "write";
 
@@ -12,6 +16,36 @@ export interface ProtectedPathRule {
   path: string;
   kind: "file" | "tree";
   label?: string;
+}
+
+/**
+ * Authoritative closed-world runtime validator for protected-rule kinds.
+ *
+ * This is the single source of truth for "what counts as a valid protected
+ * rule kind". Only the exact strings "file" and "tree" are valid; anything
+ * else (missing, null, numeric, wrong case, surrounding whitespace, "bogus",
+ * objects, arrays) is malformed. A malformed kind must NEVER be silently
+ * treated as file semantics: every consumer below fails closed on it.
+ */
+export function isValidProtectedRuleKind(kind: unknown): kind is "file" | "tree" {
+  return kind === "file" || kind === "tree";
+}
+
+/**
+ * Throwing assertion variant of the closed-world kind validator. Call sites
+ * that already convert rule-shape failures into FOLDER_PROTECTED_PATH
+ * denials use this so a malformed kind flows through the same fail-closed
+ * path as a malformed rule path.
+ */
+export function assertValidProtectedRuleKind(
+  rule: Pick<ProtectedPathRule, "kind"> | null | undefined
+): void {
+  const kind = (rule as { kind?: unknown } | null | undefined)?.kind;
+  if (!isValidProtectedRuleKind(kind)) {
+    throw new Error(
+      `Invalid protected path rule kind: ${JSON.stringify(kind)} (expected exactly "file" | "tree"); failing closed.`
+    );
+  }
 }
 
 export interface FolderAccessOptions {
@@ -54,6 +88,9 @@ export interface FolderAccessResult {
 }
 
 function canonicalizeExistingAware(inputPath: string): string {
+  if (typeof inputPath !== "string" || inputPath.trim() === "") {
+    throw new Error(`A non-empty filesystem path is required for canonicalization: ${String(inputPath)}`);
+  }
   const normalized = inputPath.normalize("NFKC");
   const resolved = path.resolve(normalized);
 
@@ -108,11 +145,16 @@ export interface PreparedProtectedRule {
   rule: ProtectedPathRule;
   canonicalPath: string;
   normalizedForCompare: string;
+  failed?: boolean;
+  error?: string;
 }
 
 export interface PreparedFolderAccessContext {
   preparedRules: PreparedProtectedRule[];
   candidates: PreparedFolderAccessCandidate[];
+  hasFailedProtectedRule?: boolean;
+  failedProtectedRuleReason?: string;
+  objectRegistry?: ProtectedObjectRegistry;
 }
 
 export function prepareFolderAccessContext(
@@ -137,22 +179,57 @@ export function prepareFolderAccessContext(
   candidates.sort((a, b) => b.canonicalRoot.length - a.canonicalRoot.length);
 
   const preparedRules: PreparedProtectedRule[] = [];
+  let hasFailedProtectedRule = false;
+  let failedProtectedRuleReason: string | undefined;
+
   for (const rule of protectedPaths) {
     try {
+      if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
+        throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
+      }
+      // Closed-world kind validation: a malformed kind marks the rule failed
+      // so the whole prepared evaluation fails closed (hasFailedProtectedRule).
+      assertValidProtectedRuleKind(rule);
       const canonicalPath = canonicalizeExistingAware(rule.path);
       preparedRules.push({
         rule,
         canonicalPath,
         normalizedForCompare: normalizeForCompare(canonicalPath),
       });
-    } catch {
-      // Malformed protected rule never grants access.
+    } catch (err: any) {
+      // Malformed/inaccessible protected rule must fail closed across prepared evaluations.
+      hasFailedProtectedRule = true;
+      if (!failedProtectedRuleReason) {
+        failedProtectedRuleReason = `Protected path rule preparation failed: ${rule?.label || rule?.path || "malformed rule"}`;
+      }
+      preparedRules.push({
+        rule,
+        canonicalPath: "",
+        normalizedForCompare: "",
+        failed: true,
+        error: String(err?.message || err),
+      });
+    }
+  }
+
+  let objectRegistry: ProtectedObjectRegistry | undefined;
+  if (!hasFailedProtectedRule) {
+    try {
+      objectRegistry = getProtectedObjectRegistry(protectedPaths);
+    } catch (err: any) {
+      hasFailedProtectedRule = true;
+      if (!failedProtectedRuleReason) {
+        failedProtectedRuleReason = `Protected object identity registry initialization failed: ${err?.message || err}`;
+      }
     }
   }
 
   return {
     preparedRules,
     candidates,
+    hasFailedProtectedRule,
+    failedProtectedRuleReason,
+    objectRegistry,
   };
 }
 
@@ -212,6 +289,12 @@ export function protectedRuleBlocksPath(
   rule: ProtectedPathRule,
   canonicalPath: string
 ): boolean {
+  if (!rule || typeof rule.path !== "string" || rule.path.trim() === "") {
+    throw new Error(`Invalid protected path rule: ${JSON.stringify(rule)}`);
+  }
+  // Closed-world kind validation: anything but exactly "file" | "tree" throws
+  // instead of silently degrading to file semantics (fail-open).
+  assertValidProtectedRuleKind(rule);
   const protectedCanonical = canonicalizeExistingAware(rule.path);
   return rule.kind === "tree"
     ? isInsideOrEqual(protectedCanonical, canonicalPath)
@@ -262,8 +345,40 @@ export function checkFolderAccess(
   }
 
   if (options.preparedContext) {
+    if (options.preparedContext.hasFailedProtectedRule) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          options.preparedContext.failedProtectedRuleReason ||
+          "Protected path policy evaluation failed closed due to malformed or inaccessible rule.",
+        canonicalPath,
+      };
+    }
+
     const targetCmp = normalizeForCompare(canonicalPath);
     for (const prep of options.preparedContext.preparedRules) {
+      if (prep.failed) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Protected path rule preparation failed: ${prep.rule.label || prep.rule.path}`,
+          canonicalPath,
+        };
+      }
+
+      // Closed-world kind validation at evaluation time as well, so a
+      // hand-built prepared context carrying a malformed kind cannot fail
+      // open through the kind === "tree" ? ... : file-equality branch below.
+      if (!isValidProtectedRuleKind(prep.rule?.kind)) {
+        return {
+          allowed: false,
+          code: "FOLDER_PROTECTED_PATH",
+          reason: `Malformed protected path rule kind ${JSON.stringify(prep.rule?.kind)} (expected "file" | "tree"); failing closed.`,
+          canonicalPath,
+        };
+      }
+
       const blocked =
         prep.rule.kind === "tree"
           ? isInsideOrEqualPrecomputed(prep.normalizedForCompare, targetCmp)
@@ -316,6 +431,24 @@ export function checkFolderAccess(
       };
     }
 
+    const registry =
+      options.preparedContext.objectRegistry ??
+      getProtectedObjectRegistry(
+        options.preparedContext.preparedRules.map((r) => r.rule)
+      );
+    const objMatch = registry.checkFileObjectId(canonicalPath);
+    if (objMatch.matched) {
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason:
+          objMatch.reason ||
+          `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
+        canonicalPath,
+        matchedFolder: matched.configured,
+      };
+    }
+
     return {
       allowed: true,
       code: "FOLDER_ALLOWED",
@@ -335,10 +468,14 @@ export function checkFolderAccess(
           canonicalPath,
         };
       }
-    } catch {
-      // A malformed protected rule never grants access. Continue evaluating
-      // ordinary folder permissions; runtime rule construction is separately
-      // validated before enforcement is activated.
+    } catch (err: any) {
+      // A malformed or inaccessible protected rule must fail closed.
+      return {
+        allowed: false,
+        code: "FOLDER_PROTECTED_PATH",
+        reason: `Failed to evaluate protected path rule: ${protectedRule.label || protectedRule.path}`,
+        canonicalPath,
+      };
     }
   }
 
@@ -375,6 +512,20 @@ export function checkFolderAccess(
       allowed: false,
       code: "FOLDER_ROOT_MUTATION",
       reason: "The configured folder root cannot be deleted, moved, renamed, or replaced.",
+      canonicalPath,
+      matchedFolder: matched.configured,
+    };
+  }
+
+  const registry = getProtectedObjectRegistry(options.protectedPaths ?? []);
+  const objMatch = registry.checkFileObjectId(canonicalPath);
+  if (objMatch.matched) {
+    return {
+      allowed: false,
+      code: "FOLDER_PROTECTED_PATH",
+      reason:
+        objMatch.reason ||
+        `Path is protected by WinHelm security policy: ${objMatch.rule?.label || objMatch.rule?.path}`,
       canonicalPath,
       matchedFolder: matched.configured,
     };

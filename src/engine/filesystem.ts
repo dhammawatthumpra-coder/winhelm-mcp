@@ -18,6 +18,10 @@ import type {
 import { ConfigManager } from "../config/config-manager.js";
 import { runPowerShell } from "./powershell-runner.js";
 import { appendFileProvenanceRecord } from "../approval/file-provenance.js";
+import {
+  findHardlinkAliasesInDirectory,
+  getProtectedObjectRegistry,
+} from "../permissions/object-identity.js";
 
 export const DEFAULT_EXCLUDED_DIRS = new Set([
   "node_modules",
@@ -285,9 +289,17 @@ export async function searchInFiles(
       }
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        const dirCheck = configManager.checkPathAccess(full, "read");
+        if (!dirCheck.allowed) {
+          continue;
+        }
         await walk(full, depth + 1);
       } else {
         if (filePattern && !entry.name.includes(filePattern.replace("*", ""))) {
+          continue;
+        }
+        const fileCheck = configManager.checkPathAccess(full, "read");
+        if (!fileCheck.allowed) {
           continue;
         }
         try {
@@ -431,6 +443,20 @@ export async function copyFileOrDir(
     throw new Error(`Source path not found: ${sourcePath}`);
   }
 
+  const srcStat = await fs.stat(resolvedSource);
+  if (srcStat.isDirectory()) {
+    const rules = configManager.getProtectedPathRulesSnapshot();
+    if (rules.length > 0) {
+      const registry = getProtectedObjectRegistry(rules);
+      const aliases = findHardlinkAliasesInDirectory(resolvedSource, registry);
+      if (aliases.length > 0) {
+        throw new Error(
+          `Operation blocked: Directory contains hardlink alias to protected object (${aliases[0]})`
+        );
+      }
+    }
+  }
+
   await fs.mkdir(path.dirname(resolvedDest), { recursive: true });
   await fs.cp(resolvedSource, resolvedDest, { recursive: true, force: overwrite });
 
@@ -465,6 +491,17 @@ export async function createZip(sourceDir: string, zipPath: string): Promise<Arc
 
   if (!existsSync(resolvedSource)) {
     throw new Error(`Source path not found: ${sourceDir}`);
+  }
+
+  const rules = configManager.getProtectedPathRulesSnapshot();
+  if (rules.length > 0) {
+    const registry = getProtectedObjectRegistry(rules);
+    const aliases = findHardlinkAliasesInDirectory(resolvedSource, registry);
+    if (aliases.length > 0) {
+      throw new Error(
+        `Cannot create zip archive: directory contains hardlink alias to protected object (${aliases[0]})`
+      );
+    }
   }
 
   await fs.mkdir(path.dirname(resolvedZip), { recursive: true });
