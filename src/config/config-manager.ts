@@ -19,6 +19,7 @@ import {
   validateSchemaV2Config,
   type ConfigMode,
 } from "./schema-v2.js";
+import type { PolicyCoverageReport } from "../permissions/policy-coverage.js";
 import {
   assertValidProtectedRuleKind,
   canonicalizeExistingAwarePath,
@@ -70,6 +71,7 @@ export class ConfigManager {
   private config: ServerConfig;
   private configMode: ConfigMode = "legacy";
   private configValidationErrors: string[] = [];
+  private policyCoverage: PolicyCoverageReport | undefined;
   private runtimeEffectivePort: number | undefined;
   /**
    * Live bearer token after an admin rotation. It shadows the token resolved at
@@ -130,6 +132,7 @@ export class ConfigManager {
     if (detectedMode === "legacy") {
       this.configMode = "legacy";
       this.configValidationErrors = [];
+      this.policyCoverage = undefined;
       this.config = { ...this.rawConfig };
       setConfiguredLocale(this.config.ui?.language);
       return;
@@ -140,6 +143,7 @@ export class ConfigManager {
       this.configValidationErrors = [
         `Unsupported schemaVersion "${String(this.rawConfig.schemaVersion)}"; expected 2 or omit schemaVersion for legacy mode`,
       ];
+      this.policyCoverage = undefined;
       this.config = {
         ...this.rawConfig,
         folders: [],
@@ -157,6 +161,7 @@ export class ConfigManager {
     );
     this.configMode = validation.valid ? "v2" : "invalid";
     this.configValidationErrors = [...validation.errors];
+    this.policyCoverage = validation.policyCoverage;
 
     // schemaVersion=2 is the authoritative permission model. Legacy governed
     // fields may remain in the raw file for migration diagnostics/backups, but
@@ -330,6 +335,7 @@ export class ConfigManager {
   private enterFailClosedConfig(reason: string): void {
     this.configMode = "invalid";
     this.configValidationErrors = [reason];
+    this.policyCoverage = undefined;
     this.config = {
       ...this.rawConfig,
       folders: [],
@@ -529,6 +535,14 @@ export class ConfigManager {
 
   public getConfigValidationErrors(): readonly string[] {
     return this.configValidationErrors;
+  }
+
+  public getPolicyCoverage(): PolicyCoverageReport | undefined {
+    return this.policyCoverage;
+  }
+
+  public getRawConfig(): ServerConfig {
+    return { ...this.rawConfig };
   }
 
   public setRuntimeEffectivePort(port: number | undefined): void {
