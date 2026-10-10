@@ -6,6 +6,7 @@ import { summarizeRuntimeRisk } from "../permissions/risk.js";
 import { getPackageVersion } from "../utils/version.js";
 import { ALL_V14_TOOL_NAMES } from "../tools/registry.js";
 import { R5_TOOLS, productProfileAllowsTool } from "../permissions/presets.js";
+import { inspectPolicyCoverage } from "../permissions/policy-coverage.js";
 import {
   getRuntimeLocale,
   translate as t,
@@ -61,10 +62,26 @@ export function buildRuntimeStatusSnapshot(
     profileDisallowedCount = disallowed;
   }
 
+  const coverage = manager.getPolicyCoverage() ?? inspectPolicyCoverage(config);
+
   return {
     version: getPackageVersion(),
     schemaMode: mode,
-    canonicalRegisteredToolCount: ALL_V14_TOOL_NAMES.length,
+    canonicalRegisteredToolCount: coverage.registered_public_tool_count,
+    registered_public_tool_count: coverage.registered_public_tool_count,
+    policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+    missing_policy_tools: [...coverage.missing_policy_tools],
+    policyCoverage: {
+      registered_public_tool_count: coverage.registered_public_tool_count,
+      policy_covered_public_tool_count: coverage.policy_covered_public_tool_count,
+      missing_policy_tools: [...coverage.missing_policy_tools],
+      explicit_policy_tools: [...coverage.explicit_policy_tools],
+      backfilled_policy_tools: [...coverage.backfilled_policy_tools],
+      separately_governed_terminal_tools: [...coverage.separately_governed_terminal_tools],
+      implicit_fail_closed_tools: [...coverage.implicit_fail_closed_tools],
+      unresolved_missing_tools: [...coverage.unresolved_missing_tools],
+      status: coverage.status,
+    },
     profilePreset: config.profilePreset ?? null,
     profile: {
       preset: profile.preset,
@@ -128,10 +145,15 @@ export function buildRuntimeStatusSnapshot(
       })(),
     },
     config: {
-      valid: mode !== "invalid",
-      validationErrors: [...manager.getConfigValidationErrors()],
+      valid: mode !== "invalid" && coverage.missing_policy_tools.length === 0,
+      validationErrors: [
+        ...manager.getConfigValidationErrors(),
+        ...(coverage.missing_policy_tools.length > 0
+          ? [`Missing deliberate policy coverage for registered tools: ${coverage.missing_policy_tools.join(", ")}`]
+          : []),
+      ],
       userAction:
-        mode === "invalid"
+        mode === "invalid" || coverage.missing_policy_tools.length > 0
           ? t("action.config.repair")
           : null,
     },
