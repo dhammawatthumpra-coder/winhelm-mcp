@@ -64,7 +64,7 @@ describe("Unified Gateway Server Integration", () => {
     const body = (await res.json()) as any;
     assert.strictEqual(body.status, "ok");
     assert.strictEqual(body.server, "winhelm-mcp");
-    assert.strictEqual(body.version, "1.2.1");
+    assert.strictEqual(body.version, "1.4.0");
   });
 
   it("should smoothly redirect browser visits (Accept: text/html) on GET /mcp to dashboard", async () => {
@@ -669,4 +669,3 @@ describe("Server Authentication and Protected Endpoints", () => {
     assert.ok(sessionId, "Expected mcp-session-id in response");
   });
 });
-

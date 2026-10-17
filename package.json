@@ -1,7 +1,7 @@
 {
   "name": "winhelm-mcp",
-  "version": "1.2.1",
-  "description": "WinHelm - Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 38 Tools",
+  "version": "1.4.0",
+  "description": "WinHelm - Windows Native MCP Server with Unified HTTP/SSE/Streamable Gateway and 56 Tools",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,7 +25,8 @@
     "scripts/manage-service.ps1",
     "CHANGELOG.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "native/build/Release/Release/winhelm_native.node"
   ],
   "repository": {
     "type": "git",
@@ -54,7 +55,7 @@
     "llm-tools"
   ],
   "scripts": {
-    "prepublishOnly": "npm run build && npm test",
+    "prepublishOnly": "npm run build:native && npm run build && npm test",
     "build": "rimraf dist && tsc",
     "build:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-exe.ps1",
     "watch": "tsc --watch",
@@ -68,10 +69,12 @@
     "service:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action uninstall",
     "service:start": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action start",
     "service:stop": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action stop",
-    "service:status": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action status"
+    "service:status": "powershell -ExecutionPolicy Bypass -File scripts/manage-service.ps1 -Action status",
+    "build:native": "powershell -ExecutionPolicy Bypass -File scripts/build-native-boundary.ps1 -BuildRoot native/build -Configuration Release",
+    "prepack": "npm run build:native && npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "zod": "^3.24.1"
