@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.4.0] - 2026-10-18 — Final RC, publication pending Owner authorization
+## [1.4.0] - 2026-10-18
 
 ### Added
 - Expanded the canonical Schema-v2 public surface to **56 tools**: the 41-tool v1.3 base plus 9 Spec 3.4 Tier A and 6 Tier B primitives.
@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Package version and lock metadata are synchronized at `1.4.0`.
 - Package description/public metadata now reports the validated **56-tool** surface.
 - The npm package includes the qualified Windows native boundary addon required by governed file/process operations.
-- `@modelcontextprotocol/sdk` is raised to the patched v1.32.x line; Final RC production dependency audit reports zero known vulnerabilities.
+- `@modelcontextprotocol/sdk` is raised to the patched v1.32.x line; release qualification reports zero known production dependency vulnerabilities.
 - R8 ingress service posture is **Manual** with public exposure **inactive by default**.
 
 ### Security
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoids fixed-port collision in SSE qualification by using an OS-assigned test port.
 
 ### Release gate
-- Technical Final RC is prepared locally only. External `v1.4.0` tag creation/push and npm publication require explicit final Owner authorization.
+- Release package is sealed at version `1.4.0`; publication uses the exact reviewed release artifact and tag.
 
 ## [1.3.0-rc.1] - 2026-10-04
 

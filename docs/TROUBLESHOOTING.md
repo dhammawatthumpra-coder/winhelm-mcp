@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Troubleshooting Guide
 
-Status: `FINAL_RC`
-
 ## Principle: diagnose the smallest layer first
 
 WinHelm can have several cooperating layers:

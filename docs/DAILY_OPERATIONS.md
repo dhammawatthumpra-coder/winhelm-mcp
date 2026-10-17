@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Daily Operations Guide
 
-Status: `FINAL_RC`
-
 ## Recommended daily posture
 
 For normal interactive engineering:

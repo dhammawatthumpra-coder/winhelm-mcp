@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Known Limitations and Deferred Items
 
-Status: `FINAL_RC__SHIP_WITH_V1_4_0`
-
 This file intentionally documents items that are **not** release blockers because they are disabled, deferred, or UX improvements rather than unsafe active functionality.
 
 ## 1. D1 live mode — deferred to v1.4.1+
@@ -58,14 +56,20 @@ The v1.4.0 npm package is Windows-targeted and includes the qualified production
 
 Trusted mode is not an "unsafe everything" mode. It cannot bypass capability denial or mandatory confirmation. Users seeking completely prompt-free high-impact system control may still encounter required confirmation by design.
 
-## 8. MCP Harbor
+## 8. WinHelm Setup Assistant
+
+WinHelm Setup Assistant is a separate optional companion UX release. It is not required for WinHelm v1.4.0 and is not a core-release blocker. The supported manual installation/configuration path remains documented in `MANUAL_INSTALL.md` so the core can always be installed and recovered without the assistant.
+
+The assistant may automate those same bounded steps—installation, configuration preview, client connection, validation, and recovery—without expanding WinHelm capability or security authority.
+
+## 9. MCP Harbor
 
 MCP Harbor is a separate future MCP control-plane/gateway product. It is not included in WinHelm v1.4.0.
 
-## 9. Public endpoint topology
+## 10. Public endpoint topology
 
 Internal development ports/hostnames and owner-specific launch paths are not public API guarantees. Final supported connection instructions must come from the release package documentation.
 
-## 10. Historical evidence volume
+## 11. Historical evidence volume
 
 The v1.4 development line contains extensive internal qualification/review artifacts. These are not intended to ship as end-user documentation. The release pack consolidates them into user-facing README/CHANGELOG/SECURITY/operations docs.

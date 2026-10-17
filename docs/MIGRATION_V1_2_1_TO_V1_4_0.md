@@ -1,10 +1,8 @@
 # WinHelm — Migration Guide: v1.2.1 to v1.4.0
 
-Status: `FINAL_RC`
-
 ## Why this guide exists
 
-v1.4.0 changes governance, Local-Control, tool surface, Approval Modes, and public-ingress behavior substantially from v1.2.1. The Final RC package metadata and lock are synchronized at `1.4.0`; migration must still be explicit rather than inferred from version metadata alone.
+v1.4.0 changes governance, Local-Control, tool surface, Approval Modes, and public-ingress behavior substantially from v1.2.1. The release package metadata and lock are synchronized at `1.4.0`; migration must still be explicit rather than inferred from version metadata alone.
 
 ## Before migration
 
@@ -92,4 +90,4 @@ After upgrade:
 - approvals behave as expected;
 - hosted ingress remains healthy where configured.
 
-Final validation should use the exact RC/release artifact recorded in the consolidated release report. External publication of `v1.4.0` remains a separate Owner-authorized step.
+Validation should use the exact reviewed v1.4.0 release artifact identified in the release record.

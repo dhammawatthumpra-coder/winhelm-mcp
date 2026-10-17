@@ -4,21 +4,23 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue.svg)](https://microsoft.com/windows)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-580%2F580%20passing-success.svg)]()
+[![Canonical Tests](https://img.shields.io/badge/canonical-1034%20passed%20%7C%201%20skipped-success.svg)]()
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
 > A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor & Approval Dashboard, 56 Canonical System Tools with Schema-v2 Governance & Dynamic Profiles, and MCP File Preview Resource.
 
-[📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [🎯 Threat Model](docs/THREAT_MODEL.md) • [📜 Terms of Use](TERMS_OF_USE.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
+[🚀 Manual Install](docs/MANUAL_INSTALL.md) • [📰 Release Notes](docs/RELEASE_NOTES_V1_4_0.md) • [📖 Tools Reference](docs/TOOLS.md) • [⚙️ Profiles & Approvals](docs/PROFILES.md) • [🔌 Clients](docs/CLIENTS_R7_CONNECTIVITY.md) • [🛡️ Security](docs/SECURITY.md) • [🩺 Troubleshooting](docs/TROUBLESHOOTING.md) • [📝 Changelog](CHANGELOG.md)
 
 ---
 
-## Product Status: v1.4.0 Final Release Candidate
+## Product Status: v1.4.0
 
-This repository contains the **WinHelm v1.4.0 Final RC**: the accepted 56-tool Schema-v2 integration lineage plus the independently reviewed Local-Control Registry R2 corrective. Final build/test/package qualification is part of the RC freeze; external tag push and npm publication remain subject to explicit Owner authorization.
+WinHelm v1.4.0 is the release-sealed 56-tool Schema-v2 line with the accepted Local-Control Registry corrective, native Windows boundary, profile/capability governance, and Manual / Smart / Trusted Approval Modes.
 
-The accepted R8 public-ingress posture is conservative by default: the Windows ingress service is Manual, the public route is inactive until explicitly activated, and D1 live mode/port 18791 is not shipped as active v1.4.0 functionality.
+The default production posture is conservative: Core is loopback-first, the qualified R8 public-ingress service is Manual with its public route inactive until explicitly activated, and D1 live mode/port 18791 is not shipped as active v1.4.0 functionality.
+
+For a clean installation, start with the **[Manual Installation Guide](docs/MANUAL_INSTALL.md)**. The separate WinHelm Setup Assistant is not required to install or operate v1.4.0.
 
 ---
 
@@ -29,6 +31,7 @@ The accepted R8 public-ingress posture is conservative by default: the Windows i
 - [System Requirements](#system-requirements)
 - [Architecture & Live Dashboard](#architecture--live-dashboard)
 - [Quick Start](#quick-start)
+  - [0. Install](#0-install)
   - [1. Setup & Configuration Wizard](#1-setup--configuration-wizard)
   - [2. Starting WinHelm](#2-starting-winhelm)
   - [3. Client Connection (Claude Desktop & Cursor)](#3-client-connection-claude-desktop--cursor)
@@ -143,6 +146,17 @@ flowchart TD
 ---
 
 ## Quick Start
+
+### 0. Install
+
+For the complete clean-install and rollback procedure, see [Manual Installation](docs/MANUAL_INSTALL.md).
+
+```powershell
+npm install --global winhelm-mcp@1.4.0
+winhelm --help
+```
+
+You can also install the exact reviewed `winhelm-mcp-1.4.0.tgz` tarball. The separate WinHelm Setup Assistant is optional and is not required for v1.4.0.
 
 ### 1. Setup & Configuration Wizard
 
@@ -272,7 +286,7 @@ WinHelm v1.4.0 defines **56 canonical public tools** in its single source of tru
 
 ## Human Approval & Cross-Process Coordination
 
-WinHelm v1.3 introduces a robust cross-process approval architecture (post DEF-02):
+WinHelm v1.4.0 includes a robust cross-process approval architecture:
 
 1. **Separation of Concerns:**
    - **Decision Plane:** The local Web Dashboard (`http://127.0.0.1:8788/`) or local CLI (`winhelm approve/deny`).
@@ -301,7 +315,7 @@ Use `winhelm connect claude --yes` for automatic configuration, or configure man
   "mcpServers": {
     "winhelm": {
       "command": "node",
-      "args": ["D:\\mcp\\winhelm-mcp\\dist\\index.js", "--stdio"]
+      "args": ["<WINHELM_INSTALL_ROOT>\\dist\\index.js", "--stdio"]
     }
   }
 }
@@ -330,7 +344,7 @@ control_plane:
 mcp:
   commands:
     - channel: main
-      command: 'node D:/mcp/winhelm-mcp/dist/index.js --stdio'
+      command: 'node <WINHELM_INSTALL_ROOT>/dist/index.js --stdio'
 ```
 
 ### 4. Remote & Tailscale Connection
@@ -391,22 +405,33 @@ Run standalone executable:
 
 ## Known Limitations & Deferred Items
 
-The following features are intentionally out of scope for v1.3 and deferred to v1.4:
-- **Dangerous Mode:** Unrestricted mode is disabled/reserved.
-- **Full Dashboard i18n:** Partial localization exists; comprehensive Thai/English translation is scheduled for v1.4.
-- **System Tray Application (Tauri):** Scheduled for v1.4; v1.3 uses Web Dashboard and Windows Toast notifications.
-- **`.mcpb` Bundle Packaging:** Scheduled for v1.4.
+WinHelm v1.4.0 intentionally keeps several convenience features outside the core release:
+- **D1 live mode:** deferred to v1.4.1+; port 18791 is not part of the active release posture.
+- **Windows toast approval / native approval UX:** deferred to v1.4.1+; v1.4.0 uses the Web Dashboard and local CLI approval flow.
+- **Native tray / richer desktop lifecycle UX:** deferred to v1.4.2+.
+- **Setup Assistant:** developed and released separately as an optional installation/connectivity UX; manual installation remains fully supported.
+- **MCP Harbor:** separate future control-plane/gateway product; not part of WinHelm v1.4.0.
+
+See **[Known Limitations and Deferred Items](docs/KNOWN_LIMITATIONS.md)** for the complete boundary.
 
 ---
 
 ## Documentation & Deep Dive
 
-- 📖 **[Tools Reference](docs/TOOLS.md)**: Full parameter specifications for all 41 tools.
-- ⚙️ **[Tool Profiles](docs/PROFILES.md)**: Safe, Balanced, Power profiles and legacy preset mapping.
+- 🚀 **[Manual Installation](docs/MANUAL_INSTALL.md)**: Clean install, first configuration, client connection, verification, upgrade, and rollback.
+- 📦 **[Install / Upgrade / Rollback](docs/INSTALL_UPGRADE_ROLLBACK.md)**: Detailed operator and migration procedures.
+- 📰 **[v1.4.0 Release Notes](docs/RELEASE_NOTES_V1_4_0.md)**: Release scope, qualification, and intentional exclusions.
+- 📖 **[Tools Reference](docs/TOOLS.md)**: Full release reference for all 56 canonical public tools.
+- ⚙️ **[Tool Profiles](docs/PROFILES.md)**: Safe, Balanced, Power profiles, Manual / Smart / Trusted Approval Modes, and legacy preset mapping.
+- 🔌 **[Clients & Connectivity](docs/CLIENTS_R7_CONNECTIVITY.md)**: Claude, Cursor, ChatGPT/OpenAI, Gemini/R8, and connection boundaries.
+- 🧰 **[Daily Operations](docs/DAILY_OPERATIONS.md)**: Routine startup, health, approvals, and shutdown guidance.
+- 🧭 **[Migration from v1.2.1](docs/MIGRATION_V1_2_1_TO_V1_4_0.md)**: Explicit Schema-v2 migration and rollback considerations.
+- ⚠️ **[Known Limitations](docs/KNOWN_LIMITATIONS.md)**: Deferred D1, native approval UX, tray UX, Setup Assistant, and MCP Harbor boundaries.
 - 🛡️ **[Security Architecture](docs/SECURITY.md)**: Permissions model, approval lifecycle, and cross-process architecture.
 - 🎯 **[Threat Model](docs/THREAT_MODEL.md)**: STRIDE analysis and trust boundary diagrams.
+- 🩺 **[Troubleshooting](docs/TROUBLESHOOTING.md)**: Common startup, configuration, approval, and connectivity failures.
 - 📜 **[Terms of Use](TERMS_OF_USE.md)**: User agreement and shared responsibility model.
-- 📝 **[Changelog](CHANGELOG.md)**: Release notes and version history.
+- 📝 **[Changelog](CHANGELOG.md)**: Release history.
 - 🤝 **[Contributing Guide](CONTRIBUTING.md)**: Development guidelines and test commands.
 
 ---

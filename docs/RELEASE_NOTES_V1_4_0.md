@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Release Notes
 
-Status: `FINAL_RC__EXTERNAL_PUBLISH_PENDING_OWNER_AUTHORIZATION`
-
 WinHelm v1.4.0 focuses on making the Windows MCP runtime safer and more practical for daily use. The release consolidates profile-based permissions, approval modes, cross-process Local-Control, hardened public ingress, recovery behavior, and a validated production operating model.
 
 ## Highlights
@@ -49,7 +47,7 @@ The v1.4 line strengthens:
 
 ## Current validated production shape
 
-The final RC lineage has exercised:
+The release qualification lineage exercised:
 - Windows-native Core;
 - stdio clients;
 - Local-Control registry and real CLI control;
@@ -65,12 +63,15 @@ The R8 Windows service remains Manual and the public route is inactive by defaul
 - **Approval UX remains web/CLI-centric.** Windows toast approval is planned for v1.4.1+.
 - **Admin-code friction remains.** One-time local admin-code workflow is retained for privileged dashboard operations in v1.4.0.
 - **Tray/dashboard polish is deferred.**
+- **WinHelm Setup Assistant ships separately.** It is an optional companion UX and is not required for manual v1.4.0 installation or operation.
 - **MCP Harbor is a separate future product/control-plane effort.**
 
-## Upgrade note
+## Install and upgrade
 
-The Final RC package metadata is `1.4.0`, its package lock is synchronized, and the public tool count is 56. Upgrade/rollback smoke and exact artifact hashes are release gates before publication.
+A complete manual installation path is part of the core release; see [MANUAL_INSTALL.md](MANUAL_INSTALL.md). The release does not depend on the separate Setup Assistant.
 
-## Publication gate
+The release package metadata is `1.4.0`, its package lock is synchronized, and the public tool count is 56. The reviewed release artifact is identified by exact size and SHA-256 in the release record.
 
-Technical release finalization is complete only after the Final RC canonical suite, package/install/rollback smoke, exact artifact hashes, and clean release commit are recorded. External `v1.4.0` tag push and npm publication require a separate final Owner authorization.
+## Release integrity
+
+The release is sealed only from the reviewed release commit and exact package artifact after canonical qualification, native conformance, migration checks, install smoke, and artifact hashing. Publication uses those sealed identities without source mutation.

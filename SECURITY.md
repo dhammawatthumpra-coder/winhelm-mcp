@@ -10,7 +10,7 @@ Only the latest minor release is actively maintained and receives security patch
 
 | Version | Supported          | Security Status |
 | ------- | ------------------ | --------------- |
-| 1.4.x   | :white_check_mark: | Active Support after v1.4.0 publication |
+| 1.4.x   | :white_check_mark: | Active Support |
 | 1.2.x   | :x:                | Superseded by v1.4.0 |
 | 1.1.x   | :x:                | End of Life     |
 | 1.0.x   | :x:                | End of Life     |
@@ -53,7 +53,7 @@ Non-bypassable release floors include:
 - fail-closed Local-Control metadata validation;
 - public-ingress OAuth/TLS boundaries and redaction of secret material.
 
-The direct production dependency `@modelcontextprotocol/sdk` is pinned to the patched v1.32.x line in this RC; release qualification requires `npm audit --omit=dev` to report zero known production vulnerabilities.
+The direct production dependency `@modelcontextprotocol/sdk` is pinned to the patched v1.32.x line; release qualification requires `npm audit --omit=dev` to report zero known production vulnerabilities.
 
 **D1 live mode is not shipped as active v1.4.0 functionality.** Port 18791 remains disabled because the deferred D1 design requires stronger process-lifetime provenance than mutable timestamp metadata can provide.
 

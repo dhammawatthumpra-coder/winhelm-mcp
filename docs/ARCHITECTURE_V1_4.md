@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Architecture Overview
 
-Status: `FINAL_RC`
-
 ## Layers
 
 ```text

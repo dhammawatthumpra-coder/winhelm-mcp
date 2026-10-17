@@ -1,7 +1,5 @@
 # WinHelm v1.4.0 — Clients, R7, and Connectivity
 
-Status: `FINAL_RC`
-
 ## Local clients
 
 WinHelm supports stdio-based clients and local HTTP transport.

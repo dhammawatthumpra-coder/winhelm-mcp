@@ -110,7 +110,7 @@ Under schema-v2, `process_kill` inspects the target process:
 
 ## 4. Human Approval Workflow & Cross-Process Architecture
 
-WinHelm v1.3 implements a distributed, file-based approval coordination architecture (post DEF-02) inside the protected `~/.winhelm` directory:
+WinHelm v1.4.0 includes the distributed, file-based approval coordination architecture inside the protected `~/.winhelm` directory:
 
 ```
 ~/.winhelm/
