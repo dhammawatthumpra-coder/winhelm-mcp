@@ -4,12 +4,16 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { getApprovalEngine } from "../approval/runtime.js";
+import {
+  crossProcessInstanceId,
+} from "../approval/cross-process.js";
 import { getAdminAuthManager } from "../admin/runtime.js";
 import { buildRuntimeStatusSnapshot } from "../status/runtime-status.js";
 
 export interface ControlServerOptions {
   metadataPath?: string;
   pipeName?: string;
+  instanceId?: string;
 }
 
 export interface ControlMetadata {
@@ -17,6 +21,7 @@ export interface ControlMetadata {
   capability: string;
   pid: number;
   createdAt: string;
+  instanceId?: string;
 }
 
 interface ControlRequest {
@@ -30,6 +35,19 @@ function defaultMetadataPath(): string {
   const override = process.env.WINHELM_CONTROL_METADATA_PATH;
   if (override) return path.resolve(override);
   return path.join(os.homedir(), ".winhelm", "control.json");
+}
+
+export function getControlRegistryDir(metadataPath: string): string {
+  const parsed = path.parse(metadataPath);
+  return path.join(parsed.dir, parsed.name + ".d");
+}
+
+function registryFilePath(metadataPath: string, instanceId: string): string {
+  const digest = crypto
+    .createHash("sha256")
+    .update(instanceId, "utf8")
+    .digest("hex");
+  return path.join(getControlRegistryDir(metadataPath), digest + ".json");
 }
 
 function defaultPipeName(): string {
@@ -46,15 +64,27 @@ function responseLine(payload: unknown): string {
   return JSON.stringify(payload) + "\n";
 }
 
+async function writeMetadataFile(
+  target: string,
+  metadata: ControlMetadata
+): Promise<void> {
+  await fs.writeFile(target, JSON.stringify(metadata, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
+
 export class LocalControlServer {
   private readonly metadataPath: string;
   private readonly pipeName: string;
   private readonly capability = crypto.randomBytes(32).toString("base64url");
+  private readonly instanceId: string;
   private server?: net.Server;
 
   constructor(options: ControlServerOptions = {}) {
     this.metadataPath = options.metadataPath ?? defaultMetadataPath();
     this.pipeName = options.pipeName ?? defaultPipeName();
+    this.instanceId = options.instanceId ?? crossProcessInstanceId();
   }
 
   async start(): Promise<ControlMetadata> {
@@ -63,6 +93,9 @@ export class LocalControlServer {
     }
 
     await fs.mkdir(path.dirname(this.metadataPath), { recursive: true });
+    await fs.mkdir(getControlRegistryDir(this.metadataPath), {
+      recursive: true,
+    });
 
     this.server = net.createServer((socket) => {
       socket.setEncoding("utf8");
@@ -111,11 +144,30 @@ export class LocalControlServer {
     });
 
     const metadata = this.metadata();
-    await fs.writeFile(
+    const registryPath = registryFilePath(
       this.metadataPath,
-      JSON.stringify(metadata, null, 2),
-      { encoding: "utf8", mode: 0o600 }
+      this.instanceId
     );
+
+    try {
+      // Publish the durable per-instance entry first. If this process dies
+      // after another process overwrites the compatibility pointer, clients
+      // can still discover every surviving local-control owner.
+      await writeMetadataFile(registryPath, metadata);
+
+      // Keep the historical single-slot pointer for backward compatibility.
+      // It is only a preferred pointer; the registry is authoritative for
+      // failover among concurrently alive instances.
+      await writeMetadataFile(this.metadataPath, metadata);
+    } catch (err) {
+      await fs.rm(registryPath, { force: true }).catch(() => {});
+      const server = this.server;
+      this.server = undefined;
+      if (server) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+      throw err;
+    }
 
     return metadata;
   }
@@ -128,7 +180,17 @@ export class LocalControlServer {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
-    await fs.rm(this.metadataPath, { force: true }).catch(() => {});
+    const registryPath = registryFilePath(
+      this.metadataPath,
+      this.instanceId
+    );
+    await fs.rm(registryPath, { force: true }).catch(() => {});
+
+    // The shared control.json is only a backward-compatible hint. Never
+    // remove it during shutdown: compare-then-delete cannot be made atomic
+    // across processes, so an older instance could otherwise erase a newer
+    // instance's pointer. A stale hint is harmless because the client checks
+    // liveness/transport and falls back to the per-instance registry.
   }
 
   private metadata(): ControlMetadata {
@@ -137,6 +199,7 @@ export class LocalControlServer {
       capability: this.capability,
       pid: process.pid,
       createdAt: new Date().toISOString(),
+      instanceId: this.instanceId,
     };
   }
 
