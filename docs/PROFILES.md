@@ -59,8 +59,18 @@ Designed for trusted automation scripts and end-to-end development workflows whe
   - **R5 (Shell / commands):** `auto`.
   - **Recovery tools:** `auto`.
 
-### Deferred Modes: `dangerous`
-> ⚠️ **Notice:** An unrestricted `dangerous` mode is **not supported** in v1.3. It is explicitly reserved and deferred to v1.4.
+### Unrestricted `dangerous` mode
+> ⚠️ **Notice:** An unrestricted `dangerous` profile is **not shipped** in v1.4.0. Safe / Balanced / Power are the supported product profiles.
+
+## Approval Modes are separate from profiles
+
+Schema-v2 v1.4.0 separates capability posture from prompting behavior:
+
+- **Manual** — R0 read-only/recovery work can run automatically; permitted state-changing work normally asks.
+- **Smart** — the default for product profiles; bounded low-risk work can proceed automatically while higher-risk work asks.
+- **Trusted** — routine permitted work can proceed automatically, but it still cannot bypass capability denial, absolute deny, explicit-confirmation, or mandatory-confirmation floors.
+
+A profile answers **what is allowed**. Approval Mode answers **whether an already-permitted action asks**. Approval Mode never expands capability.
 
 ---
 
@@ -108,8 +118,8 @@ Every tool schema takes prompt tokens when serialized. WinHelm allows optimizing
 | :--- | :---: | :---: | :---: | :--- |
 | **`minimal`** | 6 | ~1,500 | 🟢 **−85%** | Claude Haiku, Llama 8B, local models |
 | **`core`** | 15 | ~4,000 | 🟢 **−60%** | Everyday coding without daemons |
-| **`dev` / `balanced`** | ~28–41 | ~6,800–10,000 | 🟡 **−30%** | Claude Sonnet, GPT-4o, Cursor |
-| **`full` / `power`** | 41 | ~10,000 | 🔵 Baseline | Autonomous engineering agents |
+| **`dev` / `balanced`** | profile-dependent | profile-dependent | — | Daily engineering |
+| **`full` / `power`** | up to 56 | release-surface dependent | 🔵 Full v1.4 surface | Trusted automation |
 
 ---
 

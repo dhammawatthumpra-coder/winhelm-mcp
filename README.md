@@ -8,17 +8,17 @@
 [![Protocol](https://img.shields.io/badge/MCP-1.9.0-purple.svg)](https://modelcontextprotocol.io/)
 
 > **WinHelm MCP** — *The helm for your Windows workspace.*  
-> A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor & Approval Dashboard, 41 Canonical System Tools with Schema-v2 Governance & Dynamic Profiles, and MCP File Preview Resource.
+> A lightweight, production-grade Windows Native Model Context Protocol (MCP) server featuring a built-in Single-Process Web Gateway (Streamable HTTP `/mcp` + Server-Sent Events `/sse`), Real-Time Web Monitor & Approval Dashboard, 56 Canonical System Tools with Schema-v2 Governance & Dynamic Profiles, and MCP File Preview Resource.
 
 [📖 Tools Reference](docs/TOOLS.md) • [⚙️ Tool Profiles](docs/PROFILES.md) • [🛡️ Security Architecture](docs/SECURITY.md) • [🎯 Threat Model](docs/THREAT_MODEL.md) • [📜 Terms of Use](TERMS_OF_USE.md) • [💡 Agent Examples](docs/EXAMPLES.md) • [📝 Changelog](CHANGELOG.md) • [🤝 Contributing](CONTRIBUTING.md)
 
 ---
 
-## Product Status: v1.3 Release Candidate (RC Accepted)
+## Product Status: v1.4.0 Final Release Candidate
 
-This repository contains the accepted **v1.3 Release Candidate** implementation (`V1_3_RC_ACCEPTED` baseline). Technical RC blockers DEF-01 (Claude Desktop MSIX config discovery) and DEF-02 / DEF-02b (cross-process Dashboard approval routing and multi-instance admin code verification) have been resolved and verified across 580 automated tests and live client smokes.
+This repository contains the **WinHelm v1.4.0 Final RC**: the accepted 56-tool Schema-v2 integration lineage plus the independently reviewed Local-Control Registry R2 corrective. Final build/test/package qualification is part of the RC freeze; external tag push and npm publication remain subject to explicit Owner authorization.
 
-> ℹ️ **Notice:** Production release, npm publication, and release tagging remain subject to human owner authorization during the release phase.
+The accepted R8 public-ingress posture is conservative by default: the Windows ingress service is Manual, the public route is inactive until explicitly activated, and D1 live mode/port 18791 is not shipped as active v1.4.0 functionality.
 
 ---
 
@@ -35,7 +35,7 @@ This repository contains the accepted **v1.3 Release Candidate** implementation 
   - [4. Dashboard & Human Approvals](#4-dashboard--human-approvals)
 - [Configuration Modes: Legacy vs. Schema-v2](#configuration-modes-legacy-vs-schema-v2)
 - [Security Profiles & Presets](#security-profiles--presets)
-- [Canonical Tool Registry (41 Tools)](#canonical-tool-registry-41-tools)
+- [Canonical Tool Registry (56 Tools)](#canonical-tool-registry-56-tools)
 - [Human Approval & Cross-Process Coordination](#human-approval--cross-process-coordination)
 - [Client Configuration Reference](#client-configuration-reference)
   - [Claude Desktop (Classic & MSIX)](#1-claude-desktop-claude_desktop_configjson)
@@ -127,7 +127,7 @@ flowchart TD
     subgraph Execution["Execution Plane (Owning Process Only)"]
         Engine["Approval Engine (State CAS: approved -> running)"]
         ExecGuard["Invariant: executionCount <= 1"]
-        Tools["41 Canonical System Tools"]
+        Tools["56 Canonical System Tools"]
     end
 
     Claude -->|creates job| ReqMirror
@@ -248,25 +248,25 @@ In schema-v2, profiles represent policy presets that configure folder permission
 | **`balanced`** (Recommended) | `readwrite` | `ask` (approval required) | R0/R1 `auto`; R2/R3/R4 `ask` (approval); shell execution gated by terminal policy | Daily interactive engineering with human approval for elevated actions |
 | **`power`** | `readwrite` | `full` (autonomous) | R0/R1/R2 `auto`; R3/R4 `ask`; terminal & command execution `auto` | Trusted automated agent pipelines requiring unrestricted shell workflows |
 
-> ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not supported** in v1.3. It is explicitly reserved and deferred to v1.4.  
+> ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not shipped** in v1.4.0. Safe / Balanced / Power remain the supported product profiles, with Manual / Smart / Trusted as a separate Approval Mode dimension.
 > 💡 **Legacy Presets:** Named presets (`minimal`, `core`, `dev`, `sysadmin`, `full`) remain supported in schema-v2 as compatibility presets that map to specific tool policy subsets.
 
 ---
 
-## Canonical Tool Registry (41 Tools)
+## Canonical Tool Registry (56 Tools)
 
-WinHelm defines **41 canonical tools** in its single source of truth registry (`src/tools/registry.ts`), validated via `npm run lint:tools`:
+WinHelm v1.4.0 defines **56 canonical public tools** in its single source of truth registry (`src/tools/registry.ts`), validated via `npm run lint:tools`:
 
-- **38 Legacy Tools:** Original tools across Terminal (6), Filesystem (12), Search/PDF/Preview (3), Desktop (5), System (9), and Network (3).
-- **3 Schema-v2 Additions:**
-  1. `command_run`: Direct command execution without shell wrapping, passing argument vectors cleanly.
-  2. `winhelm_status`: Read-only snapshot of runtime permissions, profile, and server health.
-  3. `winhelm_job_status`: Inspect status or retrieve results of an existing approval job by `jobId` or idempotency key.
+- **38 legacy tools** across terminal/background tasks, filesystem/search/document, desktop, system/services, and network diagnostics.
+- **3 Schema-v2 execution/recovery tools:** `command_run`, `winhelm_status`, and `winhelm_job_status`.
+- **9 Spec 3.4 Tier A tools:** `file_inspect_batch`, `file_write_atomic`, `file_create_exclusive`, `session_current`, `session_audit_search`, `file_provenance_lookup`, `command_wait`, `file_compare`, and `directory_manifest`.
+- **6 Spec 3.4 Tier B tools:** `json_parse_strict`, `json_canonical_hash`, `memory_info`, `process_resource_monitor`, `git_status_structured`, and `git_diff_structured`.
 
-### Conditional Runtime Exposure
+### Runtime exposure
 
-- **In Legacy Mode:** 40 tools are registered (38 legacy tools + 2 recovery tools `winhelm_status` and `winhelm_job_status`). The `command_run` tool is schema-v2 only.
-- **In Schema-v2 Mode:** All 41 canonical tools are registered on the MCP server. Permissions and approval gating are evaluated at call-time based on active folder rules and risk policy.
+- **Legacy configuration compatibility:** the historical legacy surface remains bounded for compatibility and does not define the v1.4.0 public release count.
+- **Schema-v2 v1.4.0:** all **56** canonical public tools are registered; profile/capability policy and Approval Mode are evaluated at call time.
+- Capability denial, absolute deny, and mandatory/explicit confirmation remain stronger than Manual / Smart / Trusted Approval Mode.
 
 ---
 
@@ -317,7 +317,7 @@ Use `winhelm connect claude --yes` for automatic configuration, or configure man
 Use `winhelm connect cursor --yes` for automatic configuration, or add in Cursor Settings (`Features` -> `MCP`):
 
 - **Type:** `command`
-- **Command:** `node D:\mcp\winhelm-mcp\dist\index.js --stdio`
+- **Command:** `node <WINHELM_INSTALL_ROOT>\dist\index.js --stdio`
 
 ### 3. ChatGPT & OpenAI MCP Tunnel (`tunnel-client`)
 
@@ -359,7 +359,7 @@ winhelm --host 0.0.0.0 --auth my-secret-token
 - **`/sse`** — Server-Sent Events transport endpoint.
 - **`/message`** — POST endpoint for incoming JSON-RPC messages in SSE mode.
 - **`/preview`** — Interactive browser file viewer (`/preview?path=D:\project\README.md`).
-- **`/health`** — Health check probe (`{"status": "ok", "version": "1.2.1"}`).
+- **`/health`** — Health check probe (`{"status": "ok", "version": "1.4.0"}`).
 - **`/admin/approvals`** — Admin approvals list and decision API.
 
 ---

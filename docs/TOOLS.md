@@ -1,10 +1,16 @@
 # WinHelm MCP — Comprehensive Tools Reference
 
-WinHelm provides **41 canonical native Windows tools** (38 legacy system tools + 3 schema-v2 execution and recovery tools) and **1 MCP Resource** designed for AI coding agents and desktop automation.
+WinHelm v1.4.0 provides **56 canonical public Windows tools** and **1 MCP Resource**. The release surface is the accepted 41-tool v1.3 base plus 9 Spec 3.4 Tier A tools and 6 Tier B tools.
 
 ### Runtime Exposure by Configuration Mode
-- **Legacy Mode (v1.2.1 compatibility):** 40 tools are registered (38 legacy tools + 2 recovery tools `winhelm_status` and `winhelm_job_status`). The `command_run` tool is schema-v2 only.
-- **Schema-v2 Mode (`schemaVersion: 2`):** All 41 canonical tools are registered on the MCP server surface. Execution and approval gating are evaluated dynamically at runtime based on active folder permissions, terminal policies, and risk levels.
+- **Legacy Mode (v1.2.1 compatibility):** retains the historical compatibility surface; it is not the v1.4.0 public release-count baseline.
+- **Schema-v2 Mode (`schemaVersion: 2`):** all **56 canonical public tools** are registered on the MCP server surface. Capability/profile policy, path/terminal policy, and Approval Mode are evaluated dynamically at runtime.
+
+### v1.4.0 additions
+- **Tier A (9):** `file_inspect_batch`, `file_write_atomic`, `file_create_exclusive`, `session_current`, `session_audit_search`, `file_provenance_lookup`, `command_wait`, `file_compare`, `directory_manifest`.
+- **Tier B (6):** `json_parse_strict`, `json_canonical_hash`, `memory_info`, `process_resource_monitor`, `git_status_structured`, `git_diff_structured`.
+
+The detailed legacy/v1.3 entries below remain valid references for those tools; the v1.4 additions are governed by the same Schema-v2 capability and approval security floor.
 
 ---
 

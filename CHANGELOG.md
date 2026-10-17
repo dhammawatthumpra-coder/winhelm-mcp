@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-10-18 — Final RC, publication pending Owner authorization
+
+### Added
+- Expanded the canonical Schema-v2 public surface to **56 tools**: the 41-tool v1.3 base plus 9 Spec 3.4 Tier A and 6 Tier B primitives.
+- Added Manual / Smart / Trusted Approval Modes as a dimension separate from Safe / Balanced / Power capability profiles.
+- Added the Local-Control per-instance registry and failover model for concurrent HTTP/stdio processes, with strict registry metadata admission.
+- Added hardened R8 hosted/public ingress qualification, including TLS, static confidential-client OAuth, real Gemini connector discovery, and authenticated read-only MCP execution.
+- Added v1.4 install/upgrade/rollback, daily operations, troubleshooting, migration, architecture, client-connectivity, release-notes, and known-limitations documentation.
+
+### Changed
+- Package version and lock metadata are synchronized at `1.4.0`.
+- Package description/public metadata now reports the validated **56-tool** surface.
+- The npm package includes the qualified Windows native boundary addon required by governed file/process operations.
+- `@modelcontextprotocol/sdk` is raised to the patched v1.32.x line; Final RC production dependency audit reports zero known vulnerabilities.
+- R8 ingress service posture is **Manual** with public exposure **inactive by default**.
+
+### Security
+- Preserves pre-approval absolute deny and non-bypassable mandatory/explicit confirmation floors across all Approval Modes.
+- Preserves protected-path/object identity hardening and fail-closed native boundary semantics.
+- D1 live mode remains disabled and port 18791 is not part of active v1.4.0 scope; stronger lifetime provenance is deferred to v1.4.1+.
+- Real OAuth credentials, admin codes, Local-Control capabilities, and token material are excluded from release documentation/evidence.
+
+### Fixed
+- Carries the accepted Local-Control Registry R2 stale-pointer corrective into the release source boundary.
+- Rejects malformed/canonical-mismatch Local-Control registry records before transport and preserves bounded failover to valid live owners.
+- Avoids fixed-port collision in SSE qualification by using an OS-assigned test port.
+
+### Release gate
+- Technical Final RC is prepared locally only. External `v1.4.0` tag creation/push and npm publication require explicit final Owner authorization.
+
 ## [1.3.0-rc.1] - 2026-10-04
 
 ### Added

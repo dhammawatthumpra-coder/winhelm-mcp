@@ -10,7 +10,8 @@ Only the latest minor release is actively maintained and receives security patch
 
 | Version | Supported          | Security Status |
 | ------- | ------------------ | --------------- |
-| 1.2.x   | :white_check_mark: | Active Support  |
+| 1.4.x   | :white_check_mark: | Active Support after v1.4.0 publication |
+| 1.2.x   | :x:                | Superseded by v1.4.0 |
 | 1.1.x   | :x:                | End of Life     |
 | 1.0.x   | :x:                | End of Life     |
 
@@ -40,6 +41,23 @@ For in-depth architectural details, please refer to:
 - [Threat Model (STRIDE Framework)](docs/THREAT_MODEL.md) — Comprehensive analysis of attack surfaces, trust boundaries, and mitigations.
 - [Security Architecture & Guidelines](docs/SECURITY.md) — Detailed explanation of multi-layered controls, path confinement, and credential masking.
 - [Terms of Use & Shared Responsibility](TERMS_OF_USE.md) — Clarification of administrator responsibilities and software limitations.
+
+## v1.4.0 Security Posture
+
+WinHelm v1.4.0 uses layered authorization. Capability/profile and protected-boundary checks happen before Approval Mode. Manual / Smart / Trusted can change prompting for an already-permitted action, but cannot turn a denied capability into an allowed one.
+
+Non-bypassable release floors include:
+- absolute-deny/preflight checks before approval/job creation;
+- explicit and mandatory confirmation where required;
+- protected internal paths and secret/control state;
+- fail-closed Local-Control metadata validation;
+- public-ingress OAuth/TLS boundaries and redaction of secret material.
+
+The direct production dependency `@modelcontextprotocol/sdk` is pinned to the patched v1.32.x line in this RC; release qualification requires `npm audit --omit=dev` to report zero known production vulnerabilities.
+
+**D1 live mode is not shipped as active v1.4.0 functionality.** Port 18791 remains disabled because the deferred D1 design requires stronger process-lifetime provenance than mutable timestamp metadata can provide.
+
+The accepted R8 public-ingress service is Manual and its public route is inactive by default; exposure is explicitly activated rather than left permanently open.
 
 ---
 
