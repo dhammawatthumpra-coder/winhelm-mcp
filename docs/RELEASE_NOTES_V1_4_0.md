@@ -10,7 +10,7 @@ WinHelm v1.4.0 standardizes three product profiles:
 
 - **Safe** — read-only exploration with terminal execution disabled.
 - **Balanced** — daily engineering profile with bounded autonomous local work and approval for higher-impact actions.
-- **Power** — trusted automation profile with broader automatic execution while retaining non-bypassable security floors.
+- **Power** — broader capability for trusted automation. Product presets still default to Smart Approval Mode, so representative R2/R3/R4/R5 actions remain approval-gated unless a different permitted mode applies; non-bypassable security floors remain in force.
 
 ### Approval Modes
 

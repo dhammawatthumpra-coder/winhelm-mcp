@@ -85,21 +85,23 @@ In schema-v2, filesystem access is declared per-folder:
 Every path is resolved to its real canonical path (`fs.realpathSync`) before boundary evaluation, neutralizing path traversal attacks (`..\..\`) and directory junction bypasses.
 
 ### Terminal Modes
-Terminal execution (`terminal_run`, `terminal_task_start`, `command_run`) is governed by three distinct modes:
-- `off`: Terminal tools are disabled completely.
-- `ask`: Every terminal command requires explicit human approval before execution.
-- `full`: Terminal execution is permitted without per-command approval within allowed folders.
+Terminal mode is one layer of Schema-v2 authorization for execution tools (`terminal_run`, `terminal_task_start`, `command_run`):
+- `off`: terminal execution capability is disabled.
+- `ask`: terminal execution carries an explicit per-command confirmation floor.
+- `full`: terminal execution capability is permitted at this layer, but Approval Mode and mandatory-confirmation rules are still evaluated afterward.
+
+Product presets default to **Smart Approval Mode**. Both Balanced and Power store terminal mode `full`; under default Smart, representative R5 terminal/command actions still require approval. Trusted can remove routine prompts for permitted R5 actions, but it cannot bypass explicit/mandatory confirmation or other security floors.
 
 ### Tool Risk Classification (R0 to R5)
 
-| Risk Class | Classification | Tools | Default Balanced Policy |
+| Risk Class | Classification | Tools | Balanced + default Smart |
 | :---: | :--- | :--- | :---: |
-| **R0** | Read-Only & Inspection | `file_read`, `file_list`, `file_search`, `file_search_ripgrep`, `file_tail`, `file_hash`, `file_preview`, `system_info`, `gpu_info`, `network_info`, `port_check`, `process_list`, `service_list`, `service_status`, `eventlog_query`, `terminal_task_list`, `terminal_task_logs` | `auto` |
-| **R1** | Local Mutation | `file_write`, `file_edit`, `file_copy`, `file_move`, `file_delete_safe`, `archive_zip`, `archive_unzip`, `pdf_generate`, `notification_send` | `auto` (inside `readwrite` folders) |
+| **R0** | Read-Only & Inspection | `file_read`, `file_list`, `file_search`, `file_search_ripgrep`, `file_tail`, `file_hash`, `file_preview`, `system_info`, `gpu_info`, `network_info`, `port_check`, `process_list`, `service_list`, `service_status`, `eventlog_query`, `terminal_task_list`, `terminal_task_logs` | `allow` |
+| **R1** | Local Mutation | `file_write`, `file_edit`, `file_copy`, `file_move`, `file_delete_safe`, `archive_zip`, `archive_unzip`, `pdf_generate`, `notification_send` | `allow` inside configured `readwrite` authority |
 | **R2** | Network Outbound | `http_ping`, `http_request` | `ask` |
 | **R3** | Desktop & Clipboard | `clipboard_get`, `clipboard_set`, `screen_capture`, `system_open` | `ask` |
-| **R4** | System Mutation | `process_kill`, `service_control` | `ask` |
-| **R5** | Shell & Execution | `terminal_run`, `terminal_task_start`, `terminal_task_send`, `terminal_task_kill`, `command_run` | Gated by Terminal Mode (`ask`) |
+| **R4** | System Mutation | `process_kill`, `service_control` | **deny — Balanced capability ceiling** |
+| **R5** | Shell & Execution | `terminal_run`, `terminal_task_start`, `terminal_task_send`, `terminal_task_kill`, `command_run` | `ask` under default Smart; stored terminal mode is `full` |
 
 ### External `process_kill` Governance
 Under schema-v2, `process_kill` inspects the target process:

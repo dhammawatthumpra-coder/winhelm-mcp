@@ -11,7 +11,7 @@ In WinHelm, **Profiles** serve two vital purposes:
 - [Schema-v2 Product Profiles (Safe, Balanced, Power)](#schema-v2-product-profiles)
   - [`safe` — Read-Only Exploration & Audits](#1-safe-read-only-exploration)
   - [`balanced` — Interactive Engineering (Recommended)](#2-balanced-interactive-engineering-recommended)
-  - [`power` — Autonomous Full-Stack Development](#3-power-autonomous-full-stack-development)
+  - [`power` — Broader Capability for Trusted Automation](#3-power-broader-capability-for-trusted-automation)
   - [Deferred Modes: `dangerous`](#deferred-modes-dangerous)
 - [Legacy Compatibility Presets (`minimal`, `core`, `dev`, `sysadmin`, `full`)](#legacy-compatibility-presets)
 - [Profile Comparison Matrix](#profile-comparison-matrix)
@@ -27,37 +27,32 @@ When using schema-v2 (`schemaVersion: 2` in configuration or via `winhelm setup`
 ### 1. `safe` (Read-Only Exploration)
 Designed for code auditing, documentation search, read-only telemetry, and small language models.
 - **Folder Permission:** `read` (strictly read-only across all configured folders).
-- **Terminal Mode:** `off` (terminal execution is disabled).
-- **Tool Policies:**
-  - **R0 (Read-only tools):** `auto` (except background task listing/logs which are `off`).
-  - **R1 (Mutating tools):** `off`.
-  - **R2 (Network tools):** `off`.
-  - **R3 (Desktop/Clipboard tools):** `off`.
-  - **R4 (System mutation tools):** `off`.
-  - **R5 (Shell tools):** `off`.
-  - **Recovery tools:** `auto` (`winhelm_status`, `winhelm_job_status`).
+- **Stored Terminal Mode:** `off` (terminal execution is disabled).
+- **Capability / preset policy:**
+  - **R0 (Read-only tools):** permitted with policy `auto`, including `terminal_task_list` and `terminal_task_logs`.
+  - **R1/R2/R3/R4/R5:** unavailable under the Safe capability ceiling.
+  - Background-task mutation tools (`terminal_task_start`, `terminal_task_send`, `terminal_task_kill`) are R5 and remain unavailable.
+  - **Recovery tools:** permitted with policy `auto` (`winhelm_status`, `winhelm_job_status`).
 
 ### 2. `balanced` (Interactive Engineering — Recommended Default)
-The default profile for daily software engineering with AI coding assistants (Claude Desktop, Cursor). Strikes a pragmatic balance between autonomous execution and human oversight.
-- **Folder Permission:** `readwrite` (file modifications permitted within configured folders).
-- **Terminal Mode:** `ask` (every shell command or script execution prompts for human approval).
-- **Tool Policies:**
-  - **R0 (Read-only) & R1 (Local file edits/creates):** `auto` within allowed folders.
-  - **R2 (Network requests):** `ask` (human approval required).
-  - **R3 (Clipboard & screen capture):** `ask` (human approval required).
-  - **R4 (Process kill & service control):** `ask` (human approval required).
-  - **R5 (Shell / commands):** Gated by terminal mode (`ask`).
-  - **Recovery tools:** `auto`.
-
-### 3. `power` (Autonomous Full-Stack Development)
-Designed for trusted automation scripts and end-to-end development workflows where continuous prompts would disrupt long-running tasks.
+The default profile for daily software engineering with AI coding assistants (Claude Desktop, Cursor). Product presets default to **Smart Approval Mode**.
 - **Folder Permission:** `readwrite`.
-- **Terminal Mode:** `full` (PowerShell and command execution run autonomously).
-- **Tool Policies:**
-  - **R0, R1, and R2 (Network):** `auto`.
-  - **R3 (Desktop) & R4 (Process/Service mutation):** `ask` (retains approval gating for high-impact host operations).
-  - **R5 (Shell / commands):** `auto`.
-  - **Recovery tools:** `auto`.
+- **Stored Terminal Mode:** `full`. This is a capability-layer setting; with the default **Smart** Approval Mode, R5 terminal/command execution still requires approval.
+- **Capability / preset policy:**
+  - **R0/R1:** permitted; under default Smart they run automatically within configured authority.
+  - **R2 (Network) and R3 (Desktop/Clipboard):** capability-permitted, but default Smart requires approval.
+  - **R4 (Process kill & service control):** **denied by the Balanced product-profile capability ceiling**. Approval Mode cannot make R4 available.
+  - **R5 (Shell / commands):** capability-permitted through terminal mode `full`, but default Smart requires approval.
+  - **Recovery tools:** permitted automatically.
+
+### 3. `power` (Broader Capability for Trusted Automation)
+Designed for trusted automation workflows that need broader capability than Balanced. Product presets still default to **Smart Approval Mode**; selecting Power does not by itself mean prompt-free execution.
+- **Folder Permission:** `readwrite`.
+- **Stored Terminal Mode:** `full`.
+- **Capability / preset policy:** R0/R1/R2/R3/R4/R5 are capability-permitted according to their normal security floors.
+- **Effective behavior with default Smart:** R0/R1 run automatically; representative R2/R3/R4/R5 actions require approval.
+- **Trusted Approval Mode:** can remove routine prompts for permitted R2/R3/R5 actions, but cannot bypass absolute deny, explicit-confirmation, or mandatory-confirmation floors. R4 operations such as service mutation remain approval-gated where mandatory confirmation applies.
+- **Recovery tools:** permitted automatically.
 
 ### Unrestricted `dangerous` mode
 > ⚠️ **Notice:** An unrestricted `dangerous` profile is **not shipped** in v1.4.0. Safe / Balanced / Power are the supported product profiles.
@@ -92,21 +87,27 @@ In schema-v2, passing a legacy preset name configures tool authorization policie
 
 ## Profile Comparison Matrix
 
-| Capability / Category | `safe` | `balanced` | `power` |
+The decisions below show the **default effective behavior** after applying each product preset. Product presets default to **Smart Approval Mode**. “Denied” means the product-profile capability ceiling blocks the action; changing Approval Mode cannot override it.
+
+| Capability / Category | `safe` + Smart | `balanced` + Smart | `power` + Smart |
 | :--- | :---: | :---: | :---: |
 | **Folder Permission** | `read` | `readwrite` | `readwrite` |
-| **Terminal Runner (`terminal_run`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **No-Shell Runner (`command_run`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **Background Tasks (`terminal_task_*`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
+| **Stored Terminal Mode** | `off` | `full` | `full` |
+| **Terminal Runner (`terminal_run`)** | ❌ Denied | 🛡️ Approval | 🛡️ Approval |
+| **No-Shell Runner (`command_run`)** | ❌ Denied | 🛡️ Approval | 🛡️ Approval |
+| **Background Task List/Logs** | ✅ Auto | ✅ Auto | ✅ Auto |
+| **Background Task Start/Send/Kill** | ❌ Denied | 🛡️ Approval | 🛡️ Approval |
 | **File Reading (`file_read`, `file_list`, etc.)** | ✅ Auto | ✅ Auto | ✅ Auto |
-| **File Writing / Editing (`file_write`, `file_edit`)** | ❌ Blocked | ✅ Auto | ✅ Auto |
-| **Recycle Bin Deletion (`file_delete_safe`)** | ❌ Blocked | ✅ Auto | ✅ Auto |
+| **File Writing / Editing (`file_write`, `file_edit`)** | ❌ Denied | ✅ Auto | ✅ Auto |
+| **Recycle Bin Deletion (`file_delete_safe`)** | ❌ Denied | ✅ Auto | ✅ Auto |
 | **Code Search Ripgrep (`file_search_ripgrep`)** | ✅ Auto | ✅ Auto | ✅ Auto |
-| **Network Requests (`http_ping`, `http_request`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **Desktop Automation (`clipboard_*`, `screen_capture`)** | ❌ Blocked | 🛡️ Approval | 🛡️ Approval |
-| **Process Termination (`process_kill`)** | ❌ Blocked | 🛡️ Approval | 🛡️ Approval |
+| **Network Requests (`http_ping`, `http_request`)** | ❌ Denied | 🛡️ Approval | 🛡️ Approval |
+| **Desktop Automation (`clipboard_*`, `screen_capture`)** | ❌ Denied | 🛡️ Approval | 🛡️ Approval |
+| **Process / Service Mutation (R4)** | ❌ Denied | ❌ **Capability denied** | 🛡️ Approval |
 | **System Info Telemetry (`system_info`, `gpu_info`)** | ✅ Auto | ✅ Auto | ✅ Auto |
 | **Recovery Status (`winhelm_status`, `winhelm_job_status`)** | ✅ Auto | ✅ Auto | ✅ Auto |
+
+With **Trusted** Approval Mode, permitted Power R2/R3/R5 actions can normally run without routine prompts, while mandatory-confirmation operations remain gated. Balanced R4 remains denied in every Approval Mode.
 
 ---
 
@@ -134,11 +135,14 @@ winhelm setup --preset balanced --folder "D:\Workspace" --yes
 winhelm setup --preset safe --folder "C:\Projects" --yes
 ```
 
-### Server Execution Flag
-```powershell
-# Run server with specific profile
-winhelm --profile balanced
+### Legacy Exposure Flag
 
-# Or pass in claude_desktop_config.json:
-# "args": ["D:\\mcp\\winhelm-mcp\\dist\\index.js", "--stdio", "--profile", "balanced"]
+`--profile` is a legacy tool-exposure flag. It is not the Schema-v2 product-profile configuration mechanism. For Schema-v2 use `winhelm setup --preset <safe|balanced|power>`.
+
+Legacy example:
+```powershell
+winhelm --profile dev
+
+# Or in a legacy client entry:
+# "args": ["<WINHELM_INSTALL_ROOT>\\dist\\index.js", "--stdio", "--profile", "dev"]
 ```

@@ -259,8 +259,8 @@ In schema-v2, profiles represent policy presets that configure folder permission
 | Profile | Folder Mode | Terminal Mode | Tool Policies | Target Use Case |
 | :--- | :---: | :---: | :--- | :--- |
 | **`safe`** | `read` (read-only) | `off` | R0 tools `auto`; all mutating, network, and desktop tools `off` | Code exploration, audits, small LLMs, zero mutation risk |
-| **`balanced`** (Recommended) | `readwrite` | `ask` (approval required) | R0/R1 `auto`; R2/R3/R4 `ask` (approval); shell execution gated by terminal policy | Daily interactive engineering with human approval for elevated actions |
-| **`power`** | `readwrite` | `full` (autonomous) | R0/R1/R2 `auto`; R3/R4 `ask`; terminal & command execution `auto` | Trusted automated agent pipelines requiring unrestricted shell workflows |
+| **`balanced`** (Recommended) | `readwrite` | stored `full`; default Smart prompts for R5 | Default Smart: R0/R1 `auto`; R2/R3/R5 `ask`; **R4 capability denied** | Daily interactive engineering with a hard R4 capability ceiling |
+| **`power`** | `readwrite` | stored `full`; default Smart prompts for R5 | Default Smart: R0/R1 `auto`; R2/R3/R4/R5 `ask`; Trusted can auto permitted R2/R3/R5 but not mandatory-confirmation floors | Broader trusted automation with non-bypassable security floors |
 
 > ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not shipped** in v1.4.0. Safe / Balanced / Power remain the supported product profiles, with Manual / Smart / Trusted as a separate Approval Mode dimension.
 > 💡 **Legacy Presets:** Named presets (`minimal`, `core`, `dev`, `sysadmin`, `full`) remain supported in schema-v2 as compatibility presets that map to specific tool policy subsets.

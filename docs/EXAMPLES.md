@@ -120,7 +120,7 @@ When an agent performs an audit and generates a client-ready PDF document:
 ```json
 {
   "query": "TODO|FIXME|SECURITY",
-  "path": "D:\\mcp\\winhelm-mcp",
+  "path": "D:\\Projects\\ExampleApp",
   "page_size": 20
 }
 ```
