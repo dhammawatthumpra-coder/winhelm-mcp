@@ -66,6 +66,7 @@ export interface VerifyRuntimeEndpointOptions {
   expectedRole: string;
   expectedExecutablePath: string;
   expectedEntrypointPath: string;
+  expectedHealthServer?: string;
   observe: (target: RuntimeEndpointTarget) => Promise<RuntimeEndpointObservation>;
   probeHealth: (record: RuntimeEndpointRecord) => Promise<unknown>;
 }
@@ -242,7 +243,7 @@ export async function verifyRuntimeEndpointRecord(
 
   if (
     health.status !== "ok" ||
-    health.server !== "winhelm-mcp" ||
+    health.server !== (options.expectedHealthServer ?? "winhelm-mcp") ||
     !health.runtime ||
     health.runtime.role !== parsed.role ||
     health.runtime.generation !== parsed.generation ||
@@ -338,6 +339,9 @@ export async function probeRuntimeEndpointHealth(
     `http://${formatHealthHost(parsed.host)}:${parsed.port}/health`,
     {
       method: "GET",
+      headers: {
+        "x-winhelm-runtime-generation": parsed.generation,
+      },
       redirect: "error",
       signal: AbortSignal.timeout(3_000),
     }
@@ -355,6 +359,7 @@ export interface PublishCurrentRuntimeEndpointOptions {
   port: number;
   expectedExecutablePath: string;
   expectedEntrypointPath: string;
+  expectedHealthServer?: string;
   filePath?: string;
   observe?: (target: RuntimeEndpointTarget) => Promise<RuntimeEndpointObservation>;
   probeHealth?: (record: RuntimeEndpointRecord) => Promise<unknown>;
@@ -439,6 +444,7 @@ export interface ResolveVerifiedRuntimeEndpointOptions {
   role: string;
   expectedExecutablePath: string;
   expectedEntrypointPath: string;
+  expectedHealthServer?: string;
   filePath?: string;
   observe?: (target: RuntimeEndpointTarget) => Promise<RuntimeEndpointObservation>;
   probeHealth?: (record: RuntimeEndpointRecord) => Promise<unknown>;
@@ -456,6 +462,7 @@ export async function resolveVerifiedRuntimeEndpoint(
     expectedRole: options.role,
     expectedExecutablePath: options.expectedExecutablePath,
     expectedEntrypointPath: options.expectedEntrypointPath,
+    expectedHealthServer: options.expectedHealthServer,
     observe: options.observe ?? observeWindowsRuntimeEndpoint,
     probeHealth: options.probeHealth ?? probeRuntimeEndpointHealth,
   });
@@ -510,6 +517,7 @@ export async function publishCurrentRuntimeEndpoint(
       expectedRole: options.role,
       expectedExecutablePath: options.expectedExecutablePath,
       expectedEntrypointPath: options.expectedEntrypointPath,
+      expectedHealthServer: options.expectedHealthServer,
       observe,
       probeHealth,
     });

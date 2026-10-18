@@ -7,26 +7,36 @@ import { isLoopbackHost } from "../utils/network-gate.js";
 
 const CORE_ROLE = "core";
 
-export function defaultInternalPortPreferencePath(): string {
+function validateRuntimeRole(role: string): string {
+  if (!/^[a-z0-9][a-z0-9_-]*$/i.test(role)) {
+    throw new Error(`Invalid WinHelm runtime role: ${role}`);
+  }
+  return role;
+}
+
+export function defaultInternalPortPreferencePath(role: string = CORE_ROLE): string {
+  const safeRole = validateRuntimeRole(role);
   return path.join(
     os.homedir(),
     ".winhelm",
     "runtime",
     "preferences",
-    "core.json"
+    `${safeRole}.json`
   );
 }
 
-export function readPreferredInternalPort(
-  filePath: string = defaultInternalPortPreferencePath()
+export function readPreferredInternalPortForRole(
+  role: string,
+  filePath: string = defaultInternalPortPreferencePath(role)
 ): number | undefined {
+  const safeRole = validateRuntimeRole(role);
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
       schemaVersion?: unknown;
       role?: unknown;
       preferredPort?: unknown;
     };
-    if (parsed.schemaVersion !== 1 || parsed.role !== CORE_ROLE) return undefined;
+    if (parsed.schemaVersion !== 1 || parsed.role !== safeRole) return undefined;
     if (
       typeof parsed.preferredPort !== "number" ||
       !Number.isInteger(parsed.preferredPort) ||
@@ -41,10 +51,12 @@ export function readPreferredInternalPort(
   }
 }
 
-export async function writePreferredInternalPort(
+export async function writePreferredInternalPortForRole(
+  role: string,
   port: number,
-  filePath: string = defaultInternalPortPreferencePath()
+  filePath: string = defaultInternalPortPreferencePath(role)
 ): Promise<void> {
+  const safeRole = validateRuntimeRole(role);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid preferred WinHelm port: ${port}`);
   }
@@ -54,7 +66,7 @@ export async function writePreferredInternalPort(
     JSON.stringify(
       {
         schemaVersion: 1,
-        role: CORE_ROLE,
+        role: safeRole,
         preferredPort: port,
       },
       null,
@@ -62,6 +74,19 @@ export async function writePreferredInternalPort(
     ) + "\n",
     { mode: 0o600 }
   );
+}
+
+export function readPreferredInternalPort(
+  filePath: string = defaultInternalPortPreferencePath()
+): number | undefined {
+  return readPreferredInternalPortForRole(CORE_ROLE, filePath);
+}
+
+export async function writePreferredInternalPort(
+  port: number,
+  filePath: string = defaultInternalPortPreferencePath()
+): Promise<void> {
+  await writePreferredInternalPortForRole(CORE_ROLE, port, filePath);
 }
 
 export type InternalPortSelection =
