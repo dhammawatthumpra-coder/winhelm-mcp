@@ -172,6 +172,37 @@ export function consumeDecisionCapability(
 }
 
 /**
+ * Proactively invalidates a decision capability when the corresponding job
+ * reaches any terminal state (e.g. approved/denied via Dashboard, expired, cancelled).
+ */
+export function invalidateDecisionCapability(
+  jobId: string,
+  journalPath: string = defaultApprovalJournalPath()
+): boolean {
+  const id = safeJobId(jobId);
+  if (!id) return false;
+
+  const dir = capabilitiesDirectory(journalPath);
+  const target = path.join(dir, `${id}.json`);
+  const consumed = path.join(dir, `${id}.consumed`);
+
+  try {
+    if (fs.existsSync(target)) {
+      try {
+        fs.unlinkSync(consumed);
+      } catch {
+        // Ignored
+      }
+      fs.renameSync(target, consumed);
+      return true;
+    }
+  } catch {
+    // Best effort
+  }
+  return false;
+}
+
+/**
  * Opportunistic sweep of expired or consumed capability records.
  */
 export function sweepStaleCapabilities(

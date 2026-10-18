@@ -6,6 +6,7 @@ import {
 } from "./runtime.js";
 import {
   isProcessAlive,
+  readRequest,
   waitForCrossProcessOutcome,
   writeDecision,
 } from "./cross-process.js";
@@ -129,6 +130,19 @@ export async function executeNativeDecision(
 
     finalState = outcome.job.state;
   } else {
+    // If the local engine has this job in memory (e.g. restored from restart as "unknown"),
+    // check its state. If not awaiting_approval, fail with CONFLICT.
+    const localJob = engine.get(id);
+    if (localJob && localJob.state !== "awaiting_approval") {
+      return {
+        ok: false,
+        code: "CONFLICT",
+        state: localJob.state,
+        message: `Job is in '${localJob.state}' state and cannot be decided.`,
+        jobId: id,
+      };
+    }
+
     // 3. Cross-process routing: check owner liveness
     if (!isProcessAlive(capability.pid)) {
       return {
@@ -138,6 +152,39 @@ export async function executeNativeDecision(
           "The WinHelm instance that owns this job is no longer running; the action cannot be executed.",
         jobId: id,
       };
+    }
+
+    // If capability was issued by the current process but the current engine does not own it,
+    // the job executor was lost across instance restart or reset.
+    if (capability.pid === process.pid) {
+      return {
+        ok: false,
+        code: "OWNER_UNAVAILABLE",
+        message:
+          "The job executor was lost across instance restart; the action cannot be executed.",
+        jobId: id,
+      };
+    }
+
+    const mirror = readRequest(id, journalPath);
+    if (mirror) {
+      if (mirror.job.state !== "awaiting_approval") {
+        return {
+          ok: false,
+          code: "CONFLICT",
+          state: mirror.job.state,
+          message: `Job is already in '${mirror.job.state}' state.`,
+          jobId: id,
+        };
+      }
+      if (Date.now() >= mirror.job.expiresAt) {
+        return {
+          ok: false,
+          code: "EXPIRED",
+          message: "Approval job has expired.",
+          jobId: id,
+        };
+      }
     }
 
     // Write cross-process decision file
@@ -153,11 +200,15 @@ export async function executeNativeDecision(
 
     // Wait for owning process to consume and execute
     const outcome = await waitForCrossProcessOutcome(id, 12000, journalPath);
-    if (outcome && outcome.state !== "awaiting_approval") {
-      finalState = outcome.state;
-    } else {
-      finalState = "pending";
+    if (!outcome || outcome.state === "awaiting_approval") {
+      return {
+        ok: false,
+        code: "TIMEOUT",
+        message: "Timed out waiting for the owning WinHelm process to execute the decision.",
+        jobId: id,
+      };
     }
+    finalState = outcome.state;
   }
 
   // 4. Audit logging

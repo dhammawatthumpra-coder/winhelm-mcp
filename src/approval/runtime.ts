@@ -5,7 +5,10 @@ import {
   type RecoverableApprovalJob,
 } from "./approval-engine.js";
 import { notifyApprovalPending } from "./notify.js";
-import { issueDecisionCapability } from "./decision-capability.js";
+import {
+  issueDecisionCapability,
+  invalidateDecisionCapability,
+} from "./decision-capability.js";
 import {
   logApprovalDecision,
   type ApprovalDecision,
@@ -155,21 +158,24 @@ export function initializeApprovalPersistence(
         }
       }
     },
-    ...(options.auditDecisions
-      ? {
-          onDecision: (
-            job: ApprovalJob,
-            decision: ApprovalDecision,
-            channel: string
-          ) => {
-            (options.decisionSink ?? defaultDecisionSink)(
-              job,
-              decision,
-              channel
-            );
-          },
-        }
-      : {}),
+    onDecision: (
+      job: ApprovalJob,
+      decision: ApprovalDecision,
+      channel: string
+    ) => {
+      try {
+        invalidateDecisionCapability(job.id, journalPath);
+      } catch {
+        // Advisory invalidation
+      }
+      if (options.auditDecisions) {
+        (options.decisionSink ?? defaultDecisionSink)(
+          job,
+          decision,
+          channel
+        );
+      }
+    },
   });
 
   if (loaded.jobs.length > 0) {
