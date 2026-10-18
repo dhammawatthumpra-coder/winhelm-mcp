@@ -19,7 +19,7 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
 
       <div class="card-grid-2">
         <!-- LOCALIZATION PREFERENCES -->
-        <div class="card" role="region" aria-label="Localization Preferences">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaLocale || "Localization Preferences")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.settingsLanguage)}</span>
           </div>
@@ -36,7 +36,7 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- THEME PREFERENCES -->
-        <div class="card" role="region" aria-label="Theme Preferences">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaTheme || "Theme Preferences")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellSettingsThemeTitle || "Appearance & Theme")}</span>
           </div>
@@ -54,7 +54,7 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- NOTIFICATION PREFERENCES -->
-        <div class="card" role="region" aria-label="Notification Preferences">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaNotif || "Notification Preferences")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellSettingsNotifTitle || "Desktop Notifications")}</span>
           </div>
@@ -71,9 +71,9 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- SECURITY SAFETY FLOOR NOTICE -->
-        <div class="card" role="region" aria-label="Security Safety Floor">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaFloor || "Security Safety Floor")}">
           <div class="card-header">
-            <span class="card-label">Security Containment Floor</span>
+            <span class="card-label">${escapeHtml(messages.shellSettingsContainmentTitle || "Security Containment Floor")}</span>
           </div>
           <div style="font-size:12px; color:var(--text-secondary);">
             ${escapeHtml(messages.shellSettingsDangerNote || "All security parameters, Capability Profiles, and Bearer Tokens must be configured under Access & Security.")}

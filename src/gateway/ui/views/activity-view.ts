@@ -17,7 +17,7 @@ export function renderActivityView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- FILTER PILLS -->
-      <div class="filter-pills-bar" role="group" aria-label="Activity Filter Pills">
+      <div class="filter-pills-bar" role="group" aria-label="${escapeHtml(messages.shellActivityAriaFilters || "Activity Filter Pills")}">
         <button class="filter-pill active" onclick="setActivityFilter('all', this)">${escapeHtml(messages.filterAll)}</button>
         <button class="filter-pill" onclick="setActivityFilter('tools', this)">${escapeHtml(messages.filterTools)}</button>
         <button class="filter-pill" onclick="setActivityFilter('security', this)">${escapeHtml(messages.filterSecurity)}</button>
@@ -25,7 +25,7 @@ export function renderActivityView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- ACTIVITY TIMELINE LIST -->
-      <div class="card" role="region" aria-label="Event Timeline">
+      <div class="card" role="region" aria-label="${escapeHtml(messages.shellActivityAriaTimeline || "Event Timeline")}">
         <div id="activityLogList" class="timeline-list">
           <div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">
             ${escapeHtml(messages.activityEmpty)}

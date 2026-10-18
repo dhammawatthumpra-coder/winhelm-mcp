@@ -600,6 +600,286 @@ export const EN_MESSAGES = {
     "Status",
   "shell.connections.no_sessions":
     "No active MCP client sessions announced yet.",
+
+  // Phase 2 R3 i18n Keys
+  "shell.header.theme_toggle_title":
+    "Toggle Theme",
+  "shell.header.theme_toggle_aria":
+    "Toggle visual theme",
+  "shell.header.lang_toggle_title":
+    "Switch Language",
+  "shell.header.lang_toggle_aria":
+    "Switch interface language",
+  "shell.nav.primary_aria":
+    "Primary Navigation",
+  "shell.nav.advanced_monitor":
+    "Advanced / Diagnostics \u2197",
+  "shell.nav.advanced_monitor_title":
+    "Open engineering dashboard for raw hardware metrics and tool registry",
+  "shell.modal.close_aria":
+    "Close dialog",
+  "shell.modal.admin_title":
+    "Admin Authorization Required",
+  "shell.modal.admin_code_label":
+    "One-time admin code",
+  "shell.modal.admin_code_placeholder":
+    "Enter one-time code",
+
+  "shell.admin.lock_confirm":
+    "Lock admin privileges now?",
+  "shell.admin.enter_code_error":
+    "Please enter one-time admin code.",
+  "shell.admin.conn_error_prefix":
+    "Connection error: ",
+  "shell.admin.invalid_code":
+    "Invalid or expired admin code.",
+
+  "shell.home.policy_label":
+    "Policy:",
+  "shell.home.pending_count_suffix":
+    "Pending",
+  "shell.home.clients_connected_suffix":
+    "Connected",
+  "shell.home.server_running":
+    "Running",
+  "shell.home.activity_title":
+    "Recent Operational Activity",
+  "shell.home.activity_view_all":
+    "View Full Audit Log \u2192",
+  "shell.home.activity_loading":
+    "Loading recent activity\u2026",
+  "shell.home.activity_empty":
+    "No recent activity recorded.",
+  "shell.home.aria_approvals_summary":
+    "Approvals Summary",
+  "shell.home.aria_access_summary":
+    "Access Posture Summary",
+  "shell.home.aria_remote_summary":
+    "Remote Access Summary",
+  "shell.home.aria_clients_summary":
+    "Client Ecosystem Summary",
+  "shell.home.aria_runtime_status":
+    "Runtime Status",
+  "shell.home.aria_quick_actions":
+    "Quick Actions",
+  "shell.home.aria_recent_activity":
+    "Recent Activity Stream",
+
+  "shell.approvals.heading_suffix":
+    "Approval Jobs",
+  "shell.approvals.aria_native_notif":
+    "Notification Integration",
+  "shell.approvals.aria_queue":
+    "Pending Approvals Queue",
+  "shell.approvals.aria_history":
+    "Recent Approval History",
+  "shell.approvals.count_pending_badge":
+    "{count} Pending",
+  "shell.approvals.urgent_subtitle":
+    "{count} pending tool execution requires your authorization.",
+  "shell.approvals.risk_suffix":
+    "Risk",
+  "shell.approvals.risk_reason_label":
+    "Risk Reason:",
+  "shell.approvals.mutating_op":
+    "Mutating operation",
+  "shell.approvals.action_target_label":
+    "Action Target:",
+  "shell.approvals.mandatory_confirm_title":
+    "\u26A0\uFE0F Mandatory Safety Confirmation Required",
+  "shell.approvals.mandatory_confirm_desc":
+    "Type confirm below to authorize this backend-gated action:",
+  "shell.approvals.mandatory_confirm_placeholder":
+    "Type 'confirm' here",
+  "shell.approvals.mandatory_confirm_err":
+    "Please type 'confirm' exactly.",
+  "shell.approvals.view_payload":
+    "\u25BC View Technical Details",
+  "shell.approvals.reason_approved":
+    "Approved via Product Shell",
+  "shell.approvals.reason_denied":
+    "Denied via Product Shell",
+  "shell.approvals.err_failed":
+    "Approval failed: ",
+  "shell.approvals.err_deny_failed":
+    "Denial failed: ",
+
+  "shell.connections.first_class_heading":
+    "First-Class Clients",
+  "shell.connections.checking_status":
+    "Checking status\u2026",
+  "shell.connections.status_checking":
+    "checking\u2026",
+  "shell.connections.status_unknown":
+    "unknown",
+  "shell.connections.status_installed":
+    "Installed",
+  "shell.connections.status_ready":
+    "Ready",
+  "shell.connections.status_compatible":
+    "Compatible",
+  "shell.connections.status_configured":
+    "Configured",
+  "shell.connections.status_local":
+    "Local",
+  "shell.connections.status_managed":
+    "managed",
+  "shell.connections.status_unmanaged":
+    "unmanaged",
+  "shell.connections.status_route_active":
+    "Route verified and active.",
+  "shell.connections.status_inactive":
+    "Inactive",
+  "shell.connections.status_active":
+    "Active",
+  "shell.connections.tunnel_started":
+    "Tunnel started.",
+  "shell.connections.tunnel_start_failed":
+    "Start failed.",
+  "shell.connections.tunnel_stopped":
+    "Tunnel stopped.",
+  "shell.connections.tunnel_stop_failed":
+    "Stop failed.",
+  "shell.connections.tunnel_restarted":
+    "Tunnel restarted.",
+  "shell.connections.tunnel_restart_failed":
+    "Restart failed.",
+  "shell.connections.doctor_prefix":
+    "Doctor check complete: ",
+  "shell.connections.doctor_passed":
+    "All probes passed.",
+  "shell.connections.doctor_issues":
+    "Issues detected.",
+  "shell.connections.doctor_err_prefix":
+    "Doctor error: ",
+  "shell.connections.loading_preview":
+    "Loading client preview\u2026",
+  "shell.connections.preview_err_prefix":
+    "Preview error: ",
+  "shell.connections.configuring_client":
+    "Configuring client\u2026",
+  "shell.connections.config_success":
+    "Client configured successfully.",
+  "shell.connections.config_failed":
+    "Configuration failed.",
+  "shell.connections.apply_err_prefix":
+    "Apply error: ",
+  "shell.connections.aria_remote_posture":
+    "Remote Access Posture",
+  "shell.connections.aria_claude":
+    "Claude Desktop Integration",
+  "shell.connections.aria_cursor":
+    "Cursor Editor Integration",
+  "shell.connections.aria_chatgpt":
+    "ChatGPT Integration",
+  "shell.connections.aria_tailscale":
+    "Tailscale Manual Integration",
+  "shell.connections.aria_sessions":
+    "Active Client Sessions",
+
+  "shell.remote.status_on":
+    "Remote Access On",
+  "shell.remote.status_off":
+    "Remote Access Off",
+  "shell.remote.verified_tunnel_active":
+    "Verified tunnel active: ",
+  "shell.remote.verified_route_reachable":
+    "Verified ingress route reachable.",
+  "shell.remote.local_ready_off":
+    "Local Ready \u00B7 Remote Access Off",
+  "shell.remote.active":
+    "Remote Active",
+  "shell.remote.zero_exposure":
+    "Listening on 127.0.0.1 loopback only. Zero public exposure.",
+
+  "shell.access.label_approval_mode":
+    "Approval Mode",
+  "shell.access.confirm_required":
+    "Confirmation Required",
+  "shell.access.preview_validation_prefix":
+    "Preview Validation:",
+  "shell.access.preview_valid":
+    "Config valid.",
+  "shell.access.policy_applied":
+    "Access policy applied.",
+  "shell.access.policy_apply_failed":
+    "Failed to apply.",
+  "shell.access.save_err_prefix":
+    "Save error: ",
+  "shell.access.rotate_token_confirm":
+    "Rotate the MCP access token now? The previous token stops working immediately and connected clients must be updated.",
+  "shell.access.rotate_token_failed":
+    "Failed to rotate token.",
+  "shell.access.rotate_token_success":
+    "New MCP Bearer Access Token generated successfully:\n\n{token}\n\nCopy this token now. It will not be shown again.",
+  "shell.access.rotate_token_err_prefix":
+    "Token rotation error: ",
+  "shell.access.aria_guidance":
+    "Policy Guidance",
+  "shell.access.aria_axis1":
+    "Axis 1: Capability Profile",
+  "shell.access.aria_axis2":
+    "Axis 2: Approval Mode",
+  "shell.access.aria_folders":
+    "Allowed Directories",
+  "shell.access.aria_credentials":
+    "Security Credentials",
+
+  "shell.activity.aria_filters":
+    "Activity Filter Pills",
+  "shell.activity.aria_timeline":
+    "Event Timeline",
+  "shell.activity.status_recorded":
+    "Recorded",
+
+  "shell.settings.containment_title":
+    "Security Containment Floor",
+  "shell.settings.aria_locale":
+    "Localization Preferences",
+  "shell.settings.aria_theme":
+    "Theme Preferences",
+  "shell.settings.aria_notif":
+    "Notification Preferences",
+  "shell.settings.aria_floor":
+    "Security Safety Floor",
+
+  "shell.advanced.status_healthy":
+    "Healthy",
+  "shell.advanced.host_nodejs":
+    "Node.js Host",
+  "shell.advanced.auth_adminauth":
+    "Local AdminAuth",
+  "shell.advanced.aria_ports":
+    "Dynamic Internal Ports",
+  "shell.advanced.aria_telemetry":
+    "Process Telemetry",
+  "shell.advanced.aria_legacy":
+    "Legacy Dashboard Access",
+
+  "shell.setup.aria_companion":
+    "Setup Assistant Companion",
+  "shell.setup.aria_workspace":
+    "Workspace Folders Setup Step",
+  "shell.setup.aria_profile":
+    "Capability Profile Setup Step",
+  "shell.setup.aria_approval":
+    "Approval Mode Setup Step",
+  "shell.setup.aria_client":
+    "Client Configuration Setup Step",
+  "shell.setup.aria_observe":
+    "Connection Observation Setup Step",
+  "shell.setup.aria_first_action":
+    "First Safe Action Guidance",
+  "shell.setup.aria_orientation":
+    "Navigation Orientation",
+  "shell.setup.companion_connected_notice":
+    "Setup Assistant companion bridge will be connected during Phase 3 cross-tranche integration.",
+  "shell.setup.diagnostic_running":
+    "Running installation diagnostic probes\u2026",
+  "shell.setup.diagnostic_healthy":
+    "\u2713 WinHelm gateway healthy. Timestamp: ",
+  "shell.setup.diagnostic_failed":
+    "Diagnostic check failed: ",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -1204,6 +1484,286 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "สถานะ",
   "shell.connections.no_sessions":
     "ยังไม่มีเซสชันไคลเอนต์ MCP ที่เปิดใช้งานในขณะนี้",
+
+  // Phase 2 R3 i18n Keys
+  "shell.header.theme_toggle_title":
+    "เปลี่ยนธีม",
+  "shell.header.theme_toggle_aria":
+    "สลับธีมการแสดงผล",
+  "shell.header.lang_toggle_title":
+    "เปลี่ยนภาษา",
+  "shell.header.lang_toggle_aria":
+    "สลับภาษาของอินเทอร์เฟซ",
+  "shell.nav.primary_aria":
+    "การนำทางหลัก",
+  "shell.nav.advanced_monitor":
+    "ขั้นสูง / การวินิจฉัย \u2197",
+  "shell.nav.advanced_monitor_title":
+    "เปิดแดชบอร์ดวิศวกรรมสำหรับข้อมูลฮาร์ดแวร์ดิบและรายการเครื่องมือ",
+  "shell.modal.close_aria":
+    "ปิดหน้าต่าง",
+  "shell.modal.admin_title":
+    "จำเป็นต้องยืนยันสิทธิ์ผู้ดูแล",
+  "shell.modal.admin_code_label":
+    "รหัสผู้ดูแลแบบใช้ครั้งเดียว",
+  "shell.modal.admin_code_placeholder":
+    "ใส่รหัสแบบใช้ครั้งเดียว",
+
+  "shell.admin.lock_confirm":
+    "ล็อกสิทธิ์ผู้ดูแลตอนนี้หรือไม่?",
+  "shell.admin.enter_code_error":
+    "โปรดใส่รหัสผู้ดูแลแบบใช้ครั้งเดียว",
+  "shell.admin.conn_error_prefix":
+    "ข้อผิดพลาดในการเชื่อมต่อ: ",
+  "shell.admin.invalid_code":
+    "รหัสผู้ดูแลไม่ถูกต้องหรือหมดอายุ",
+
+  "shell.home.policy_label":
+    "นโยบาย:",
+  "shell.home.pending_count_suffix":
+    "รายการรออนุมัติ",
+  "shell.home.clients_connected_suffix":
+    "เชื่อมต่อแล้ว",
+  "shell.home.server_running":
+    "กำลังทำงาน",
+  "shell.home.activity_title":
+    "กิจกรรมการทำงานล่าสุด",
+  "shell.home.activity_view_all":
+    "ดูบันทึกการตรวจสอบทั้งหมด \u2192",
+  "shell.home.activity_loading":
+    "กำลังโหลดกิจกรรมล่าสุด\u2026",
+  "shell.home.activity_empty":
+    "ยังไม่มีกิจกรรมที่บันทึกไว้",
+  "shell.home.aria_approvals_summary":
+    "สรุปรายการอนุมัติ",
+  "shell.home.aria_access_summary":
+    "สรุปสถานะการเข้าถึง",
+  "shell.home.aria_remote_summary":
+    "สรุปการเข้าถึงระยะไกล",
+  "shell.home.aria_clients_summary":
+    "สรุปภาพรวมไคลเอนต์",
+  "shell.home.aria_runtime_status":
+    "สถานะการทำงาน",
+  "shell.home.aria_quick_actions":
+    "คำสั่งด่วน",
+  "shell.home.aria_recent_activity":
+    "ฟีดกิจกรรมล่าสุด",
+
+  "shell.approvals.heading_suffix":
+    "งานการอนุมัติ",
+  "shell.approvals.aria_native_notif":
+    "การรวมระบบแจ้งเตือน",
+  "shell.approvals.aria_queue":
+    "คิวรายการรออนุมัติ",
+  "shell.approvals.aria_history":
+    "ประวัติการอนุมัติล่าสุด",
+  "shell.approvals.count_pending_badge":
+    "{count} รายการรออนุมัติ",
+  "shell.approvals.urgent_subtitle":
+    "{count} คำสั่งเครื่องมือที่รอดำเนินการต้องได้รับการอนุมัติจากคุณ",
+  "shell.approvals.risk_suffix":
+    "ความเสี่ยง",
+  "shell.approvals.risk_reason_label":
+    "เหตุผลความเสี่ยง:",
+  "shell.approvals.mutating_op":
+    "การดำเนินการแก้ไขข้อมูล",
+  "shell.approvals.action_target_label":
+    "เป้าหมายการกระทำ:",
+  "shell.approvals.mandatory_confirm_title":
+    "\u26A0\uFE0F จำเป็นต้องยืนยันความปลอดภัยตามข้อกำหนด",
+  "shell.approvals.mandatory_confirm_desc":
+    "พิมพ์ confirm ด้านล่างเพื่ออนุญาตคำสั่งที่ผ่านการควบคุมจากระบบ:",
+  "shell.approvals.mandatory_confirm_placeholder":
+    "พิมพ์ 'confirm' ที่นี่",
+  "shell.approvals.mandatory_confirm_err":
+    "โปรดพิมพ์ 'confirm' ให้ตรงทุกตัวอักษร",
+  "shell.approvals.view_payload":
+    "\u25BC ดูรายละเอียดทางเทคนิค",
+  "shell.approvals.reason_approved":
+    "อนุมัติผ่าน Product Shell",
+  "shell.approvals.reason_denied":
+    "ปฏิเสธผ่าน Product Shell",
+  "shell.approvals.err_failed":
+    "การอนุมัติล้มเหลว: ",
+  "shell.approvals.err_deny_failed":
+    "การปฏิเสธล้มเหลว: ",
+
+  "shell.connections.first_class_heading":
+    "ไคลเอนต์ระดับหนึ่ง",
+  "shell.connections.checking_status":
+    "กำลังตรวจสถานะ\u2026",
+  "shell.connections.status_checking":
+    "กำลังตรวจ\u2026",
+  "shell.connections.status_unknown":
+    "ไม่ทราบ",
+  "shell.connections.status_installed":
+    "ติดตั้งแล้ว",
+  "shell.connections.status_ready":
+    "พร้อม",
+  "shell.connections.status_compatible":
+    "เข้ากันได้",
+  "shell.connections.status_configured":
+    "กำหนดค่าแล้ว",
+  "shell.connections.status_local":
+    "ในเครื่อง",
+  "shell.connections.status_managed":
+    "จัดการเอง",
+  "shell.connections.status_unmanaged":
+    "ไม่ได้รับการจัดการ",
+  "shell.connections.status_route_active":
+    "ตรวจสอบเส้นทางแล้วและพร้อมใช้งาน",
+  "shell.connections.status_inactive":
+    "ไม่ทำงาน",
+  "shell.connections.status_active":
+    "ใช้งานอยู่",
+  "shell.connections.tunnel_started":
+    "เริ่มทันเนลแล้ว",
+  "shell.connections.tunnel_start_failed":
+    "เริ่มทันเนลไม่สำเร็จ",
+  "shell.connections.tunnel_stopped":
+    "หยุดทันเนลแล้ว",
+  "shell.connections.tunnel_stop_failed":
+    "หยุดทันเนลไม่สำเร็จ",
+  "shell.connections.tunnel_restarted":
+    "รีสตาร์ตทันเนลแล้ว",
+  "shell.connections.tunnel_restart_failed":
+    "รีสตาร์ตทันเนลไม่สำเร็จ",
+  "shell.connections.doctor_prefix":
+    "ตรวจสอบเสร็จสิ้น: ",
+  "shell.connections.doctor_passed":
+    "การตรวจสอบทั้งหมดผ่าน",
+  "shell.connections.doctor_issues":
+    "ตรวจพบปัญหา",
+  "shell.connections.doctor_err_prefix":
+    "ข้อผิดพลาดในการตรวจสอบ: ",
+  "shell.connections.loading_preview":
+    "กำลังโหลดตัวอย่างการกำหนดค่าไคลเอนต์\u2026",
+  "shell.connections.preview_err_prefix":
+    "ข้อผิดพลาดของตัวอย่าง: ",
+  "shell.connections.configuring_client":
+    "กำลังกำหนดค่าไคลเอนต์\u2026",
+  "shell.connections.config_success":
+    "กำหนดค่าไคลเอนต์สำเร็จ",
+  "shell.connections.config_failed":
+    "กำหนดค่าไม่สำเร็จ",
+  "shell.connections.apply_err_prefix":
+    "ข้อผิดพลาดในการนำไปใช้: ",
+  "shell.connections.aria_remote_posture":
+    "สถานะการเข้าถึงระยะไกล",
+  "shell.connections.aria_claude":
+    "การรวมระบบ Claude Desktop",
+  "shell.connections.aria_cursor":
+    "การรวมระบบตัวแก้ไข Cursor",
+  "shell.connections.aria_chatgpt":
+    "การรวมระบบ ChatGPT",
+  "shell.connections.aria_tailscale":
+    "การรวมระบบ Tailscale แบบกำหนดเอง",
+  "shell.connections.aria_sessions":
+    "เซสชันไคลเอนต์ที่กำลังทำงาน",
+
+  "shell.remote.status_on":
+    "เปิดการเข้าถึงระยะไกล",
+  "shell.remote.status_off":
+    "ปิดการเข้าถึงระยะไกล",
+  "shell.remote.verified_tunnel_active":
+    "ทันเนลที่ตรวจสอบแล้วทำงานอยู่: ",
+  "shell.remote.verified_route_reachable":
+    "เส้นทาง Ingress ที่ตรวจสอบแล้วสามารถเข้าถึงได้",
+  "shell.remote.local_ready_off":
+    "พร้อมใช้งานในเครื่อง \u00B7 ปิดการเข้าถึงระยะไกล",
+  "shell.remote.active":
+    "การเข้าถึงระยะไกลทำงานอยู่",
+  "shell.remote.zero_exposure":
+    "รับฟังบน 127.0.0.1 ลูปแบ็กเท่านั้น ไม่มีการเปิดเผยสู่สาธารณะ",
+
+  "shell.access.label_approval_mode":
+    "โหมดการอนุมัติ",
+  "shell.access.confirm_required":
+    "จำเป็นต้องยืนยัน",
+  "shell.access.preview_validation_prefix":
+    "การตรวจสอบตัวอย่าง:",
+  "shell.access.preview_valid":
+    "การกำหนดค่าถูกต้อง",
+  "shell.access.policy_applied":
+    "ใช้นโยบายการเข้าถึงแล้ว",
+  "shell.access.policy_apply_failed":
+    "ใช้นโยบายไม่สำเร็จ",
+  "shell.access.save_err_prefix":
+    "ข้อผิดพลาดในการบันทึก: ",
+  "shell.access.rotate_token_confirm":
+    "ต้องการหมุนเวียนโทเค็นการเข้าถึง MCP ตอนนี้หรือไม่? โทเค็นเดิมจะหยุดทำงานทันทีและต้องอัปเดตไคลเอนต์ที่เชื่อมต่อใหม่",
+  "shell.access.rotate_token_failed":
+    "หมุนเวียนโทเค็นไม่สำเร็จ",
+  "shell.access.rotate_token_success":
+    "สร้างโทเค็น Bearer สำหรับเข้าถึง MCP ใหม่สำเร็จ:\n\n{token}\n\nคัดลอกโทเค็นนี้ทันที ระบบจะไม่แสดงให้เห็นอีก",
+  "shell.access.rotate_token_err_prefix":
+    "ข้อผิดพลาดในการหมุนเวียนโทเค็น: ",
+  "shell.access.aria_guidance":
+    "คำแนะนำเกี่ยวกับนโยบาย",
+  "shell.access.aria_axis1":
+    "แกนที่ 1: โพรไฟล์ความสามารถ",
+  "shell.access.aria_axis2":
+    "แกนที่ 2: โหมดการอนุมัติ",
+  "shell.access.aria_folders":
+    "ไดเรกทอรีที่ได้รับอนุญาต",
+  "shell.access.aria_credentials":
+    "ข้อมูลรับรองความปลอดภัย",
+
+  "shell.activity.aria_filters":
+    "ปุ่มกรองกิจกรรม",
+  "shell.activity.aria_timeline":
+    "ไทม์ไลน์เหตุการณ์",
+  "shell.activity.status_recorded":
+    "บันทึกแล้ว",
+
+  "shell.settings.containment_title":
+    "เกณฑ์ความปลอดภัยขั้นต่ำ",
+  "shell.settings.aria_locale":
+    "การตั้งค่าภาษา",
+  "shell.settings.aria_theme":
+    "การตั้งค่าธีม",
+  "shell.settings.aria_notif":
+    "การตั้งค่าการแจ้งเตือน",
+  "shell.settings.aria_floor":
+    "เกณฑ์ความปลอดภัยของระบบ",
+
+  "shell.advanced.status_healthy":
+    "สมบูรณ์ดี",
+  "shell.advanced.host_nodejs":
+    "กระบวนการ Node.js",
+  "shell.advanced.auth_adminauth":
+    "AdminAuth ในเครื่อง",
+  "shell.advanced.aria_ports":
+    "พอร์ตภายในแบบไดนามิก",
+  "shell.advanced.aria_telemetry":
+    "ข้อมูลการทำงานของกระบวนการ",
+  "shell.advanced.aria_legacy":
+    "การเข้าถึงแดชบอร์ดแบบเดิม",
+
+  "shell.setup.aria_companion":
+    "โปรแกรมเสริม Setup Assistant",
+  "shell.setup.aria_workspace":
+    "ขั้นตอนตั้งค่าโฟลเดอร์เวิร์กสเปซ",
+  "shell.setup.aria_profile":
+    "ขั้นตอนตั้งค่าโพรไฟล์ความสามารถ",
+  "shell.setup.aria_approval":
+    "ขั้นตอนตั้งค่าโหมดการอนุมัติ",
+  "shell.setup.aria_client":
+    "ขั้นตอนตั้งค่าไคลเอนต์",
+  "shell.setup.aria_observe":
+    "ขั้นตอนการสังเกตการเชื่อมต่อ",
+  "shell.setup.aria_first_action":
+    "คำแนะนำการเริ่มใช้งานอย่างปลอดภัย",
+  "shell.setup.aria_orientation":
+    "คำแนะนำการนำทาง",
+  "shell.setup.companion_connected_notice":
+    "สะพานเชื่อมต่อการเปิด Setup Assistant จะถูกรวมเข้ากับระบบในระหว่างการผสานรวมข้าม Tranche ใน Phase 3",
+  "shell.setup.diagnostic_running":
+    "กำลังรันการตรวจสอบวินิจฉัยการติดตั้ง\u2026",
+  "shell.setup.diagnostic_healthy":
+    "\u2713 เกตเวย์ WinHelm สมบูรณ์ดี ประทับเวลา: ",
+  "shell.setup.diagnostic_failed":
+    "การตรวจสอบวินิจฉัยล้มเหลว: ",
 };
 
 export const MESSAGE_CATALOGS: Record<

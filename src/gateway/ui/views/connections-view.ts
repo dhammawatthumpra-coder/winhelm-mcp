@@ -18,7 +18,7 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- REMOTE ACCESS & INGRESS CONTROL BANNER -->
-      <div id="connectionsRemoteStatusBanner" class="banner banner-info" role="region" aria-label="Remote Access Posture">
+      <div id="connectionsRemoteStatusBanner" class="banner banner-info" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaRemotePosture || "Remote Access Posture")}">
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">🔒</span>
           <div>
@@ -31,17 +31,17 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- FIRST-CLASS CLIENT INTEGRATIONS -->
-      <h2 class="policy-group-title" style="margin-top:var(--space-5);">First-Class Clients</h2>
+      <h2 class="policy-group-title" style="margin-top:var(--space-5);">${escapeHtml(messages.shellConnectionsFirstClassHeading || "First-Class Clients")}</h2>
       <div class="card-grid-2">
         <!-- Claude Desktop -->
-        <div class="card" role="region" aria-label="Claude Desktop Integration">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaClaude || "Claude Desktop Integration")}">
           <div class="card-header">
             <strong style="color:var(--text-primary); font-size:var(--text-md);">${escapeHtml(messages.connClaudeLabel)}</strong>
             <span class="status-pill status-ready">${escapeHtml(messages.connClaudeType)}</span>
           </div>
           <div class="card-sub">
             ${escapeHtml(messages.shellConnectionsClaudeDesc || "Direct local client connection via native config update.")}
-            <div id="connClaudeStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
+            <div id="connClaudeStatus" style="font-size:12px; margin-top:4px;">${escapeHtml(messages.shellConnectionsCheckingStatus || "Checking status…")}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(messages.connRestartHint || "If this client was running, restart it or reconnect so the new configuration is loaded.")}</div>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
@@ -51,14 +51,14 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- Cursor -->
-        <div class="card" role="region" aria-label="Cursor Editor Integration">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaCursor || "Cursor Editor Integration")}">
           <div class="card-header">
             <strong style="color:var(--text-primary); font-size:var(--text-md);">${escapeHtml(messages.connCursorLabel)}</strong>
             <span class="status-pill status-ready">${escapeHtml(messages.connCursorType)}</span>
           </div>
           <div class="card-sub">
             ${escapeHtml(messages.shellConnectionsCursorDesc || "Workspace and editor client integration via local config.")}
-            <div id="connCursorStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
+            <div id="connCursorStatus" style="font-size:12px; margin-top:4px;">${escapeHtml(messages.shellConnectionsCheckingStatus || "Checking status…")}</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(messages.connRestartHint || "If this client was running, restart it or reconnect so the new configuration is loaded.")}</div>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
@@ -68,14 +68,14 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- ChatGPT / OpenAI Tunnel -->
-        <div class="card" role="region" aria-label="ChatGPT Integration">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaChatgpt || "ChatGPT Integration")}">
           <div class="card-header">
             <strong style="color:var(--text-primary); font-size:var(--text-md);">${escapeHtml(messages.connChatgptLabel)}</strong>
             <span class="status-pill status-info">${escapeHtml(messages.connChatgptType)}</span>
           </div>
           <div class="card-sub">
             ${escapeHtml(messages.shellConnectionsChatgptDesc || "Managed reverse tunnel for ChatGPT actions.")}
-            <div id="connChatgptStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
+            <div id="connChatgptStatus" style="font-size:12px; margin-top:4px;">${escapeHtml(messages.shellConnectionsCheckingStatus || "Checking status…")}</div>
           </div>
 
           <!-- M3A P2 LIFECYCLE CONTROLS -->
@@ -85,11 +85,11 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
             </div>
             
             <div style="font-size:var(--text-xs); display:flex; flex-direction:column; gap:4px; margin-bottom:var(--space-3);">
-              <div>${escapeHtml(messages.connChatgptDependencyLabel)}: <span id="tunnelDependencyStatus">checking…</span></div>
-              <div>${escapeHtml(messages.connChatgptProfileLabel)}: <span id="tunnelProfileStatus">checking…</span></div>
-              <div>${escapeHtml(messages.connChatgptBackendLabel)}: <span id="tunnelBackendStatus">checking…</span></div>
-              <div>${escapeHtml(messages.connChatgptStateLabel)}: <span id="tunnelStateBadge" class="status-pill status-neutral">unknown</span></div>
-              <div>${escapeHtml(messages.connChatgptOwnershipLabel)}: <span id="tunnelOwnershipBadge" class="status-pill status-neutral">unknown</span></div>
+              <div>${escapeHtml(messages.connChatgptDependencyLabel)}: <span id="tunnelDependencyStatus">${escapeHtml(messages.shellConnectionsStatusChecking || "checking…")}</span></div>
+              <div>${escapeHtml(messages.connChatgptProfileLabel)}: <span id="tunnelProfileStatus">${escapeHtml(messages.shellConnectionsStatusChecking || "checking…")}</span></div>
+              <div>${escapeHtml(messages.connChatgptBackendLabel)}: <span id="tunnelBackendStatus">${escapeHtml(messages.shellConnectionsStatusChecking || "checking…")}</span></div>
+              <div>${escapeHtml(messages.connChatgptStateLabel)}: <span id="tunnelStateBadge" class="status-pill status-neutral">${escapeHtml(messages.shellConnectionsStatusUnknown || "unknown")}</span></div>
+              <div>${escapeHtml(messages.connChatgptOwnershipLabel)}: <span id="tunnelOwnershipBadge" class="status-pill status-neutral">${escapeHtml(messages.shellConnectionsStatusUnknown || "unknown")}</span></div>
             </div>
 
             <div id="tunnelDetail" style="font-size:var(--text-xs); color:var(--text-muted); margin-bottom:var(--space-3);"></div>
@@ -113,7 +113,7 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- Tailscale HTTPS /mcp -->
-        <div class="card" role="region" aria-label="Tailscale Manual Integration">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaTailscale || "Tailscale Manual Integration")}">
           <div class="card-header">
             <strong id="connTailscaleLabel" style="color:var(--text-primary); font-size:var(--text-md);">${escapeHtml(messages.connTailscaleLabel)}</strong>
             <span class="status-pill status-neutral">${escapeHtml(messages.connTailscaleType)}</span>
@@ -136,7 +136,7 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
 
       <!-- ACTIVE MCP CLIENT SESSIONS TABLE -->
       <h2 class="policy-group-title" style="margin-top:var(--space-5);">${escapeHtml(messages.shellConnectionsSessionsTitle || "Active Client Sessions")}</h2>
-      <div class="data-table-container" role="region" aria-label="Active Client Sessions">
+      <div class="data-table-container" role="region" aria-label="${escapeHtml(messages.shellConnectionsAriaSessions || "Active Client Sessions")}">
         <table class="data-table">
           <thead>
             <tr>

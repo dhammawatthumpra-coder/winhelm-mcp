@@ -25,12 +25,12 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
   return `
     <section id="panel-approvals" class="panel" aria-labelledby="heading-approvals">
       <div class="panel-header">
-        <h1 id="heading-approvals" class="panel-title">${escapeHtml(messages.approvalsTitle)} — Approval Jobs</h1>
+        <h1 id="heading-approvals" class="panel-title">${escapeHtml(messages.approvalsTitle)} — ${escapeHtml(messages.shellApprovalsHeadingSuffix || "Approval Jobs")}</h1>
         <p class="panel-desc">${escapeHtml(messages.approvalsOnce || "One-time action")} · ${escapeHtml(messages.approvalsNote || "Pending approvals are local-only.")}</p>
       </div>
 
       <!-- TRANCHE B: WINDOWS NATIVE NOTIFICATIONS STATUS (Blocker A Fix) -->
-      <div class="${nativeBannerClass}" role="region" aria-label="Notification Integration">
+      <div class="${nativeBannerClass}" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaNativeNotif || "Notification Integration")}">
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">${isNativeReady ? "🔔" : "ℹ️"}</span>
           <div>
@@ -43,10 +43,10 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- INBOX PENDING LIST -->
-      <div class="card" role="region" aria-label="Pending Approvals Queue">
+      <div class="card" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaQueue || "Pending Approvals Queue")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.shellApprovalsQueueTitle || "Active Queue")}</span>
-          <span id="approvalQueueCountPill" class="status-pill status-ready">0 Pending</span>
+          <span id="approvalQueueCountPill" class="status-pill status-ready">${escapeHtml((messages.shellApprovalsCountPendingBadge || "{count} Pending").replace("{count}", "0"))}</span>
         </div>
         <div id="approvalJobs" class="approval-jobs-container" aria-live="polite">
           <div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">
@@ -58,7 +58,7 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- RECENT DECISIONS AUDIT -->
-      <div class="card" style="margin-top:var(--space-5);" role="region" aria-label="Recent Approval History">
+      <div class="card" style="margin-top:var(--space-5);" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaHistory || "Recent Approval History")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.shellApprovalsHistoryTitle || "Recent Approval Decisions")}</span>
         </div>

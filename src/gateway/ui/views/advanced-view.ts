@@ -48,7 +48,7 @@ export function renderAdvancedView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- TRANCHE A: DYNAMIC INTERNAL PORTS CARD (Blocker B Fix) -->
-      <div class="card" style="margin-bottom:var(--space-5);" role="region" aria-label="Dynamic Internal Ports">
+      <div class="card" style="margin-bottom:var(--space-5);" role="region" aria-label="${escapeHtml(messages.shellAdvancedAriaPorts || "Dynamic Internal Ports")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.shellAdvancedPortsTitle || "Internal Port Routing (Tranche A)")}</span>
           <span id="advPortAllocationPill" class="${modePillClass}">${modeBadgeText}</span>
@@ -74,15 +74,15 @@ export function renderAdvancedView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- PROCESS RUNTIME TELEMETRY -->
-      <div class="card" style="margin-bottom:var(--space-5);" role="region" aria-label="Process Telemetry">
+      <div class="card" style="margin-bottom:var(--space-5);" role="region" aria-label="${escapeHtml(messages.shellAdvancedAriaTelemetry || "Process Telemetry")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.shellAdvancedTelemetryTitle || "Host Process Telemetry")}</span>
-          <span class="status-pill status-ready"><span class="status-dot green"></span> Healthy</span>
+          <span class="status-pill status-ready"><span class="status-dot green"></span> ${escapeHtml(messages.shellAdvancedStatusHealthy || "Healthy")}</span>
         </div>
         <div class="card-grid" style="margin-bottom:0;">
           <div>
             <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(messages.shellAdvancedLblHost || "HOST PROCESS")}</div>
-            <strong id="advProcessPid" style="font-size:16px;">Node.js Host</strong>
+            <strong id="advProcessPid" style="font-size:16px;">${escapeHtml(messages.shellAdvancedHostNodejs || "Node.js Host")}</strong>
           </div>
           <div>
             <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(messages.shellAdvancedLblLoopback || "LOOPBACK INTERFACE")}</div>
@@ -94,13 +94,13 @@ export function renderAdvancedView(ctx: ShellRenderContext): string {
           </div>
           <div>
             <div style="font-size:11px; color:var(--text-muted);">${escapeHtml(messages.shellAdvancedLblAuth || "AUTHORIZATION PLANE")}</div>
-            <strong style="font-size:16px;">Local AdminAuth</strong>
+            <strong style="font-size:16px;">${escapeHtml(messages.shellAdvancedAuthAdminauth || "Local AdminAuth")}</strong>
           </div>
         </div>
       </div>
 
       <!-- PRESERVED ENGINEERING MONITOR ESCAPE HATCH -->
-      <div class="banner banner-info" role="region" aria-label="Legacy Dashboard Access">
+      <div class="banner banner-info" role="region" aria-label="${escapeHtml(messages.shellAdvancedAriaLegacy || "Legacy Dashboard Access")}">
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">🛠️</span>
           <div>

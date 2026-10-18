@@ -119,7 +119,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
     // Admin Auth & Unlock
     function handleAdminPillClick() {
       if (isAdminUnlocked) {
-        if (confirm('Lock admin privileges now?')) {
+        if (confirm(SHELL_MESSAGES.shellAdminLockConfirm || '')) {
           lockAdmin();
         }
       } else {
@@ -144,7 +144,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const err = document.getElementById('adminUnlockError');
       const code = input ? input.value.trim() : '';
       if (!code) {
-        if (err) err.textContent = 'Please enter one-time admin code.';
+        if (err) err.textContent = SHELL_MESSAGES.shellAdminEnterCodeError || '';
         return;
       }
 
@@ -160,7 +160,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          if (err) err.textContent = body.message || 'Invalid or expired admin code.';
+          if (err) err.textContent = body.message || (SHELL_MESSAGES.shellAdminInvalidCode || '');
           return;
         }
 
@@ -171,7 +171,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         updateAdminPill(true);
         refreshAllData();
       } catch (ex) {
-        if (err) err.textContent = 'Connection error: ' + ex.message;
+        if (err) err.textContent = (SHELL_MESSAGES.shellAdminConnErrorPrefix || '') + ex.message;
       }
     }
 
@@ -201,11 +201,11 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       if (unlocked) {
         pill.className = 'admin-pill unlocked';
         if (dot) dot.className = 'status-dot green';
-        if (text) text.textContent = SHELL_MESSAGES.adminUnlocked || 'Admin Unlocked';
+        if (text) text.textContent = SHELL_MESSAGES.adminUnlocked || '';
       } else {
         pill.className = 'admin-pill';
         if (dot) dot.className = 'status-dot yellow';
-        if (text) text.textContent = SHELL_MESSAGES.adminLocked || 'Admin Locked';
+        if (text) text.textContent = SHELL_MESSAGES.adminLocked || '';
       }
     }
 
@@ -234,7 +234,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         countEl.style.display = count > 0 ? 'inline-block' : 'none';
       }
       if (pillEl) {
-        pillEl.textContent = count + ' Pending';
+        pillEl.textContent = (SHELL_MESSAGES.shellApprovalsCountPendingBadge || '{count}').replace('{count}', count);
         pillEl.className = 'status-pill ' + (count > 0 ? 'status-attention' : 'status-ready');
       }
       if (homePending) homePending.textContent = count;
@@ -242,14 +242,14 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
 
       if (homePill) {
         homePill.className = 'status-pill ' + (count > 0 ? 'status-attention' : 'status-ready');
-        homePill.innerHTML = '<span class="status-dot ' + (count > 0 ? 'yellow' : 'green') + '"></span> ' + count + ' Pending';
+        homePill.innerHTML = '<span class="status-dot ' + (count > 0 ? 'yellow' : 'green') + '"></span> ' + (SHELL_MESSAGES.shellApprovalsCountPendingBadge || '{count}').replace('{count}', count);
       }
 
       if (urgentBanner) {
         if (count > 0) {
           urgentBanner.style.display = 'flex';
           if (urgentSub) {
-            urgentSub.textContent = count + ' pending tool execution requires your authorization.';
+            urgentSub.textContent = (SHELL_MESSAGES.shellApprovalsUrgentSubtitle || '{count}').replace('{count}', count);
           }
         } else {
           urgentBanner.style.display = 'none';
@@ -264,7 +264,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
           <div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">
             <div style="font-size:28px; margin-bottom:var(--space-2);">✓</div>
             <div style="font-size:var(--text-base); font-weight:600; color:var(--text-primary);">\${escapeHtml(SHELL_MESSAGES.approvalsEmpty)}</div>
-            <div style="font-size:var(--text-xs); margin-top:4px;">When AI clients request sensitive or mutating actions, they will appear here.</div>
+            <div style="font-size:var(--text-xs); margin-top:4px;">\${escapeHtml(SHELL_MESSAGES.shellApprovalsEmptySub || '')}</div>
           </div>
         \`;
         return;
@@ -279,35 +279,35 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
           <div class="approval-card \${isHigh ? 'high-risk' : ''}" id="job_\${escapeHtml(job.id)}">
             <div class="approval-header">
               <div class="approval-meta-left">
-                <span class="risk-tag \${escapeHtml((job.riskLevel || 'medium').toLowerCase())}">\${escapeHtml(job.riskLevel || 'Medium')} Risk</span>
-                <strong style="color:var(--text-primary); font-size:var(--text-md);">\${escapeHtml(job.tool || 'Tool')}</strong>
+                <span class="risk-tag \${escapeHtml((job.riskLevel || 'medium').toLowerCase())}">\${escapeHtml(job.riskLevel || '')} \${escapeHtml(SHELL_MESSAGES.shellApprovalsRiskSuffix || '')}</span>
+                <strong style="color:var(--text-primary); font-size:var(--text-md);">\${escapeHtml(job.tool || '')}</strong>
                 <span style="color:var(--text-muted); font-size:var(--text-xs);">#\${escapeHtml(job.id)}</span>
               </div>
               <div style="font-size:var(--text-xs); color:var(--text-muted);">
-                \${escapeHtml(job.clientName || 'AI Client')}
+                \${escapeHtml(job.clientName || '')}
               </div>
             </div>
 
             <div class="approval-details-grid">
-              <div class="detail-label">Risk Reason:</div>
-              <div class="detail-value" style="color:var(--status-attention-text);">\${escapeHtml(job.riskReason || job.reason || 'Mutating operation')}</div>
+              <div class="detail-label">\${escapeHtml(SHELL_MESSAGES.shellApprovalsRiskReasonLabel || '')}</div>
+              <div class="detail-value" style="color:var(--status-attention-text);">\${escapeHtml(job.riskReason || job.reason || (SHELL_MESSAGES.shellApprovalsMutatingOp || ''))}</div>
 
-              <div class="detail-label">Action Target:</div>
-              <div class="detail-value"><code>\${escapeHtml(job.target || job.resource || 'N/A')}</code></div>
+              <div class="detail-label">\${escapeHtml(SHELL_MESSAGES.shellApprovalsActionTargetLabel || '')}</div>
+              <div class="detail-value"><code>\${escapeHtml(job.target || job.resource || '')}</code></div>
             </div>
 
             \${needsConfirm ? \`
               <div class="mandatory-confirm-box">
-                <label for="confirm_input_\${escapeHtml(job.id)}">⚠️ Mandatory Safety Confirmation Required</label>
-                <div style="margin-bottom:8px; color:var(--text-secondary);">Type <code>confirm</code> below to authorize this backend-gated action:</div>
-                <input type="text" class="mandatory-confirm-input" id="confirm_input_\${escapeHtml(job.id)}" placeholder="Type 'confirm' here" autocomplete="off" />
-                <div id="confirm_err_\${escapeHtml(job.id)}" style="color:var(--status-offline-text); font-size:11px; margin-top:4px; display:none;">Please type 'confirm' exactly.</div>
+                <label for="confirm_input_\${escapeHtml(job.id)}">\${escapeHtml(SHELL_MESSAGES.shellApprovalsMandatoryConfirmTitle || '')}</label>
+                <div style="margin-bottom:8px; color:var(--text-secondary);">\${escapeHtml(SHELL_MESSAGES.shellApprovalsMandatoryConfirmDesc || '')}</div>
+                <input type="text" class="mandatory-confirm-input" id="confirm_input_\${escapeHtml(job.id)}" placeholder="\${escapeHtml(SHELL_MESSAGES.shellApprovalsMandatoryConfirmPlaceholder || '')}" autocomplete="off" />
+                <div id="confirm_err_\${escapeHtml(job.id)}" style="color:var(--status-offline-text); font-size:11px; margin-top:4px; display:none;">\${escapeHtml(SHELL_MESSAGES.shellApprovalsMandatoryConfirmErr || '')}</div>
               </div>
             \` : ''}
 
             <div style="margin-bottom:var(--space-4);">
               <button class="btn-secondary" style="font-size:11px; padding:3px 8px;" onclick="togglePayload('\${escapeHtml(job.id)}')">
-                ▼ View Technical Details
+                \${escapeHtml(SHELL_MESSAGES.shellApprovalsViewPayload || '')}
               </button>
               <div class="payload-drawer" id="payload_\${escapeHtml(job.id)}" style="display:none; margin-top:var(--space-2); background:var(--code-bg); padding:var(--space-3); border-radius:var(--radius-sm); font-family:var(--font-mono); font-size:11px; max-height:160px; overflow:auto;">
                 \${escapeHtml(JSON.stringify(job.arguments || job.params || {}, null, 2))}
@@ -315,8 +315,8 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
             </div>
 
             <div class="approval-actions">
-              <button class="btn-approve" onclick="handleApprove('\${escapeHtml(job.id)}', \${needsConfirm})">✓ \${escapeHtml(SHELL_MESSAGES.approvalsApprove || 'Approve')}</button>
-              <button class="btn-deny" onclick="handleDeny('\${escapeHtml(job.id)}')">✕ \${escapeHtml(SHELL_MESSAGES.approvalsDeny || 'Deny')}</button>
+              <button class="btn-approve" onclick="handleApprove('\${escapeHtml(job.id)}', \${needsConfirm})">✓ \${escapeHtml(SHELL_MESSAGES.approvalsApprove || '')}</button>
+              <button class="btn-deny" onclick="handleDeny('\${escapeHtml(job.id)}')">✕ \${escapeHtml(SHELL_MESSAGES.approvalsDeny || '')}</button>
             </div>
           </div>
         \`;
@@ -347,7 +347,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
             'x-winhelm-csrf': adminCsrfToken || '',
             'x-winhelm-origin': window.location.origin
           },
-          body: JSON.stringify({ reason: 'Approved via Product Shell' })
+          body: JSON.stringify({ reason: SHELL_MESSAGES.shellApprovalsReasonApproved || '' })
         });
 
         if (res.status === 401) {
@@ -358,7 +358,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         fetchApprovals();
         fetchActivity();
       } catch (ex) {
-        alert('Approval failed: ' + ex.message);
+        alert((SHELL_MESSAGES.shellApprovalsErrFailed || '') + ex.message);
       }
     }
 
@@ -371,7 +371,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
             'x-winhelm-csrf': adminCsrfToken || '',
             'x-winhelm-origin': window.location.origin
           },
-          body: JSON.stringify({ reason: 'Denied via Product Shell' })
+          body: JSON.stringify({ reason: SHELL_MESSAGES.shellApprovalsReasonDenied || '' })
         });
 
         if (res.status === 401) {
@@ -382,7 +382,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         fetchApprovals();
         fetchActivity();
       } catch (ex) {
-        alert('Denial failed: ' + ex.message);
+        alert((SHELL_MESSAGES.shellApprovalsErrDenyFailed || '') + ex.message);
       }
     }
 
@@ -415,28 +415,28 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const homeRemoteDetail = document.getElementById('statRemoteDetail');
 
       if (isRemoteOn) {
-        if (remoteHeading) remoteHeading.textContent = 'Remote Access On';
-        if (remoteDetail) remoteDetail.textContent = 'Verified tunnel active: ' + (status.publicUrl || status.url || 'Active Route');
+        if (remoteHeading) remoteHeading.textContent = SHELL_MESSAGES.shellRemoteStatusOn || '';
+        if (remoteDetail) remoteDetail.textContent = (SHELL_MESSAGES.shellRemoteVerifiedTunnelActive || '') + (status.publicUrl || status.url || '');
         if (homeRemotePill) {
           homeRemotePill.className = 'status-pill status-attention';
-          homeRemotePill.innerHTML = '<span class="status-dot yellow"></span> Remote Access On';
+          homeRemotePill.innerHTML = '<span class="status-dot yellow"></span> ' + (SHELL_MESSAGES.shellRemoteStatusOn || '');
         }
-        if (homeRemoteText) homeRemoteText.textContent = 'Remote Active';
-        if (homeRemoteDetail) homeRemoteDetail.textContent = 'Verified ingress route reachable.';
+        if (homeRemoteText) homeRemoteText.textContent = SHELL_MESSAGES.shellRemoteActive || '';
+        if (homeRemoteDetail) homeRemoteDetail.textContent = SHELL_MESSAGES.shellRemoteVerifiedRouteReachable || '';
       } else {
-        if (remoteHeading) remoteHeading.textContent = 'Local Ready · Remote Access Off';
-        if (remoteDetail) remoteDetail.textContent = 'WinHelm is listening on local loopback only (127.0.0.1). Zero public exposure.';
+        if (remoteHeading) remoteHeading.textContent = SHELL_MESSAGES.shellRemoteLocalReadyOff || '';
+        if (remoteDetail) remoteDetail.textContent = SHELL_MESSAGES.shellRemoteZeroExposure || '';
         if (homeRemotePill) {
           homeRemotePill.className = 'status-pill status-ready';
-          homeRemotePill.innerHTML = '<span class="status-dot green"></span> Remote Access Off';
+          homeRemotePill.innerHTML = '<span class="status-dot green"></span> ' + (SHELL_MESSAGES.shellRemoteStatusOff || '');
         }
-        if (homeRemoteText) homeRemoteText.textContent = 'Local Ready';
-        if (homeRemoteDetail) homeRemoteDetail.textContent = 'Listening on 127.0.0.1 loopback only. Zero public exposure.';
+        if (homeRemoteText) homeRemoteText.textContent = SHELL_MESSAGES.shellHomeLocalReady || '';
+        if (homeRemoteDetail) homeRemoteDetail.textContent = SHELL_MESSAGES.shellRemoteZeroExposure || '';
       }
 
-      if (depEl) depEl.textContent = status?.dependenciesInstalled ? 'Installed' : 'Ready';
-      if (profEl) profEl.textContent = status?.profileCompatible ? 'Compatible' : 'Ready';
-      if (backEl) backEl.textContent = status?.backendConfigured ? 'Configured' : 'Local';
+      if (depEl) depEl.textContent = status?.dependenciesInstalled ? (SHELL_MESSAGES.shellConnectionsStatusInstalled || '') : (SHELL_MESSAGES.shellConnectionsStatusReady || '');
+      if (profEl) profEl.textContent = status?.profileCompatible ? (SHELL_MESSAGES.shellConnectionsStatusCompatible || '') : (SHELL_MESSAGES.shellConnectionsStatusReady || '');
+      if (backEl) backEl.textContent = status?.backendConfigured ? (SHELL_MESSAGES.shellConnectionsStatusConfigured || '') : (SHELL_MESSAGES.shellConnectionsStatusLocal || '');
 
       if (stateBadge) {
         stateBadge.textContent = status?.state || (isRemoteOn ? 'running' : 'stopped');
@@ -444,11 +444,11 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       }
 
       if (ownerBadge) {
-        ownerBadge.textContent = status?.managed ? 'managed' : 'unmanaged';
+        ownerBadge.textContent = status?.managed ? (SHELL_MESSAGES.shellConnectionsStatusManaged || '') : (SHELL_MESSAGES.shellConnectionsStatusUnmanaged || '');
       }
 
       if (detailEl) {
-        detailEl.textContent = status?.detail || status?.error || (isRemoteOn ? 'Route verified and active.' : 'Inactive');
+        detailEl.textContent = status?.detail || status?.error || (isRemoteOn ? (SHELL_MESSAGES.shellConnectionsStatusRouteActive || '') : (SHELL_MESSAGES.shellConnectionsStatusInactive || ''));
       }
     }
 
@@ -474,7 +474,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         }
 
         const data = await res.json().catch(() => ({}));
-        if (resultEl) resultEl.textContent = data.message || (res.ok ? 'Tunnel started.' : 'Start failed.');
+        if (resultEl) resultEl.textContent = data.message || (res.ok ? (SHELL_MESSAGES.shellConnectionsTunnelStarted || '') : (SHELL_MESSAGES.shellConnectionsTunnelStartFailed || ''));
         fetchTunnelStatus();
       } catch (ex) {
         if (resultEl) resultEl.textContent = 'Error: ' + ex.message;
@@ -503,7 +503,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         }
 
         const data = await res.json().catch(() => ({}));
-        if (resultEl) resultEl.textContent = data.message || (res.ok ? 'Tunnel stopped.' : 'Stop failed.');
+        if (resultEl) resultEl.textContent = data.message || (res.ok ? (SHELL_MESSAGES.shellConnectionsTunnelStopped || '') : (SHELL_MESSAGES.shellConnectionsTunnelStopFailed || ''));
         fetchTunnelStatus();
       } catch (ex) {
         if (resultEl) resultEl.textContent = 'Error: ' + ex.message;
@@ -532,7 +532,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         }
 
         const data = await res.json().catch(() => ({}));
-        if (resultEl) resultEl.textContent = data.message || (res.ok ? 'Tunnel restarted.' : 'Restart failed.');
+        if (resultEl) resultEl.textContent = data.message || (res.ok ? (SHELL_MESSAGES.shellConnectionsTunnelRestarted || '') : (SHELL_MESSAGES.shellConnectionsTunnelRestartFailed || ''));
         fetchTunnelStatus();
       } catch (ex) {
         if (resultEl) resultEl.textContent = 'Error: ' + ex.message;
@@ -548,9 +548,9 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
           return;
         }
         const data = await res.json();
-        if (resultEl) resultEl.textContent = 'Doctor check complete: ' + (data.healthy ? 'All probes passed.' : (data.summary || 'Issues detected.'));
+        if (resultEl) resultEl.textContent = (SHELL_MESSAGES.shellConnectionsDoctorPrefix || '') + (data.healthy ? (SHELL_MESSAGES.shellConnectionsDoctorPassed || '') : (data.summary || (SHELL_MESSAGES.shellConnectionsDoctorIssues || '')));
       } catch (ex) {
-        if (resultEl) resultEl.textContent = 'Doctor error: ' + ex.message;
+        if (resultEl) resultEl.textContent = (SHELL_MESSAGES.shellConnectionsDoctorErrPrefix || '') + ex.message;
       }
     }
 
@@ -570,13 +570,13 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const homeConnected = document.getElementById('statConnectedClients');
       const advSessionCount = document.getElementById('advActiveSessionCount');
 
-      if (homeConnected) homeConnected.textContent = sessions.length + ' Connected';
+      if (homeConnected) homeConnected.textContent = sessions.length + ' ' + (SHELL_MESSAGES.shellHomeClientsConnectedSuffix || '');
       if (advSessionCount) advSessionCount.textContent = sessions.length;
 
       if (!tbody) return;
 
       if (sessions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:var(--space-4);">No active MCP client sessions announced yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:var(--space-4);">' + escapeHtml(SHELL_MESSAGES.shellConnectionsNoSessions || '') + '</td></tr>';
         return;
       }
 
@@ -586,7 +586,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
           <td><code>\${escapeHtml(s.ip || '127.0.0.1')}</code></td>
           <td>\${escapeHtml(s.transport || 'SSE / Streamable')}</td>
           <td><code>\${escapeHtml(s.id ? s.id.substring(0, 12) + '…' : 'local')}</code></td>
-          <td><span class="status-pill status-ready"><span class="status-dot green"></span> Active</span></td>
+          <td><span class="status-pill status-ready"><span class="status-dot green"></span> \${escapeHtml(SHELL_MESSAGES.shellConnectionsStatusActive || '')}</span></td>
         </tr>
       \`).join('');
     }
@@ -599,7 +599,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const resBox = document.getElementById('clientActionResult');
       if (resBox) {
         resBox.style.display = 'block';
-        resBox.textContent = 'Loading client preview…';
+        resBox.textContent = SHELL_MESSAGES.shellConnectionsLoadingPreview || '';
       }
       try {
         const res = await fetch('/admin/clients/' + encodeURIComponent(clientName) + '/preview', {
@@ -613,7 +613,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
           resBox.innerHTML = '<div class="banner banner-info">' + escapeHtml(data.message || JSON.stringify(data, null, 2)) + '</div>';
         }
       } catch (ex) {
-        if (resBox) resBox.textContent = 'Preview error: ' + ex.message;
+        if (resBox) resBox.textContent = (SHELL_MESSAGES.shellConnectionsPreviewErrPrefix || '') + ex.message;
       }
     }
 
@@ -625,7 +625,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const resBox = document.getElementById('clientActionResult');
       if (resBox) {
         resBox.style.display = 'block';
-        resBox.textContent = 'Configuring client…';
+        resBox.textContent = SHELL_MESSAGES.shellConnectionsConfiguringClient || '';
       }
       try {
         const res = await fetch('/admin/clients/' + encodeURIComponent(clientName) + '/apply', {
@@ -638,12 +638,12 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         });
         const data = await res.json().catch(() => ({}));
         if (resBox) {
-          const restartMsg = SHELL_MESSAGES.connRestartHint || 'If this client was running, restart it or reconnect so the new configuration is loaded.';
-          resBox.innerHTML = '<div class="banner ' + (res.ok ? 'banner-ready' : 'banner-danger') + '">' + escapeHtml(data.message || (res.ok ? 'Client configured successfully. ' + restartMsg : 'Configuration failed.')) + '</div>';
+          const restartMsg = SHELL_MESSAGES.connRestartHint || '';
+          resBox.innerHTML = '<div class="banner ' + (res.ok ? 'banner-ready' : 'banner-danger') + '">' + escapeHtml(data.message || (res.ok ? (SHELL_MESSAGES.shellConnectionsConfigSuccess || '') + ' ' + restartMsg : (SHELL_MESSAGES.shellConnectionsConfigFailed || ''))) + '</div>';
         }
         refreshAllData();
       } catch (ex) {
-        if (resBox) resBox.textContent = 'Apply error: ' + ex.message;
+        if (resBox) resBox.textContent = (SHELL_MESSAGES.shellConnectionsApplyErrPrefix || '') + ex.message;
       }
     }
 
@@ -654,7 +654,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         return;
       }
 
-      if (!confirm('Rotate the MCP access token now? The previous token stops working immediately and connected clients must be updated.')) {
+      if (!confirm(SHELL_MESSAGES.shellAccessRotateTokenConfirm || '')) {
         return;
       }
 
@@ -669,15 +669,15 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         });
 
         if (!res.ok) {
-          alert('Failed to rotate token.');
+          alert(SHELL_MESSAGES.shellAccessRotateTokenFailed || '');
           return;
         }
 
         const data = await res.json();
         // One-time secret display:
-        alert('New MCP Bearer Access Token generated successfully:\\n\\n' + data.token + '\\n\\nCopy this token now. It will not be shown again.');
+        alert((SHELL_MESSAGES.shellAccessRotateTokenSuccess || '').replace('{token}', data.token));
       } catch (ex) {
-        alert('Token rotation error: ' + ex.message);
+        alert((SHELL_MESSAGES.shellAccessRotateTokenErrPrefix || '') + ex.message);
       }
     }
 
@@ -730,10 +730,10 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         }
 
         if (resEl) {
-          resEl.innerHTML = '<div class="banner banner-info" style="margin-top:8px;"><strong>Preview Validation:</strong> ' + escapeHtml(data.message || (data.warnings && data.warnings.join(' ')) || 'Config valid.') + '</div>';
+          resEl.innerHTML = '<div class="banner banner-info" style="margin-top:8px;"><strong>' + escapeHtml(SHELL_MESSAGES.shellAccessPreviewValidationPrefix || '') + '</strong> ' + escapeHtml(data.message || (data.warnings && data.warnings.join(' ')) || (SHELL_MESSAGES.shellAccessPreviewValid || '')) + '</div>';
         }
       } catch (ex) {
-        if (resEl) resEl.textContent = 'Preview error: ' + ex.message;
+        if (resEl) resEl.textContent = (SHELL_MESSAGES.shellConnectionsPreviewErrPrefix || '') + ex.message;
       }
     }
 
@@ -766,7 +766,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
 
         const data = await res.json().catch(() => ({}));
         if (resEl) {
-          resEl.innerHTML = '<div class="banner ' + (res.ok ? 'banner-ready' : 'banner-danger') + '" style="margin-top:8px;">' + escapeHtml(data.message || (res.ok ? 'Access policy applied.' : 'Failed to apply.')) + '</div>';
+          resEl.innerHTML = '<div class="banner ' + (res.ok ? 'banner-ready' : 'banner-danger') + '" style="margin-top:8px;">' + escapeHtml(data.message || (res.ok ? (SHELL_MESSAGES.shellAccessPolicyApplied || '') : (SHELL_MESSAGES.shellAccessPolicyApplyFailed || ''))) + '</div>';
         }
         if (res.ok) {
           if (confInput) confInput.value = '';
@@ -774,7 +774,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         }
         fetchProfile();
       } catch (ex) {
-        if (resEl) resEl.textContent = 'Save error: ' + ex.message;
+        if (resEl) resEl.textContent = (SHELL_MESSAGES.shellAccessSaveErrPrefix || '') + ex.message;
       }
     }
 
@@ -807,7 +807,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">' + escapeHtml(SHELL_MESSAGES.activityEmpty || 'No events recorded.') + '</div>';
+        container.innerHTML = '<div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">' + escapeHtml(SHELL_MESSAGES.activityEmpty || '') + '</div>';
       } else {
         container.innerHTML = filtered.slice(0, 50).map(item => \`
           <div class="timeline-item">
@@ -826,7 +826,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       if (homeList) {
         const recent = activityCache.slice(0, 3);
         if (recent.length === 0) {
-          homeList.innerHTML = '<div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">No recent activity recorded.</div>';
+          homeList.innerHTML = '<div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">' + escapeHtml(SHELL_MESSAGES.shellHomeActivityEmpty || '') + '</div>';
         } else {
           homeList.innerHTML = recent.map(item => \`
             <div class="timeline-item">
@@ -835,7 +835,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
                 <span class="timeline-badge">\${escapeHtml((item.category || 'EVENT').toUpperCase())}</span>
                 <strong style="color:var(--text-primary);">\${escapeHtml(item.action || item.message || '')}</strong>
               </div>
-              <span class="status-pill status-ready">Recorded</span>
+              <span class="status-pill status-ready">\${escapeHtml(SHELL_MESSAGES.shellActivityStatusRecorded || '')}</span>
             </div>
           \`).join('');
         }
@@ -847,18 +847,18 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const resEl = document.getElementById('setupDiagnosticResult');
       if (resEl) {
         resEl.style.display = 'block';
-        resEl.innerHTML = '<div class="banner banner-info">Running installation diagnostic probes…</div>';
+        resEl.innerHTML = '<div class="banner banner-info">' + escapeHtml(SHELL_MESSAGES.shellSetupDiagnosticRunning || '') + '</div>';
       }
 
       try {
         const res = await fetch('/health');
         const data = await res.json();
         if (resEl) {
-          resEl.innerHTML = '<div class="banner banner-ready" style="background:var(--status-ready-bg); color:var(--status-ready-text);">✓ WinHelm gateway healthy. Timestamp: ' + escapeHtml(data.timestamp || new Date().toISOString()) + '</div>';
+          resEl.innerHTML = '<div class="banner banner-ready" style="background:var(--status-ready-bg); color:var(--status-ready-text);">' + escapeHtml(SHELL_MESSAGES.shellSetupDiagnosticHealthy || '') + escapeHtml(data.timestamp || new Date().toISOString()) + '</div>';
         }
       } catch (ex) {
         if (resEl) {
-          resEl.innerHTML = '<div class="banner banner-danger">Diagnostic check failed: ' + escapeHtml(ex.message) + '</div>';
+          resEl.innerHTML = '<div class="banner banner-danger">' + escapeHtml(SHELL_MESSAGES.shellSetupDiagnosticFailed || '') + escapeHtml(ex.message) + '</div>';
         }
       }
     }
@@ -922,9 +922,9 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
         return;
       }
       const labels = {
-        configured: SHELL_MESSAGES.setupStatusConfigured || 'Configured',
-        needs_configuration: SHELL_MESSAGES.setupStatusNeedsConfiguration || 'Needs Configuration',
-        attention: SHELL_MESSAGES.setupStatusAttention || 'Attention'
+        configured: SHELL_MESSAGES.setupStatusConfigured || '',
+        needs_configuration: SHELL_MESSAGES.setupStatusNeedsConfiguration || '',
+        attention: SHELL_MESSAGES.setupStatusAttention || ''
       };
       statusEl.textContent = labels[entry.status] || entry.status;
       statusEl.className = 'status-pill ' + setupBadgeClass(entry.status);
@@ -948,7 +948,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
       const folders = profile && Array.isArray(profile.folders) ? profile.folders : (profile && Array.isArray(profile.allowedDirectories) ? profile.allowedDirectories : []);
       const workspaceComplete = folders.length > 0;
       setSetupBadge('setupWorkspaceStatus',
-        workspaceComplete ? (SHELL_MESSAGES.setupStatusComplete || 'Complete') : (SHELL_MESSAGES.setupStatusIncomplete || 'Incomplete'),
+        workspaceComplete ? (SHELL_MESSAGES.setupStatusComplete || '') : (SHELL_MESSAGES.setupStatusIncomplete || ''),
         workspaceComplete ? 'complete' : 'incomplete');
       const workspaceDetail = document.getElementById('setupWorkspaceDetail');
       if (workspaceDetail) {
@@ -957,20 +957,20 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
 
       const preset = profile ? (profile.preset || (profile.schemaMode === 'legacy' ? 'legacy' : '')) : '';
       setSetupBadge('setupProfileStatus',
-        preset ? (SHELL_MESSAGES.setupStatusComplete || 'Complete') : (SHELL_MESSAGES.setupStatusIncomplete || 'Incomplete'),
+        preset ? (SHELL_MESSAGES.setupStatusComplete || '') : (SHELL_MESSAGES.setupStatusIncomplete || ''),
         preset ? 'complete' : 'incomplete');
       const profileDetail = document.getElementById('setupProfileDetail');
       if (profileDetail) {
-        profileDetail.textContent = (SHELL_MESSAGES.setupCurrent || 'Current') + ': ' + (preset || '-');
+        profileDetail.textContent = (SHELL_MESSAGES.setupCurrent || '') + ': ' + (preset || '-');
       }
 
       const approvalMode = profile ? profile.approvalMode : '';
       setSetupBadge('setupApprovalStatus',
-        approvalMode ? (SHELL_MESSAGES.setupStatusComplete || 'Complete') : (SHELL_MESSAGES.setupStatusIncomplete || 'Incomplete'),
+        approvalMode ? (SHELL_MESSAGES.setupStatusComplete || '') : (SHELL_MESSAGES.setupStatusIncomplete || ''),
         approvalMode ? 'complete' : 'incomplete');
       const approvalDetail = document.getElementById('setupApprovalDetail');
       if (approvalDetail) {
-        approvalDetail.textContent = (SHELL_MESSAGES.setupCurrent || 'Current') + ': ' + (approvalMode || '-');
+        approvalDetail.textContent = (SHELL_MESSAGES.setupCurrent || '') + ': ' + (approvalMode || '-');
       }
 
       renderSetupClientStatus('claude', 'setupClientClaudeStatus', 'setupClientClaudeDetail');
@@ -978,7 +978,7 @@ export function getClientScript(clientScriptMessages: string, focusJobId: string
 
       const activeCount = (lastSessions || []).length;
       setSetupBadge('setupSessionsStatus',
-        activeCount > 0 ? (SHELL_MESSAGES.setupStatusActive || 'Active Session Observed') : (SHELL_MESSAGES.setupStatusNotObserved || 'No Active Session Observed'),
+        activeCount > 0 ? (SHELL_MESSAGES.setupStatusActive || '') : (SHELL_MESSAGES.setupStatusNotObserved || ''),
         activeCount > 0 ? 'active' : 'neutral');
       const sessionsDetail = document.getElementById('setupSessionsDetail');
       if (sessionsDetail) {

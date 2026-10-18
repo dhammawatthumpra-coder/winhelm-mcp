@@ -50,12 +50,12 @@ export function renderProductShell(ctx: ShellRenderContext): string {
       </div>
 
       <!-- THEME TOGGLE -->
-      <button class="icon-btn" onclick="handleThemeChange(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')" title="Toggle Theme" aria-label="Toggle visual theme">
+      <button class="icon-btn" onclick="handleThemeChange(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')" title="${escapeHtml(messages.shellHeaderThemeToggleTitle || "Toggle Theme")}" aria-label="${escapeHtml(messages.shellHeaderThemeToggleAria || "Toggle visual theme")}">
         ☼
       </button>
 
       <!-- LANGUAGE SELECT -->
-      <button class="icon-btn" style="font-size:11px; font-weight:700;" onclick="handleLanguageChange('${locale === "en" ? "th" : "en"}')" title="Switch Language" aria-label="Switch interface language">
+      <button class="icon-btn" style="font-size:11px; font-weight:700;" onclick="handleLanguageChange('${locale === "en" ? "th" : "en"}')" title="${escapeHtml(messages.shellHeaderLangToggleTitle || "Switch Language")}" aria-label="${escapeHtml(messages.shellHeaderLangToggleAria || "Switch interface language")}">
         ${locale === "en" ? "TH" : "EN"}
       </button>
     </div>
@@ -64,7 +64,7 @@ export function renderProductShell(ctx: ShellRenderContext): string {
   <!-- APP BODY -->
   <div class="app-body">
     <!-- SEMANTIC NAVIGATION SIDEBAR -->
-    <nav class="sidebar" id="appSidebar" role="navigation" aria-label="Primary Navigation">
+    <nav class="sidebar" id="appSidebar" role="navigation" aria-label="${escapeHtml(messages.shellNavPrimaryAria || "Primary Navigation")}">
       <div class="nav-group">
         <button class="nav-item active" data-tab="overview" onclick="showTab('overview')" aria-current="page">
           <div class="nav-item-left">
@@ -125,7 +125,7 @@ export function renderProductShell(ctx: ShellRenderContext): string {
       </div>
 
       <div class="sidebar-footer">
-        <a href="/dashboard" class="sidebar-external-link" title="Open engineering dashboard for raw hardware metrics and tool registry">
+        <a href="/dashboard" class="sidebar-external-link" title="${escapeHtml(messages.shellNavAdvancedMonitorTitle || "Open engineering dashboard for raw hardware metrics and tool registry")}">
           <span>${escapeHtml(messages.shellNavAdvancedMonitor || "Advanced / Diagnostics ↗")}</span>
         </a>
       </div>
@@ -148,8 +148,8 @@ export function renderProductShell(ctx: ShellRenderContext): string {
   <div id="adminModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h2 id="adminModalTitle" class="modal-title">${escapeHtml(messages.adminRequired || "Admin Authorization Required")}</h2>
-        <button class="icon-btn" onclick="closeAdminModal()" aria-label="Close dialog">✕</button>
+        <h2 id="adminModalTitle" class="modal-title">${escapeHtml(messages.shellModalAdminTitle || messages.adminRequired || "Admin Authorization Required")}</h2>
+        <button class="icon-btn" onclick="closeAdminModal()" aria-label="${escapeHtml(messages.shellModalCloseAria || "Close dialog")}">✕</button>
       </div>
       <div class="modal-body">
         <p style="margin-bottom:var(--space-3);">
@@ -157,9 +157,9 @@ export function renderProductShell(ctx: ShellRenderContext): string {
         </p>
         <div style="margin-bottom:var(--space-3);">
           <label for="adminCodeInput" style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">
-            ${escapeHtml(messages.adminPlaceholder || "One-time admin code")}
+            ${escapeHtml(messages.shellModalAdminCodeLabel || messages.adminPlaceholder || "One-time admin code")}
           </label>
-          <input type="password" id="adminCodeInput" class="mandatory-confirm-input" style="max-width:100%; width:100%;" placeholder="${escapeHtml(messages.adminPlaceholder || "Enter code")}" autocomplete="one-time-code" />
+          <input type="password" id="adminCodeInput" class="mandatory-confirm-input" style="max-width:100%; width:100%;" placeholder="${escapeHtml(messages.shellModalAdminCodePlaceholder || messages.adminPlaceholder || "Enter code")}" autocomplete="one-time-code" />
         </div>
         <div id="adminUnlockError" style="color:var(--status-offline-text); font-size:12px; margin-bottom:var(--space-2);"></div>
         <div style="font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:var(--space-2); border-radius:4px;">

@@ -28,6 +28,7 @@ import vm from "node:vm";
 import { getProductShellHtml, type ProductShellSummary } from "../../src/gateway/product-shell-html.js";
 import { getDashboardHtml } from "../../src/gateway/dashboard-html.js";
 import { validateI18nCatalogs, setConfiguredLocale, getRuntimeLocale } from "../../src/i18n/messages.js";
+import { getClientScript } from "../../src/gateway/ui/client-script.js";
 
 function renderTestShell(summary?: Partial<ProductShellSummary>): string {
   return getProductShellHtml("full", {
@@ -320,7 +321,8 @@ describe("Phase 2 Production UI Qualification Suite", () => {
       "Must explain that companion bridge is not detected"
     );
 
-    // 16.3 When adapter confirms installed_ready, button is enabled
+    // 16.3 Blocker C Corrective: Even when adapter reports installed_ready, launch remains disabled in Phase 2
+    // without invoking undefined launchSetupAssistant(), until Phase 3 companion bridge exists
     const readyHtml = renderTestShell({
       adapters: { setupAssistant: "installed_ready" },
     });
@@ -329,7 +331,19 @@ describe("Phase 2 Production UI Qualification Suite", () => {
       readyHtml.indexOf('id="panel-access"')
     );
     assert.ok(readyPanel.includes("Companion Installed &amp; Ready"), "Status must indicate Companion Installed & Ready");
-    assert.ok(readyPanel.includes("launchSetupAssistant()"), "Enabled button invokes launcher function");
+    assert.strictEqual(
+      readyPanel.includes("launchSetupAssistant()"),
+      false,
+      "Must NOT render onclick calling undefined launchSetupAssistant()"
+    );
+    assert.ok(
+      readyPanel.includes("disabled") && readyPanel.includes('aria-disabled="true"'),
+      "Launch button must remain disabled even when installed_ready until Phase 3 bridge contract exists"
+    );
+    assert.ok(
+      readyPanel.includes("Phase 3") || readyPanel.includes("cross-tranche") || readyPanel.includes("bridge"),
+      "Must explain companion bridge integration contract in title/hint"
+    );
   });
 
   it("17. Blocker D Corrective: Thai & English localization parity and truthful catalog-backed rendering", () => {
@@ -380,5 +394,130 @@ describe("Phase 2 Production UI Qualification Suite", () => {
     const legacyHtml = getDashboardHtml("full");
     assert.ok(legacyHtml.includes("WinHelm | Monitor Dashboard"));
     assert.ok(legacyHtml.includes("LIVE MONITOR"));
+  });
+
+  it("19. Blocker D Corrective: No hardcoded Phase-2 English human-facing strings bypass i18n in client-script.ts", () => {
+    // 1. Raw client-script must contain no human-facing English string literals
+    const rawScript = getClientScript("{}", "");
+
+    // 2. In Thai mode, the rendered client script must contain no untranslated English human strings
+    setConfiguredLocale("th");
+    const thHtml = renderTestShell();
+    const scriptMatch = thHtml.match(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/i);
+    assert.ok(scriptMatch, "Client script must be present");
+    const thScript = scriptMatch[1];
+
+    const forbiddenPhrases = [
+      "Lock admin privileges now?",
+      "Please enter one-time admin code.",
+      "Connection error: ",
+      "When AI clients request sensitive or mutating actions, they will appear here.",
+      "Medium Risk",
+      "Risk Reason:",
+      "Mutating operation",
+      "Action Target:",
+      "Mandatory Safety Confirmation Required",
+      "Please type 'confirm' exactly.",
+      "Approval failed: ",
+      "Denial failed: ",
+      "Verified tunnel active: ",
+      "Remote Active",
+      "Verified ingress route reachable.",
+      "Local Ready · Remote Access Off",
+      "Zero public exposure.",
+      "Doctor check complete: ",
+      "No active MCP client sessions announced yet.",
+      "Loading client preview…",
+      "Configuring client…",
+      "Rotate the MCP access token now?",
+      "Failed to rotate token.",
+      "New MCP Bearer Access Token generated successfully",
+      "Preview Validation:",
+      "Access policy applied.",
+      "No recent activity recorded.",
+      "Running installation diagnostic probes…",
+      "WinHelm gateway healthy.",
+      "Diagnostic check failed: "
+    ];
+
+    for (const phrase of forbiddenPhrases) {
+      assert.strictEqual(
+        rawScript.includes(phrase),
+        false,
+        `Hardcoded phrase '${phrase}' must NOT exist as literal in client script template; must use SHELL_MESSAGES`
+      );
+      assert.strictEqual(
+        thScript.includes(phrase),
+        false,
+        `Hardcoded phrase '${phrase}' must NOT exist in Thai client script payload; must be translated`
+      );
+    }
+  });
+
+  it("20. Blocker D Corrective: Critical ARIA labels and view accessibility copy use localized messages", () => {
+    const initialLocale = getRuntimeLocale();
+    const oldEnvLocale = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+
+    try {
+      // In English
+      setConfiguredLocale("en");
+      const enHtml = renderTestShell();
+      assert.ok(enHtml.includes('aria-label="Primary Navigation"'), "EN nav landmark");
+      assert.ok(enHtml.includes('aria-label="Toggle visual theme"'), "EN theme toggle aria");
+      assert.ok(enHtml.includes('aria-label="Switch interface language"'), "EN lang toggle aria");
+      assert.ok(enHtml.includes('aria-label="Close dialog"'), "EN modal close aria");
+      assert.ok(enHtml.includes('aria-label="Pending Approvals Queue"'), "EN approvals queue aria");
+      assert.ok(enHtml.includes('aria-label="Dynamic Internal Ports"'), "EN dynamic ports aria");
+      assert.ok(enHtml.includes('aria-label="Process Telemetry"'), "EN telemetry aria");
+      assert.ok(enHtml.includes('aria-label="Setup Assistant Companion"'), "EN companion aria");
+
+      // In Thai
+      setConfiguredLocale("th");
+      const thHtml = renderTestShell();
+      assert.ok(thHtml.includes('aria-label="การนำทางหลัก"'), "TH nav landmark");
+      assert.ok(thHtml.includes('aria-label="สลับธีมการแสดงผล"'), "TH theme toggle aria");
+      assert.ok(thHtml.includes('aria-label="สลับภาษาของอินเทอร์เฟซ"'), "TH lang toggle aria");
+      assert.ok(thHtml.includes('aria-label="ปิดหน้าต่าง"'), "TH modal close aria");
+      assert.ok(thHtml.includes('aria-label="คิวรายการรออนุมัติ"'), "TH approvals queue aria");
+      assert.ok(thHtml.includes('aria-label="พอร์ตภายในแบบไดนามิก"'), "TH dynamic ports aria");
+      assert.ok(thHtml.includes('aria-label="ข้อมูลการทำงานของกระบวนการ"'), "TH telemetry aria");
+      assert.ok(thHtml.includes('aria-label="โปรแกรมเสริม Setup Assistant"'), "TH companion aria");
+    } finally {
+      if (oldEnvLocale !== undefined) {
+        process.env.WINHELM_LOCALE = oldEnvLocale;
+      } else {
+        delete process.env.WINHELM_LOCALE;
+      }
+      setConfiguredLocale(initialLocale);
+    }
+  });
+
+  it("21. Blocker D Corrective: Runtime state dictionary (SHELL_MESSAGES) includes full localized coverage for EN and TH", () => {
+    const initialLocale = getRuntimeLocale();
+    const oldEnvLocale = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+
+    try {
+      setConfiguredLocale("th");
+      const thHtml = renderTestShell();
+      const match = thHtml.match(/const SHELL_MESSAGES = (\{.*?\});/s);
+      assert.ok(match, "SHELL_MESSAGES JSON object must be present in client script");
+      const dict = JSON.parse(match[1]);
+
+      // Verify Thai runtime translations exist in client script payload
+      assert.ok(dict.shellAdminLockConfirm && dict.shellAdminLockConfirm.includes("ล็อกสิทธิ์ผู้ดูแล"), "TH admin lock confirm");
+      assert.ok(dict.shellApprovalsRiskReasonLabel && dict.shellApprovalsRiskReasonLabel.includes("เหตุผลความเสี่ยง"), "TH risk reason");
+      assert.ok(dict.shellRemoteStatusOn && dict.shellRemoteStatusOn.includes("เปิดการเข้าถึงระยะไกล"), "TH remote status on");
+      assert.ok(dict.shellConnectionsDoctorPassed && dict.shellConnectionsDoctorPassed.includes("ผ่าน"), "TH doctor passed");
+      assert.ok(dict.shellSetupDiagnosticHealthy && dict.shellSetupDiagnosticHealthy.includes("เกตเวย์ WinHelm สมบูรณ์ดี"), "TH setup healthy");
+    } finally {
+      if (oldEnvLocale !== undefined) {
+        process.env.WINHELM_LOCALE = oldEnvLocale;
+      } else {
+        delete process.env.WINHELM_LOCALE;
+      }
+      setConfiguredLocale(initialLocale);
+    }
   });
 });

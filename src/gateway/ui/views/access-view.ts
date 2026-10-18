@@ -21,7 +21,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- DUAL-AXIS GUIDANCE NOTE -->
-      <div class="banner banner-info" role="region" aria-label="Policy Guidance">
+      <div class="banner banner-info" role="region" aria-label="${escapeHtml(messages.shellAccessAriaGuidance || "Policy Guidance")}">
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">ℹ️</span>
           <div>
@@ -36,7 +36,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
       <!-- DUAL-AXIS SELECTION GRID -->
       <div class="card-grid-2">
         <!-- AXIS 1: CAPABILITY PROFILE -->
-        <div class="card" role="region" aria-label="Axis 1: Capability Profile">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellAccessAriaAxis1 || "Axis 1: Capability Profile")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellAccessAxis1Title || "Axis 1: Capability Profile (Tool Exposure)")}</span>
           </div>
@@ -63,7 +63,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- AXIS 2: APPROVAL MODE -->
-        <div class="card" role="region" aria-label="Axis 2: Approval Mode">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellAccessAriaAxis2 || "Axis 2: Approval Mode")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellAccessAxis2Title || "Axis 2: Approval Policy (Prompt Frequency)")}</span>
           </div>
@@ -72,7 +72,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
           </div>
 
           <div style="margin-bottom:var(--space-3);">
-            <label for="approvalModeSelect" style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Approval Mode</label>
+            <label for="approvalModeSelect" style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">${escapeHtml(messages.shellAccessLabelApprovalMode || "Approval Mode")}</label>
             <select id="approvalModeSelect" style="width:100%; padding:8px;">
               <option value="manual">${escapeHtml(messages.shellAccessModeManual || "Manual (Prompt on every mutating action)")}</option>
               <option value="smart" selected>${escapeHtml(messages.shellAccessModeSmart || "Smart (Prompt on high-risk & boundary crosses)")}</option>
@@ -87,7 +87,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- ALLOWED WORKSPACE DIRECTORIES -->
-      <div class="card" style="margin-top:var(--space-4);" role="region" aria-label="Allowed Directories">
+      <div class="card" style="margin-top:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellAccessAriaFolders || "Allowed Directories")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.foldersTitle)}</span>
         </div>
@@ -103,7 +103,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
         </div>
 
         <div class="form-group" id="accessConfirmGroup" style="display:none; margin-bottom:var(--space-3);">
-          <label class="form-label" for="accessConfirmInput" style="display:block; font-size:12px; font-weight:600; color:var(--status-attention-text); margin-bottom:4px;">Confirmation Required</label>
+          <label class="form-label" for="accessConfirmInput" style="display:block; font-size:12px; font-weight:600; color:var(--status-attention-text); margin-bottom:4px;">${escapeHtml(messages.shellAccessConfirmRequired || "Confirmation Required")}</label>
           <div class="form-desc" style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">${escapeHtml(messages.confirmType)}</div>
           <input type="text" id="accessConfirmInput" class="mandatory-confirm-input" style="width:100%; max-width:320px;" placeholder="confirm">
         </div>
@@ -117,7 +117,7 @@ export function renderAccessView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- PRIVILEGED SECURITY CREDENTIALS (Constraint 4) -->
-      <div class="card" style="margin-top:var(--space-5); border-left:4px solid var(--accent-primary);" role="region" aria-label="Security Credentials">
+      <div class="card" style="margin-top:var(--space-5); border-left:4px solid var(--accent-primary);" role="region" aria-label="${escapeHtml(messages.shellAccessAriaCredentials || "Security Credentials")}">
         <div class="card-header">
           <span class="card-label">${escapeHtml(messages.shellAccessCredTitle || "Security Credentials & Token Management")}</span>
           <span class="status-pill status-attention">${escapeHtml(messages.shellAccessCredPill || "Privileged Operation")}</span>

@@ -45,11 +45,11 @@ export function renderHomeView(ctx: ShellRenderContext): string {
       <!-- 4 CORE POSTURE TILES -->
       <div class="card-grid">
         <!-- 1. APPROVALS POSTURE -->
-        <div class="card" onclick="showTab('approvals')" style="cursor:pointer;" role="region" aria-label="Approvals Summary">
+        <div class="card" onclick="showTab('approvals')" style="cursor:pointer;" role="region" aria-label="${escapeHtml(messages.shellHomeAriaApprovalsSummary || "Approvals Summary")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.pendingTitle)}</span>
             <span id="statPendingBadge" class="status-pill status-ready">
-              <span class="status-dot green"></span> 0 Pending
+              <span class="status-dot green"></span> 0 ${escapeHtml(messages.shellHomePendingCountSuffix || "Pending")}
             </span>
           </div>
           <div class="card-value" id="statPendingApprovals">0</div>
@@ -58,7 +58,7 @@ export function renderHomeView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- 2. ACCESS POSTURE -->
-        <div class="card" onclick="showTab('access')" style="cursor:pointer;" role="region" aria-label="Access Posture Summary">
+        <div class="card" onclick="showTab('access')" style="cursor:pointer;" role="region" aria-label="${escapeHtml(messages.shellHomeAriaAccessSummary || "Access Posture Summary")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.profileTitle)}</span>
             <span class="status-pill status-neutral">${escapeHtml(displayProfile.toUpperCase())}</span>
@@ -67,7 +67,7 @@ export function renderHomeView(ctx: ShellRenderContext): string {
             ${escapeHtml(displayProfile.toUpperCase())} ${isModified ? `<span class="badge badge-warning" style="font-size:11px;">${escapeHtml(messages.profileModified)}</span>` : ""}
           </div>
           <div class="card-sub">
-            Policy: <strong id="statApprovalMode">${escapeHtml(approvalMode.toUpperCase())}</strong>
+            ${escapeHtml(messages.shellHomePolicyLabel || "Policy:")} <strong id="statApprovalMode">${escapeHtml(approvalMode.toUpperCase())}</strong>
             <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
               ${escapeHtml(messages.shellHomePolicyDesc || "Safe Profile restricts tool exposure; terminal mode controls execution safety.")}
             </div>
@@ -76,7 +76,7 @@ export function renderHomeView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- 3. REMOTE ACCESS POSTURE -->
-        <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="Remote Access Summary">
+        <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="${escapeHtml(messages.shellHomeAriaRemoteSummary || "Remote Access Summary")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellHomeRemoteTitle || "Remote Access")}</span>
             <span id="statRemotePill" class="status-pill status-ready">
@@ -91,12 +91,12 @@ export function renderHomeView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- 4. CLIENT ECOSYSTEM -->
-        <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="Client Ecosystem Summary">
+        <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="${escapeHtml(messages.shellHomeAriaClientsSummary || "Client Ecosystem Summary")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.connectionsTitle)}</span>
             <span class="status-pill status-ready" id="statClientBadge">${escapeHtml(messages.connConnected || "Connected")}</span>
           </div>
-          <div class="card-value" id="statConnectedClients">0 Connected</div>
+          <div class="card-value" id="statConnectedClients">0 ${escapeHtml(messages.shellHomeClientsConnectedSuffix || "Connected")}</div>
           <div class="card-sub" id="statClientList">
             Claude Desktop, Cursor, ChatGPT, Gemini
           </div>
@@ -106,10 +106,10 @@ export function renderHomeView(ctx: ShellRenderContext): string {
 
       <!-- SERVER STATUS & QUICK ACCESS -->
       <div class="card-grid-2">
-        <div class="card" role="region" aria-label="Runtime Status">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellHomeAriaRuntimeStatus || "Runtime Status")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellHomeServerStatus || "Server Status")}</span>
-            <span class="status-pill status-ready"><span class="status-dot green"></span> Running</span>
+            <span class="status-pill status-ready"><span class="status-dot green"></span> ${escapeHtml(messages.shellHomeServerRunning || "Running")}</span>
           </div>
           <div class="card-value">
             <span id="statServerStatus">${escapeHtml(messages.statusRunning)}</span>
@@ -120,11 +120,11 @@ export function renderHomeView(ctx: ShellRenderContext): string {
           </div>
         </div>
 
-        <div class="card" role="region" aria-label="Quick Actions">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellHomeAriaQuickActions || "Quick Actions")}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.shellHomeShortcutsTitle || "Operational Shortcuts")}</span>
           </div>
-          <div style="display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-1);">
+          <div style="flex-direction:column; gap:var(--space-2); margin-top:var(--space-1); display:flex;">
             <button class="btn-secondary" style="text-align:left; font-size:13px;" onclick="showTab('approvals')">
               🛡️ ${escapeHtml(messages.shellHomeShortcutApprovals || "Review Pending Approvals")} (<span id="quickApprovalCount">0</span>)
             </button>
@@ -139,13 +139,13 @@ export function renderHomeView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- RECENT ACTIVITY TIMELINE -->
-      <div class="card" style="margin-top:var(--space-4);" role="region" aria-label="Recent Activity Stream">
+      <div class="card" style="margin-top:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellHomeAriaRecentActivity || "Recent Activity Stream")}">
         <div class="card-header">
-          <span class="card-label">Recent Operational Activity</span>
-          <a href="javascript:void(0)" onclick="showTab('activity')" class="card-action-link">View Full Audit Log →</a>
+          <span class="card-label">${escapeHtml(messages.shellHomeActivityTitle || "Recent Operational Activity")}</span>
+          <a href="javascript:void(0)" onclick="showTab('activity')" class="card-action-link">${escapeHtml(messages.shellHomeActivityViewAll || "View Full Audit Log →")}</a>
         </div>
         <div id="homeRecentActivityList" class="timeline-list">
-          <div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">Loading recent activity…</div>
+          <div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">${escapeHtml(messages.shellHomeActivityLoading || "Loading recent activity…")}</div>
         </div>
       </div>
     </section>
