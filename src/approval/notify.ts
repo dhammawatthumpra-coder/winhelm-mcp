@@ -15,6 +15,8 @@ export interface ApprovalNotifierOptions {
     payload?: ApprovalNotificationPayload
   ) => Promise<unknown>;
   meta?: Record<string, unknown>;
+  activationToken?: string;
+  journalPath?: string;
 }
 
 /**
@@ -57,18 +59,26 @@ export async function notifyApprovalPending(
         options.meta
       );
 
-      const actions: ToastActionItem[] = [
-        {
-          content: "Approve",
-          arguments: `winhelm-approval:decide?jobId=${encodeURIComponent(job.id)}&decision=approved`,
-          activationType: "protocol",
-        },
-        {
-          content: "Deny",
-          arguments: `winhelm-approval:decide?jobId=${encodeURIComponent(job.id)}&decision=denied`,
-          activationType: "protocol",
-        },
-      ];
+      const actions: ToastActionItem[] = [];
+
+      if (options.activationToken) {
+        const tokenParam = `&token=${encodeURIComponent(options.activationToken)}`;
+        const journalParam = options.journalPath
+          ? `&journal=${encodeURIComponent(options.journalPath)}`
+          : "";
+        actions.push(
+          {
+            content: "Approve",
+            arguments: `winhelm-approval:decide?jobId=${encodeURIComponent(job.id)}&decision=approved${tokenParam}${journalParam}`,
+            activationType: "protocol",
+          },
+          {
+            content: "Deny",
+            arguments: `winhelm-approval:decide?jobId=${encodeURIComponent(job.id)}&decision=denied${tokenParam}${journalParam}`,
+            activationType: "protocol",
+          }
+        );
+      }
 
       if (url) {
         actions.push({

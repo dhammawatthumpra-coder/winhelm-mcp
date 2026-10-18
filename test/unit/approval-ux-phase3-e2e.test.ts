@@ -7,9 +7,9 @@ import {
   ApprovalEngine,
 } from "../../src/approval/approval-engine.js";
 import {
+  initializeApprovalPersistence,
   getApprovalEngine,
   resetApprovalEngine,
-  initializeApprovalPersistence,
 } from "../../src/approval/runtime.js";
 import {
   executeNativeDecision,
@@ -20,23 +20,17 @@ import {
 import {
   consumeOwnedDecisions,
   readRequest,
-  writeDecision,
-  crossProcessPaths,
   resetCrossProcessInstanceId,
 } from "../../src/approval/cross-process.js";
 import {
   notifyApprovalPending,
-  approvalJobUrl,
 } from "../../src/approval/notify.js";
-import {
-  issueDecisionCapability,
-} from "../../src/approval/decision-capability.js";
 import {
   runToolWithHybridApproval,
 } from "../../src/approval/tool-flow.js";
 
 describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
-  it("proves complete E2E flow: request -> notification -> native approve -> governed execution -> completed outcome", async () => {
+  it("proves complete E2E flow: request -> notification -> native approve with token -> governed execution -> completed outcome", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-p3-local-approve-"));
     const journalPath = path.join(dir, "approval-jobs.json");
     const prevJournalEnv = process.env.WINHELM_APPROVAL_JOURNAL_PATH;
@@ -49,8 +43,9 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
       // 1. Initialize runtime with notification enabled
       initializeApprovalPersistence(journalPath, {
         notifyApprovals: true,
-        notifier: (job) => {
+        notifier: (job, activationToken) => {
           void notifyApprovalPending(job, {
+            activationToken,
             send: async (_url, payload) => {
               notifiedPayload = payload;
             },
@@ -83,7 +78,7 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
       // Give async notification hook a tick
       await new Promise((r) => setTimeout(r, 20));
 
-      // 3. Verify notification presentation
+      // 3. Verify notification presentation carries proof-of-possession token
       assert.ok(notifiedPayload, "Notification payload must be created");
       assert.strictEqual(notifiedPayload.title, "WinHelm Approval: file_write");
       assert.ok(notifiedPayload.message?.includes("Target: D:\\workspace\\project\\data.json"));
@@ -93,6 +88,7 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
         (a: any) => a.content === "Approve"
       );
       assert.ok(approveAction, "Approve action button must exist");
+      assert.ok(approveAction.arguments.includes("&token="), "Approve URI must carry token proof");
 
       // 4. Human chooses Approve via native URI activation
       const activateResult = await runControlCliCommand([
@@ -120,7 +116,7 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
     }
   });
 
-  it("proves complete E2E flow: request -> notification -> native deny -> action cancelled -> tool never runs", async () => {
+  it("proves complete E2E flow: request -> notification -> native deny with token -> action cancelled -> tool never runs", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-p3-local-deny-"));
     const journalPath = path.join(dir, "approval-jobs.json");
     const prevJournalEnv = process.env.WINHELM_APPROVAL_JOURNAL_PATH;
@@ -132,8 +128,9 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
 
       initializeApprovalPersistence(journalPath, {
         notifyApprovals: true,
-        notifier: (job) => {
+        notifier: (job, activationToken) => {
           void notifyApprovalPending(job, {
+            activationToken,
             send: async (_url, payload) => {
               notifiedPayload = payload;
             },
@@ -166,6 +163,7 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
         (a: any) => a.content === "Deny"
       );
       assert.ok(denyAction);
+      assert.ok(denyAction.arguments.includes("&token="), "Deny URI must carry token proof");
 
       // Human clicks Deny
       const activateResult = await runControlCliCommand([
@@ -195,7 +193,7 @@ describe("Phase 3: End-to-End Native Approval UX — Local Jobs", () => {
 });
 
 describe("Phase 3: End-to-End Native Approval UX — Cross-Process Jobs (DEF-02)", () => {
-  it("proves cross-process approval: Stdio Instance owns job -> Decider activates -> Stdio consumes & executes", async () => {
+  it("proves cross-process approval: Stdio Instance owns job -> Decider activates with token -> Stdio consumes & executes", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-p3-crossproc-"));
     const journalPath = path.join(dir, "approval-jobs.json");
     const prevJournalEnv = process.env.WINHELM_APPROVAL_JOURNAL_PATH;
@@ -206,14 +204,14 @@ describe("Phase 3: End-to-End Native Approval UX — Cross-Process Jobs (DEF-02)
 
       // 1. Setup Instance A (Simulating Stdio Client owning the tool callback)
       resetCrossProcessInstanceId();
-      const stdioEngine = new ApprovalEngine();
       let stdioNotifiedPayload: any = null;
 
       initializeApprovalPersistence(journalPath, {
         notifyApprovals: true,
         crossProcess: true,
-        notifier: (job) => {
+        notifier: (job, activationToken) => {
           void notifyApprovalPending(job, {
+            activationToken,
             send: async (_url, payload) => {
               stdioNotifiedPayload = payload;
             },
@@ -234,21 +232,28 @@ describe("Phase 3: End-to-End Native Approval UX — Cross-Process Jobs (DEF-02)
       });
 
       const jobId = outcome.job.id;
-      issueDecisionCapability(outcome.job, journalPath);
+
+      // Wait for notification to be emitted
+      await new Promise((r) => setTimeout(r, 20));
 
       // Verify cross-process mirror was written
       const mirror = readRequest(jobId, journalPath);
       assert.ok(mirror, "Request mirror must be published for other instances");
       assert.strictEqual(mirror.job.id, jobId);
 
-      // 2. Setup Instance B (Simulating Decider process that does NOT own the job in memory)
-      // We simulate this by switching processInstanceId or running approval-activate CLI
-      // Because CLI runs as a separate process context, it acts as Instance B!
+      // Verify notified payload has Approve action with token
+      assert.ok(stdioNotifiedPayload);
+      const approveAction = stdioNotifiedPayload.actions.find(
+        (a: any) => a.content === "Approve"
+      );
+      assert.ok(approveAction);
+      assert.ok(approveAction.arguments.includes("&token="));
 
-      // Decider clicks Approve
+      // 2. Setup Instance B (Simulating Decider process that does NOT own the job in memory)
+      // Decider clicks Approve using the exact action URI from notification
       const activatePromise = runControlCliCommand([
         "approval-activate",
-        `winhelm-approval:decide?jobId=${jobId}&decision=approved`,
+        approveAction.arguments,
       ]);
 
       // 3. Instance A background coordination poll consumes the decision

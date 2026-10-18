@@ -1,5 +1,7 @@
+import crypto from "node:crypto";
 import {
   consumeDecisionCapability,
+  type ApprovalDecisionVerb,
 } from "./decision-capability.js";
 import {
   getApprovalEngine,
@@ -34,11 +36,16 @@ function safeJobId(jobId: string): string | null {
 
 /**
  * Parses a custom URI protocol string formatted as:
- * winhelm-approval:decide?jobId=job_...&decision=approved
+ * winhelm-approval:decide?jobId=job_...&decision=approved&token=...
  */
 export function parseApprovalProtocolUri(
   uri: string
-): { jobId?: string; decision?: "approved" | "denied" } {
+): {
+  jobId?: string;
+  decision?: "approved" | "denied";
+  token?: string;
+  journalPath?: string;
+} {
   try {
     const normalized = uri.replace(/^winhelm-approval:\/?\/?/i, "http://local/");
     const parsed = new URL(normalized);
@@ -48,7 +55,9 @@ export function parseApprovalProtocolUri(
       rawDecision === "approved" || rawDecision === "denied"
         ? rawDecision
         : undefined;
-    return { jobId, decision };
+    const token = parsed.searchParams.get("token") || undefined;
+    const journalPath = parsed.searchParams.get("journal") || undefined;
+    return { jobId, decision, token, journalPath };
   } catch {
     return {};
   }
@@ -56,11 +65,13 @@ export function parseApprovalProtocolUri(
 
 /**
  * Executes a native approval decision (approve or deny) through the verified
- * decision capability channel without requiring terminal interaction or full AdminAuth.
+ * decision capability channel, enforcing cryptographic proof-of-possession
+ * and authoritative job binding.
  */
 export async function executeNativeDecision(
   jobId: string,
   decision: "approved" | "denied",
+  token: string | undefined,
   options: NativeDecisionOptions = {}
 ): Promise<NativeDecisionResult> {
   const id = safeJobId(jobId);
@@ -82,17 +93,30 @@ export async function executeNativeDecision(
     };
   }
 
+  if (!token || typeof token !== "string" || !token.trim()) {
+    return {
+      ok: false,
+      code: "MISSING_ACTIVATION_TOKEN",
+      message: "An activation token is required for native approval decisions.",
+      jobId: id,
+    };
+  }
+
   const journalPath = options.journalPath ?? defaultApprovalJournalPath();
   const channel = options.channel ?? "native_ux";
 
-  // 1. Consume decision capability (single-use, bounded expiry)
-  const consumed = consumeDecisionCapability(id, journalPath);
+  // 1. Atomically consume decision capability and verify proof-of-possession
+  const consumed = consumeDecisionCapability(id, token, decision, journalPath);
   if (!consumed.ok) {
     const errorMessages: Record<string, string> = {
       NOT_FOUND: "Approval job decision capability not found.",
       EXPIRED: "Approval job has expired and can no longer be decided.",
       ALREADY_CONSUMED: "This approval job has already been decided.",
-      INVALID_ARGUMENT: "Invalid jobId parameter.",
+      INVALID_ARGUMENT: "Invalid jobId or decision parameter.",
+      MISSING_ACTIVATION_TOKEN: "An activation token is required.",
+      DECISION_NOT_ALLOWED: "Decision verb is not permitted for this capability.",
+      INVALID_CAPABILITY_TOKEN:
+        "Invalid activation token; proof-of-possession verification failed.",
     };
 
     return {
@@ -108,8 +132,41 @@ export async function executeNativeDecision(
 
   let finalState: string | undefined;
 
-  // 2. Check if local engine owns the job
+  // 2. Local Engine Authority Path
   if (engine.ownsJob(id)) {
+    const localJob = engine.get(id);
+    if (!localJob) {
+      return {
+        ok: false,
+        code: "NOT_FOUND",
+        message: "Authoritative local approval job not found.",
+        jobId: id,
+      };
+    }
+
+    // Verify authoritative local job binding
+    if (
+      localJob.fingerprint !== capability.fingerprint ||
+      localJob.createdAt !== capability.createdAt
+    ) {
+      return {
+        ok: false,
+        code: "BINDING_MISMATCH",
+        message: "Capability does not match authoritative local job identity.",
+        jobId: id,
+      };
+    }
+
+    if (localJob.state !== "awaiting_approval") {
+      return {
+        ok: false,
+        code: "CONFLICT",
+        state: localJob.state,
+        message: `Job is no longer awaiting approval (current state: ${localJob.state}).`,
+        jobId: id,
+      };
+    }
+
     const outcome =
       decision === "approved"
         ? engine.approve(id, channel)
@@ -130,8 +187,7 @@ export async function executeNativeDecision(
 
     finalState = outcome.job.state;
   } else {
-    // If the local engine has this job in memory (e.g. restored from restart as "unknown"),
-    // check its state. If not awaiting_approval, fail with CONFLICT.
+    // 3. Cross-Process Coordination Authority Path (DEF-02)
     const localJob = engine.get(id);
     if (localJob && localJob.state !== "awaiting_approval") {
       return {
@@ -143,7 +199,7 @@ export async function executeNativeDecision(
       };
     }
 
-    // 3. Cross-process routing: check owner liveness
+    // Check owning process liveness
     if (!isProcessAlive(capability.pid)) {
       return {
         ok: false,
@@ -154,8 +210,7 @@ export async function executeNativeDecision(
       };
     }
 
-    // If capability was issued by the current process but the current engine does not own it,
-    // the job executor was lost across instance restart or reset.
+    // Check same-PID orphan across restart
     if (capability.pid === process.pid) {
       return {
         ok: false,
@@ -166,25 +221,50 @@ export async function executeNativeDecision(
       };
     }
 
+    // Read and verify authoritative cross-process mirror request
     const mirror = readRequest(id, journalPath);
-    if (mirror) {
-      if (mirror.job.state !== "awaiting_approval") {
-        return {
-          ok: false,
-          code: "CONFLICT",
-          state: mirror.job.state,
-          message: `Job is already in '${mirror.job.state}' state.`,
-          jobId: id,
-        };
-      }
-      if (Date.now() >= mirror.job.expiresAt) {
-        return {
-          ok: false,
-          code: "EXPIRED",
-          message: "Approval job has expired.",
-          jobId: id,
-        };
-      }
+    if (!mirror) {
+      return {
+        ok: false,
+        code: "OWNER_UNAVAILABLE",
+        message:
+          "Authoritative cross-process mirror request not found; owning instance unavailable.",
+        jobId: id,
+      };
+    }
+
+    if (
+      mirror.job.fingerprint !== capability.fingerprint ||
+      mirror.instanceId !== capability.instanceId ||
+      mirror.pid !== capability.pid ||
+      mirror.job.createdAt !== capability.createdAt
+    ) {
+      return {
+        ok: false,
+        code: "BINDING_MISMATCH",
+        message:
+          "Capability does not match authoritative cross-process mirror binding.",
+        jobId: id,
+      };
+    }
+
+    if (mirror.job.state !== "awaiting_approval") {
+      return {
+        ok: false,
+        code: "CONFLICT",
+        state: mirror.job.state,
+        message: `Job is already in '${mirror.job.state}' state.`,
+        jobId: id,
+      };
+    }
+
+    if (Date.now() >= mirror.job.expiresAt) {
+      return {
+        ok: false,
+        code: "EXPIRED",
+        message: "Approval job has expired.",
+        jobId: id,
+      };
     }
 
     // Write cross-process decision file
@@ -204,15 +284,22 @@ export async function executeNativeDecision(
       return {
         ok: false,
         code: "TIMEOUT",
-        message: "Timed out waiting for the owning WinHelm process to execute the decision.",
+        message:
+          "Timed out waiting for the owning WinHelm process to execute the decision.",
         jobId: id,
       };
     }
     finalState = outcome.state;
   }
 
-  // 4. Audit logging
+  // 4. Audit logging (CRITICAL: Record only truncated token hash fingerprint, NEVER raw token)
   try {
+    const tokenFingerprint = crypto
+      .createHash("sha256")
+      .update(token, "utf8")
+      .digest("hex")
+      .slice(0, 12);
+
     auditLogger.log({
       event: decision === "approved" ? "APPROVAL_APPROVED" : "APPROVAL_DENIED",
       severity: "INFO",
@@ -226,6 +313,7 @@ export async function executeNativeDecision(
         decision,
         state: finalState,
         fingerprint: capability.fingerprint,
+        tokenFingerprint,
       },
     });
   } catch {

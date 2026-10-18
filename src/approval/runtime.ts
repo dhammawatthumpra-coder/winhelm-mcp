@@ -79,7 +79,7 @@ export interface ApprovalPersistenceOptions {
    */
   notifyApprovals?: boolean;
   /** Notification adapter; defaults to WinHelm's own desktop toast. */
-  notifier?: (job: ApprovalJob) => void;
+  notifier?: (job: ApprovalJob, activationToken?: string) => void;
   /**
    * Write an audit record for every terminal approval decision, including the
    * decision latency. Off by default so tests and library callers do not append
@@ -142,19 +142,25 @@ export function initializeApprovalPersistence(
     },
     journalIntegrityFailed: loaded.integrityFailure !== null,
     onCreated: (job: ApprovalJob) => {
+      let issuedToken: string | undefined;
       try {
-        issueDecisionCapability(job, journalPath);
+        const issued = issueDecisionCapability(job, journalPath);
+        issuedToken = issued?.token;
       } catch {
         // Advisory capability write; fails closed if unreadable later
       }
       if (options.notifyApprovals) {
         if (options.notifier) {
-          options.notifier(job);
+          options.notifier(job, issuedToken);
         } else {
           const meta = options.requestMetaProvider
             ? options.requestMetaProvider(job)
             : undefined;
-          void notifyApprovalPending(job, { meta });
+          void notifyApprovalPending(job, {
+            meta,
+            activationToken: issuedToken,
+            journalPath,
+          });
         }
       }
     },

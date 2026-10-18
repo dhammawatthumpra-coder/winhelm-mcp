@@ -24,12 +24,9 @@ import {
 import {
   runControlCliCommand,
 } from "../../src/cli/commands.js";
-import {
-  consumeOwnedDecisions,
-} from "../../src/approval/cross-process.js";
 
 describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => {
-  it("issues a decision capability bound to exact jobId and fingerprint", async () => {
+  it("issues a decision capability bound to exact jobId and fingerprint, never persisting raw token", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cap-test-"));
     const journalPath = path.join(dir, "approval-jobs.json");
 
@@ -43,20 +40,22 @@ describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => 
 
       const issued = issueDecisionCapability(job, journalPath);
       assert.ok(issued);
-      assert.strictEqual(issued.jobId, "job_cap_001");
-      assert.strictEqual(issued.fingerprint, "sha256-fingerprint-abc");
-      assert.ok(issued.nonce.length >= 32);
+      assert.strictEqual(issued.record.jobId, "job_cap_001");
+      assert.strictEqual(issued.record.fingerprint, "sha256-fingerprint-abc");
+      assert.ok(issued.token.length >= 32);
 
       const read = readDecisionCapability("job_cap_001", journalPath);
       assert.ok(read);
       assert.strictEqual(read.jobId, "job_cap_001");
-      assert.strictEqual(read.nonce, issued.nonce);
+      assert.strictEqual(read.tokenVerifier, issued.record.tokenVerifier);
+      // Plaintext token must NEVER be persisted to disk
+      assert.strictEqual((read as any).token, undefined);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("enforces single-use consumption atomically", async () => {
+  it("enforces single-use consumption atomically and verifies proof-of-possession token", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cap-test-"));
     const journalPath = path.join(dir, "approval-jobs.json");
 
@@ -68,15 +67,21 @@ describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => 
         expiresAt: Date.now() + 60_000,
       };
 
-      issueDecisionCapability(job, journalPath);
+      const issued = issueDecisionCapability(job, journalPath);
+      assert.ok(issued);
 
-      // First consumption succeeds
-      const first = consumeDecisionCapability("job_cap_single_use", journalPath);
-      assert.strictEqual(first.ok, true);
-      assert.strictEqual(first.capability.jobId, "job_cap_single_use");
+      // Attempt consumption without token must fail
+      const noToken = consumeDecisionCapability("job_cap_single_use", "", "approved", journalPath);
+      assert.strictEqual(noToken.ok, false);
+      assert.strictEqual(noToken.code, "MISSING_ACTIVATION_TOKEN");
+
+      // Attempt consumption with wrong token must fail and consume the capability immediately
+      const wrongToken = consumeDecisionCapability("job_cap_single_use", "wrong_token_value", "approved", journalPath);
+      assert.strictEqual(wrongToken.ok, false);
+      assert.strictEqual(wrongToken.code, "INVALID_CAPABILITY_TOKEN");
 
       // Second consumption must fail with ALREADY_CONSUMED
-      const second = consumeDecisionCapability("job_cap_single_use", journalPath);
+      const second = consumeDecisionCapability("job_cap_single_use", issued.token, "approved", journalPath);
       assert.strictEqual(second.ok, false);
       assert.strictEqual(second.code, "ALREADY_CONSUMED");
     } finally {
@@ -96,9 +101,10 @@ describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => 
         expiresAt: Date.now() - 1_000, // already expired
       };
 
-      issueDecisionCapability(job, journalPath);
+      const issued = issueDecisionCapability(job, journalPath);
+      assert.ok(issued);
 
-      const outcome = consumeDecisionCapability("job_cap_expired", journalPath);
+      const outcome = consumeDecisionCapability("job_cap_expired", issued.token, "approved", journalPath);
       assert.strictEqual(outcome.ok, false);
       assert.strictEqual(outcome.code, "EXPIRED");
     } finally {
@@ -111,7 +117,7 @@ describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => 
     const journalPath = path.join(dir, "approval-jobs.json");
 
     try {
-      const outcome = consumeDecisionCapability("job_nonexistent", journalPath);
+      const outcome = consumeDecisionCapability("job_nonexistent", "some_token", "approved", journalPath);
       assert.strictEqual(outcome.ok, false);
       assert.strictEqual(outcome.code, "NOT_FOUND");
     } finally {
@@ -121,23 +127,26 @@ describe("Phase 2: Decision Capability Store — Lifecycle & Invariants", () => 
 });
 
 describe("Phase 2: Protocol URI Parsing", () => {
-  it("parses winhelm-approval protocol URI with decision and jobId", () => {
-    const uri = "winhelm-approval:decide?jobId=job_abc-123&decision=approved";
+  it("parses winhelm-approval protocol URI with decision, jobId, and token", () => {
+    const uri = "winhelm-approval:decide?jobId=job_abc-123&decision=approved&token=myToken123";
     const parsed = parseApprovalProtocolUri(uri);
     assert.strictEqual(parsed.jobId, "job_abc-123");
     assert.strictEqual(parsed.decision, "approved");
+    assert.strictEqual(parsed.token, "myToken123");
 
-    const denyUri = "winhelm-approval://decide?jobId=job_xyz-999&decision=denied";
+    const denyUri = "winhelm-approval://decide?jobId=job_xyz-999&decision=denied&token=secret456";
     const parsedDeny = parseApprovalProtocolUri(denyUri);
     assert.strictEqual(parsedDeny.jobId, "job_xyz-999");
     assert.strictEqual(parsedDeny.decision, "denied");
+    assert.strictEqual(parsedDeny.token, "secret456");
   });
 
   it("rejects invalid decisions in protocol URI", () => {
-    const uri = "winhelm-approval:decide?jobId=job_1&decision=hacked";
+    const uri = "winhelm-approval:decide?jobId=job_1&decision=hacked&token=tok";
     const parsed = parseApprovalProtocolUri(uri);
     assert.strictEqual(parsed.jobId, "job_1");
     assert.strictEqual(parsed.decision, undefined);
+    assert.strictEqual(parsed.token, "tok");
   });
 });
 
@@ -168,10 +177,18 @@ describe("Phase 2: Secure Decision Execution — Local Engine Flow", () => {
       const jobId = outcome.job.id;
 
       // Issue capability
-      issueDecisionCapability(outcome.job, journalPath);
+      const issued = issueDecisionCapability(outcome.job, journalPath);
+      assert.ok(issued);
 
-      // Execute approval
-      const decisionResult = await executeNativeDecision(jobId, "approved", {
+      // Attempting execution without token must fail
+      const noTokenRes = await executeNativeDecision(jobId, "approved", undefined, {
+        journalPath,
+      });
+      assert.strictEqual(noTokenRes.ok, false);
+      assert.strictEqual(noTokenRes.code, "MISSING_ACTIVATION_TOKEN");
+
+      // Execute approval with valid token
+      const decisionResult = await executeNativeDecision(jobId, "approved", issued.token, {
         channel: "native_ux",
         journalPath,
         notifyOutcome: false,
@@ -186,7 +203,7 @@ describe("Phase 2: Secure Decision Execution — Local Engine Flow", () => {
       assert.strictEqual(getApprovalEngine().get(jobId)?.state, "completed");
 
       // Repeated activation fails due to single-use capability consumption
-      const secondResult = await executeNativeDecision(jobId, "approved", {
+      const secondResult = await executeNativeDecision(jobId, "approved", issued.token, {
         channel: "native_ux",
         journalPath,
         notifyOutcome: false,
@@ -222,9 +239,10 @@ describe("Phase 2: Secure Decision Execution — Local Engine Flow", () => {
       assert.strictEqual(outcome.kind, "created");
       const jobId = outcome.job.id;
 
-      issueDecisionCapability(outcome.job, journalPath);
+      const issued = issueDecisionCapability(outcome.job, journalPath);
+      assert.ok(issued);
 
-      const decisionResult = await executeNativeDecision(jobId, "denied", {
+      const decisionResult = await executeNativeDecision(jobId, "denied", issued.token, {
         channel: "native_ux",
         journalPath,
         notifyOutcome: false,
@@ -244,7 +262,7 @@ describe("Phase 2: Secure Decision Execution — Local Engine Flow", () => {
 });
 
 describe("Phase 2: CLI Activation Command (winhelm approval-activate)", () => {
-  it("activates an approval decision from flags --job and --decision", async () => {
+  it("activates an approval decision from flags --job, --decision, and --token", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-activate-"));
     const journalPath = path.join(dir, "approval-jobs.json");
     const prevJournalEnv = process.env.WINHELM_APPROVAL_JOURNAL_PATH;
@@ -267,14 +285,29 @@ describe("Phase 2: CLI Activation Command (winhelm approval-activate)", () => {
       });
 
       const jobId = outcome.job.id;
-      issueDecisionCapability(outcome.job, journalPath);
+      const issued = issueDecisionCapability(outcome.job, journalPath);
+      assert.ok(issued);
 
+      // Attempting without token flag must fail
+      const failNoToken = await runControlCliCommand([
+        "approval-activate",
+        "--job",
+        jobId,
+        "--decision",
+        "approved",
+      ]);
+      assert.strictEqual(failNoToken.handled, true);
+      assert.strictEqual(failNoToken.exitCode, 2);
+
+      // Activating with token flag succeeds
       const result = await runControlCliCommand([
         "approval-activate",
         "--job",
         jobId,
         "--decision",
         "approved",
+        "--token",
+        issued.token,
       ]);
 
       assert.strictEqual(result.handled, true);
@@ -291,7 +324,7 @@ describe("Phase 2: CLI Activation Command (winhelm approval-activate)", () => {
     }
   });
 
-  it("activates an approval decision directly from protocol URI argument", async () => {
+  it("activates an approval decision directly from protocol URI argument carrying token", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "winhelm-cli-proto-"));
     const journalPath = path.join(dir, "approval-jobs.json");
     const prevJournalEnv = process.env.WINHELM_APPROVAL_JOURNAL_PATH;
@@ -314,11 +347,12 @@ describe("Phase 2: CLI Activation Command (winhelm approval-activate)", () => {
       });
 
       const jobId = outcome.job.id;
-      issueDecisionCapability(outcome.job, journalPath);
+      const issued = issueDecisionCapability(outcome.job, journalPath);
+      assert.ok(issued);
 
       const result = await runControlCliCommand([
         "approval-activate",
-        `winhelm-approval:decide?jobId=${jobId}&decision=denied`,
+        `winhelm-approval:decide?jobId=${jobId}&decision=denied&token=${issued.token}`,
       ]);
 
       assert.strictEqual(result.handled, true);

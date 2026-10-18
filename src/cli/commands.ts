@@ -112,12 +112,17 @@ export async function runControlCliCommand(
     if (command === "approval-activate") {
       let jobId: string | undefined;
       let decision: "approved" | "denied" | undefined;
+      let token: string | undefined;
+
+      let parsedJournal: string | undefined;
 
       const rawArg = args[1] || "";
       if (rawArg.startsWith("winhelm-approval:")) {
         const parsed = parseApprovalProtocolUri(rawArg);
         jobId = parsed.jobId;
         decision = parsed.decision;
+        token = parsed.token;
+        parsedJournal = parsed.journalPath;
       } else {
         for (let i = 1; i < args.length; i++) {
           if (args[i] === "--job" && args[i + 1]) {
@@ -130,6 +135,14 @@ export async function runControlCliCommand(
           } else if (args[i].startsWith("--decision=")) {
             const d = args[i].slice(11);
             if (d === "approved" || d === "denied") decision = d;
+          } else if (args[i] === "--token" && args[i + 1]) {
+            token = args[++i];
+          } else if (args[i].startsWith("--token=")) {
+            token = args[i].slice(8);
+          } else if (args[i] === "--journal" && args[i + 1]) {
+            parsedJournal = args[++i];
+          } else if (args[i].startsWith("--journal=")) {
+            parsedJournal = args[i].slice(10);
           } else if (!jobId && args[i].startsWith("job_")) {
             jobId = args[i];
           } else if (!decision && (args[i] === "approved" || args[i] === "denied")) {
@@ -138,18 +151,19 @@ export async function runControlCliCommand(
         }
       }
 
-      if (!jobId || !decision) {
+      if (!jobId || !decision || !token) {
         return {
           handled: true,
           exitCode: 2,
           error:
-            "Usage: winhelm approval-activate --job <jobId> --decision <approved|denied> OR winhelm approval-activate <protocol-uri>",
+            "Usage: winhelm approval-activate --job <jobId> --decision <approved|denied> --token <token> OR winhelm approval-activate <protocol-uri>",
         };
       }
 
-      const outcome = await executeNativeDecision(jobId, decision, {
+      const outcome = await executeNativeDecision(jobId, decision, token, {
         channel: "native_toast",
         notifyOutcome: false,
+        journalPath: parsedJournal,
       });
 
       if (!outcome.ok) {
