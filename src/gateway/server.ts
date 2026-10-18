@@ -31,6 +31,10 @@ export interface ServerOptions {
   authToken?: string | null;
   internalPortSelection?: InternalPortSelection;
   preferredPort?: number;
+  runtimeIdentity?: {
+    role: string;
+    generation: string;
+  };
 }
 
 export function safeCompare(a: string, b: string): boolean {
@@ -669,6 +673,15 @@ export function createServer(options: ServerOptions): {
       },
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
+      ...(options.runtimeIdentity
+        ? {
+            runtime: {
+              role: options.runtimeIdentity.role,
+              generation: options.runtimeIdentity.generation,
+              pid: process.pid,
+            },
+          }
+        : {}),
     });
   });
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigManager } from "./config/config-manager.js";
 import { createServer } from "./gateway/server.js";
@@ -33,6 +34,10 @@ import {
   resolveInternalPortSelection,
   writePreferredInternalPort,
 } from "./runtime/internal-port.js";
+import {
+  createRuntimeGeneration,
+  publishCurrentRuntimeEndpoint,
+} from "./runtime/endpoint-registry.js";
 import {
   getRunManager,
   initializeRunManager,
@@ -402,27 +407,57 @@ async function main() {
     return;
   }
 
+  const runtimeGeneration = createRuntimeGeneration();
+  const coreEntrypointPath = fileURLToPath(import.meta.url);
   const { start, stop } = createServer({
     port: PORT,
     host: HOST,
     authToken: effectiveAuthToken,
     internalPortSelection: PORT_SELECTION,
     preferredPort: PREFERRED_PORT,
+    runtimeIdentity:
+      PORT_SELECTION.mode === "auto"
+        ? {
+            role: "core",
+            generation: runtimeGeneration,
+          }
+        : undefined,
   });
 
   const server = await start();
 
   if (PORT_SELECTION.mode === "auto") {
     const boundAddress = server.address();
-    if (boundAddress && typeof boundAddress === "object") {
-      try {
-        await writePreferredInternalPort(boundAddress.port);
-      } catch (err) {
-        console.error(
-          "[WinHelm] Warning: could not persist the automatic internal-port preference:",
-          (err as Error).message
-        );
-      }
+    if (!boundAddress || typeof boundAddress === "string") {
+      await stop(server).catch(() => {});
+      throw new Error(
+        "Automatic internal port startup failed: bound Core listener did not report an IP endpoint."
+      );
+    }
+
+    try {
+      await publishCurrentRuntimeEndpoint({
+        role: "core",
+        generation: runtimeGeneration,
+        host: boundAddress.address,
+        port: boundAddress.port,
+        expectedExecutablePath: process.execPath,
+        expectedEntrypointPath: coreEntrypointPath,
+      });
+    } catch (err) {
+      await stop(server).catch(() => {});
+      throw new Error(
+        `Automatic internal port startup failed: runtime endpoint identity could not be verified and published: ${(err as Error).message}`
+      );
+    }
+
+    try {
+      await writePreferredInternalPort(boundAddress.port);
+    } catch (err) {
+      console.error(
+        "[WinHelm] Warning: could not persist the automatic internal-port preference:",
+        (err as Error).message
+      );
     }
   }
 
