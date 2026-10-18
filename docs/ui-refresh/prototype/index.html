@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinHelm v1.4.1 Dashboard UI Refresh — Interactive Review Prototype</title>
+  <link rel="stylesheet" href="prototype.css">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+</head>
+<body>
+
+  <!-- REVIEWER STATE TOOLBAR -->
+  <div class="reviewer-toolbar">
+    <div class="reviewer-toolbar-group">
+      <span class="reviewer-toolbar-label">Review State:</span>
+      <select id="stateSelect" class="reviewer-select" title="Switch between the 10 mandatory review states"></select>
+      <span id="reviewerStateDesc" style="color:#d1d5db; font-size:11px; margin-left:8px;"></span>
+    </div>
+    <div class="reviewer-toolbar-group">
+      <span class="reviewer-toolbar-label">Viewport:</span>
+      <div class="viewport-btn-group">
+        <button class="viewport-btn active" data-viewport="desktop">Desktop</button>
+        <button class="viewport-btn" data-viewport="tablet">Tablet (900px)</button>
+        <button class="viewport-btn" data-viewport="mobile">Mobile (480px)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEWPORT WRAPPER -->
+  <div class="prototype-viewport-container" id="viewportContainer">
+    <div class="app-wrapper">
+
+      <!-- TOP HEADER -->
+      <header class="top-header">
+        <div class="brand-section">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation">☰</button>
+          <div class="brand-logo">
+            <div class="brand-icon">W</div>
+            <span>WinHelm</span>
+            <span class="brand-version">v1.4.1</span>
+          </div>
+          <div id="headerStatusPill" class="header-status-pill status-ready">
+            <span class="status-dot"></span>
+            <span>Ready</span>
+          </div>
+        </div>
+
+        <div class="header-controls">
+          <button id="adminPillBtn" class="admin-pill-btn" title="Click to unlock or lock local administrator privileges">
+            <span>🔒</span>
+            <span data-i18n="adminLocked">Admin Locked</span>
+          </button>
+          <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+            ☼
+          </button>
+          <button id="langToggleBtn" class="icon-btn" style="font-weight:700; font-size:11px;" title="Switch Language EN / ภาษาไทย">
+            EN
+          </button>
+        </div>
+      </header>
+
+      <!-- APP BODY -->
+      <div class="app-body">
+        
+        <!-- SIDEBAR NAVIGATION -->
+        <nav class="sidebar" id="appSidebar" aria-label="Main Navigation">
+          <div class="nav-group">
+            <button class="nav-item active" data-tab="home">
+              <div class="nav-item-left">
+                <span>🏠</span>
+                <span data-i18n="navHome">Home</span>
+              </div>
+            </button>
+            <button class="nav-item" data-tab="approvals">
+              <div class="nav-item-left">
+                <span>🛡️</span>
+                <span data-i18n="navApprovals">Approvals</span>
+              </div>
+              <span id="navApprovalsBadge" class="nav-badge" style="display:none;">0</span>
+            </button>
+            <button class="nav-item" data-tab="connections">
+              <div class="nav-item-left">
+                <span>🔗</span>
+                <span data-i18n="navConnections">Connections</span>
+              </div>
+            </button>
+            <button class="nav-item" data-tab="access">
+              <div class="nav-item-left">
+                <span>🔒</span>
+                <span data-i18n="navAccess">Access & Security</span>
+              </div>
+            </button>
+            <button class="nav-item" data-tab="activity">
+              <div class="nav-item-left">
+                <span>📜</span>
+                <span data-i18n="navActivity">Activity</span>
+              </div>
+            </button>
+            <button class="nav-item" data-tab="settings">
+              <div class="nav-item-left">
+                <span>⚙️</span>
+                <span data-i18n="navSettings">Settings</span>
+              </div>
+            </button>
+            <button class="nav-item" data-tab="advanced">
+              <div class="nav-item-left">
+                <span>🔧</span>
+                <span data-i18n="navAdvanced">Advanced</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="sidebar-footer">
+            <button class="nav-item" id="navSetupBtn" style="border:1px dashed var(--border-strong);">
+              <div class="nav-item-left">
+                <span>🚀</span>
+                <span data-i18n="navSetup">Setup Assistant</span>
+              </div>
+            </button>
+            <a href="javascript:alert('In production, this links to /dashboard (Preserved Engineering Monitor).')" class="sidebar-external-link">
+              <span>Engineering Monitor ↗</span>
+            </a>
+          </div>
+        </nav>
+
+        <!-- MAIN PANELS CONTAINER -->
+        <main class="main-content">
+
+          <!-- 1. HOME PANEL -->
+          <section id="panel-home" class="panel active">
+            <div class="panel-header">
+              <h1 class="panel-title">Operational Overview</h1>
+              <p class="panel-subtitle">At-a-glance operational state, security posture, and active client integrations.</p>
+            </div>
+
+            <!-- URGENT ATTENTION BANNER -->
+            <div id="homeAttentionBanner" class="banner banner-warning" style="display:none;"></div>
+
+            <!-- 4 CORE POSTURE TILES -->
+            <div class="card-grid-4">
+              <div class="card card-clickable" id="homeTileApprovals" onclick="showTab('approvals')"></div>
+              <div class="card card-clickable" id="homeTileAccess" onclick="showTab('access')"></div>
+              <div class="card card-clickable" id="homeTileRemote" onclick="showTab('connections')"></div>
+              <div class="card card-clickable" id="homeTileClients" onclick="showTab('connections')"></div>
+            </div>
+
+            <!-- RECENT ACTIVITY CARD -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-label">Recent Operational Activity</span>
+                <a href="javascript:void(0)" onclick="showTab('activity')" class="card-action-link">View Full Audit Log →</a>
+              </div>
+              <div class="timeline-list">
+                <div class="timeline-item">
+                  <div class="timeline-item-left">
+                    <span class="timeline-time">12:44:02</span>
+                    <span class="timeline-badge">APPROVALS</span>
+                    <strong>execute_command</strong>
+                    <span style="font-size:12px; color:var(--text-secondary);">by Claude Desktop</span>
+                  </div>
+                  <span class="status-pill status-attention"><span class="status-dot"></span> Pending Approval</span>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-item-left">
+                    <span class="timeline-time">12:41:19</span>
+                    <span class="timeline-badge">TOOLS</span>
+                    <strong>read_file</strong>
+                    <span style="font-size:12px; color:var(--text-secondary);">by Cursor</span>
+                  </div>
+                  <span class="status-pill status-ready"><span class="status-dot"></span> Allowed (Smart)</span>
+                </div>
+                <div class="timeline-item">
+                  <div class="timeline-item-left">
+                    <span class="timeline-time">12:38:50</span>
+                    <span class="timeline-badge">SECURITY</span>
+                    <strong>admin_code_exchange</strong>
+                    <span style="font-size:12px; color:var(--text-secondary);">by Local Terminal</span>
+                  </div>
+                  <span class="status-pill status-ready"><span class="status-dot"></span> Admin Session Active</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. APPROVALS PANEL -->
+          <section id="panel-approvals" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Approvals Inbox</h1>
+              <p class="panel-subtitle">Review, inspect, and authorize pending actions requested by connected AI clients.</p>
+            </div>
+
+            <!-- NATIVE NOTIFICATION STATUS BANNER (Tranche B) -->
+            <div class="banner banner-info" style="margin-bottom:var(--space-4);">
+              <div class="banner-content">
+                <span>🔔</span>
+                <div>
+                  <strong>Windows Native Notifications: Active & Ready</strong>
+                  <div style="font-size:12px; margin-top:2px;">
+                    Approval prompts appear as Windows desktop notifications. You can also safely approve or deny actions directly from this dashboard.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PENDING QUEUE CONTAINER -->
+            <div id="approvalsQueue"></div>
+          </section>
+
+          <!-- 3. CONNECTIONS PANEL -->
+          <section id="panel-connections" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Client Connections & Ingress</h1>
+              <p class="panel-subtitle">Inspect connected AI applications, configure local integrations, and manage remote access.</p>
+            </div>
+
+            <!-- REMOTE ACCESS STATUS -->
+            <div id="connectionsRemoteStatus" class="banner banner-info"></div>
+
+            <!-- CLIENT CARDS GRID -->
+            <h2 class="policy-group-title" style="margin-top:var(--space-5);">Supported AI Clients</h2>
+            <div class="card-grid-2" id="connectionsClientGrid"></div>
+
+            <!-- ACTIVE SESSIONS TABLE -->
+            <h2 class="policy-group-title" style="margin-top:var(--space-4);">Active MCP Sessions</h2>
+            <div class="data-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Client Name</th>
+                    <th>Host IP</th>
+                    <th>Transport Protocol</th>
+                    <th>Connected Time</th>
+                    <th>State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Claude Desktop</strong></td>
+                    <td><code>127.0.0.1</code></td>
+                    <td>Server-Sent Events (SSE)</td>
+                    <td>42 minutes ago</td>
+                    <td><span class="status-pill status-ready"><span class="status-dot"></span> Active</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Cursor Editor</strong></td>
+                    <td><code>127.0.0.1</code></td>
+                    <td>Streamable HTTP</td>
+                    <td>18 minutes ago</td>
+                    <td><span class="status-pill status-ready"><span class="status-dot"></span> Active</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 4. ACCESS & SECURITY PANEL -->
+          <section id="panel-access" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Access & Security Policy</h1>
+              <p class="panel-subtitle">Govern what tools AI models can run and when human approval is required.</p>
+            </div>
+
+            <!-- DUAL-AXIS GUIDANCE NOTE -->
+            <div class="banner banner-info" style="margin-bottom:var(--space-5);">
+              <div class="banner-content">
+                <span>ℹ️</span>
+                <div>
+                  <strong>Understanding the Dual-Axis Security Model:</strong>
+                  <div style="font-size:12px; margin-top:2px;">
+                    <strong>Capability Profile</strong> determines <em>what tools exist</em>. 
+                    <strong>Approval Mode</strong> determines <em>when WinHelm prompts you</em> for permitted tools. 
+                    Trusted Mode never expands your profile or grants unrestricted access.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-grid-2">
+              <!-- AXIS 1: CAPABILITY PROFILE -->
+              <div class="card">
+                <h2 class="policy-group-title">Axis 1: Capability Profile (Tool Exposure)</h2>
+                <div id="profileCardsContainer"></div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                  🛡️ <em>Dangerous profile is permanently disabled and not supported.</em>
+                </div>
+              </div>
+
+              <!-- AXIS 2: APPROVAL MODE -->
+              <div class="card">
+                <h2 class="policy-group-title">Axis 2: Approval Policy (Prompt Frequency)</h2>
+                <div id="approvalModeContainer"></div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                  ⚡ <em>Trusted Mode only skips prompts inside designated allowed directories.</em>
+                </div>
+              </div>
+            </div>
+
+            <!-- ALLOWED DIRECTORIES -->
+            <div class="card" style="margin-top:var(--space-4);">
+              <div class="card-header">
+                <span class="card-label">Allowed Working Directories</span>
+                <span class="status-pill status-neutral">2 Folders Configured</span>
+              </div>
+              <div class="data-table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Directory Path</th>
+                      <th>Permissions</th>
+                      <th>Scope</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>D:\mcp</code></td>
+                      <td><span class="status-pill status-ready">Read & Write</span></td>
+                      <td>Primary Workspace Root</td>
+                    </tr>
+                    <tr>
+                      <td><code>C:\Users\csuti\Projects</code></td>
+                      <td><span class="status-pill status-ready">Read & Write</span></td>
+                      <td>Additional Authorized Path</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 5. ACTIVITY PANEL -->
+          <section id="panel-activity" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Activity & Audit Log</h1>
+              <p class="panel-subtitle">Comprehensive, human-readable timeline of all AI tool executions and security decisions.</p>
+            </div>
+
+            <div class="filter-pills-bar">
+              <button class="filter-pill active">All Events (48)</button>
+              <button class="filter-pill">Approvals (4)</button>
+              <button class="filter-pill">Tools (36)</button>
+              <button class="filter-pill">Security (6)</button>
+              <button class="filter-pill">Connections (2)</button>
+            </div>
+
+            <div id="activityTimelineList" class="timeline-list"></div>
+
+            <div style="margin-top:var(--space-5); display:flex; gap:var(--space-3);">
+              <button class="btn-secondary" onclick="alert('In production, downloads sanitized audit log as JSON.')">
+                📥 Download Audit Log (JSON)
+              </button>
+            </div>
+          </section>
+
+          <!-- 6. SETTINGS PANEL -->
+          <section id="panel-settings" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Settings & Preferences</h1>
+              <p class="panel-subtitle">Configure application preferences, localization, and local security credentials.</p>
+            </div>
+
+            <div class="card-grid-2">
+              <div class="card">
+                <h2 class="policy-group-title">Display & Language</h2>
+                <div style="margin-bottom:var(--space-3);">
+                  <label style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary);">Interface Language</label>
+                  <select class="reviewer-select" style="width:100%; padding:8px;" onchange="currentLocale = this.value; renderLocaleText();">
+                    <option value="en">English (US)</option>
+                    <option value="th">ภาษาไทย (Thai)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block; font-size:12px; margin-bottom:4px; color:var(--text-secondary);">Color Theme</label>
+                  <select class="reviewer-select" style="width:100%; padding:8px;" onchange="document.documentElement.setAttribute('data-theme', this.value); currentTheme = this.value; updateThemeIcon();">
+                    <option value="dark">Dark Theme (Default)</option>
+                    <option value="light">Light Theme</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2 class="policy-group-title">MCP Access Credentials</h2>
+                <div style="font-size:12px; color:var(--text-secondary); margin-bottom:var(--space-3);">
+                  Local MCP Bearer access token used by AI client applications.
+                </div>
+                <div style="margin-bottom:var(--space-3);">
+                  <code>wh_live_••••••••••••••••••••••••••••••••</code>
+                </div>
+                <div>
+                  <button class="btn-secondary" style="font-size:12px;" onclick="alert('In production, requires Admin Unlock and generates a fresh token.')">
+                    🔑 Rotate Access Token
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 7. ADVANCED PANEL -->
+          <section id="panel-advanced" class="panel">
+            <div class="panel-header">
+              <h1 class="panel-title">Advanced Diagnostics</h1>
+              <p class="panel-subtitle">Progressive disclosure of internal network endpoints, dynamic port routing, and runtime telemetry.</p>
+            </div>
+
+            <!-- TRANCHE A: DYNAMIC INTERNAL PORTS -->
+            <div class="card" style="margin-bottom:var(--space-5);">
+              <div class="card-header">
+                <span class="card-label">Tranche A: Internal Port Allocation</span>
+                <span id="advPortModeBadge" class="status-pill status-ready">Automatic (Tranche A)</span>
+              </div>
+              <div class="card-desc">
+                In normal operation, WinHelm dynamically binds internal loopback ports to prevent port conflicts with other local software.
+              </div>
+              <div class="data-table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Internal Component Target</th>
+                      <th>Resolved Loopback Address</th>
+                      <th>Binding State</th>
+                    </tr>
+                  </thead>
+                  <tbody id="advEndpointsBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- PROCESS RUNTIME TELEMETRY -->
+            <div class="card" style="margin-bottom:var(--space-5);">
+              <div class="card-header">
+                <span class="card-label">Runtime Telemetry & Health</span>
+                <span class="status-pill status-ready"><span class="status-dot"></span> Process Healthy</span>
+              </div>
+              <div class="card-grid-4" style="margin-top:var(--space-2); margin-bottom:0;">
+                <div>
+                  <div style="font-size:11px; color:var(--text-muted);">HOST PID</div>
+                  <strong style="font-size:16px;">19488</strong>
+                </div>
+                <div>
+                  <div style="font-size:11px; color:var(--text-muted);">NODE RUNTIME</div>
+                  <strong style="font-size:16px;">v22.12.0</strong>
+                </div>
+                <div>
+                  <div style="font-size:11px; color:var(--text-muted);">MEMORY RSS</div>
+                  <strong style="font-size:16px;">58.4 MB</strong>
+                </div>
+                <div>
+                  <div style="font-size:11px; color:var(--text-muted);">UPTIME</div>
+                  <strong style="font-size:16px;">2h 14m</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- ENGINEERING MONITOR LINK -->
+            <div class="banner banner-info">
+              <div class="banner-content">
+                <span>🛠️</span>
+                <div>
+                  <strong>Preserved Engineering Monitor (/dashboard)</strong>
+                  <div style="font-size:12px; margin-top:2px;">
+                    The raw, low-level technical monitor dashboard remains available for low-level socket inspection and hardware diagnostics.
+                  </div>
+                </div>
+              </div>
+              <button class="banner-btn" onclick="alert('In production, navigates to /dashboard')">Open Monitor</button>
+            </div>
+          </section>
+
+        </main>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ADMIN UNLOCK MODAL -->
+  <div class="modal-overlay" id="adminUnlockModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title">Unlock Administrator Privileges</h2>
+        <button class="icon-btn" id="closeAdminModal" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:var(--space-3);">
+          Run <code>winhelm admin-code</code> in your local terminal, then enter the one-time authentication code below.
+        </p>
+        <div style="margin-bottom:var(--space-3);">
+          <label for="modalAdminCodeInput" style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">One-Time Admin Code</label>
+          <input type="password" id="modalAdminCodeInput" class="mandatory-confirm-input" style="max-width:100%;" placeholder="Enter code (e.g. winhelm-admin-123)" />
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:8px; border-radius:4px;">
+          🔒 Never share or paste this admin code into an AI chat. The admin session remains valid for 15 minutes.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('adminUnlockModal').classList.remove('open')">Cancel</button>
+        <button class="btn-approve" id="submitAdminCode">Verify & Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP ASSISTANT COMPANION MODAL -->
+  <div class="modal-overlay" id="setupAssistantModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title">WinHelm Setup Assistant Companion</h2>
+        <button class="icon-btn" id="closeSetupModal" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="banner banner-ready" style="background:var(--status-ready-bg); color:var(--status-ready-text); border:1px solid var(--status-ready-border); margin-bottom:var(--space-4);">
+          <div class="banner-content">
+            <span>✓</span>
+            <div>
+              <strong>Setup Assistant Installed & Verified</strong>
+              <div style="font-size:11px; margin-top:2px;">Location: <code>D:\mcp\winhelm-setup-assistant-r1</code></div>
+            </div>
+          </div>
+        </div>
+        <p style="margin-bottom:var(--space-3);">
+          The standalone Setup Assistant handles Windows service registration, client config file generation, and deep environment diagnostics.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:var(--space-2);">
+          <button class="btn-approve" style="text-align:center; padding:10px;" onclick="alert('Launching Standalone Setup Assistant companion executable...')">
+            🚀 Launch Standalone Setup Assistant
+          </button>
+          <button class="btn-secondary" style="text-align:center; padding:8px;" onclick="alert('Running self-repair checks: validating allowed directories, resetting internal ports, verifying loopback binding...')">
+            🔧 Run Diagnostic Self-Repair
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="closeSetupModalBtn" onclick="document.getElementById('setupAssistantModal').classList.remove('open')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROTOTYPE SCRIPTS -->
+  <script src="mock-data.js"></script>
+  <script src="prototype.js"></script>
+</body>
+</html>
