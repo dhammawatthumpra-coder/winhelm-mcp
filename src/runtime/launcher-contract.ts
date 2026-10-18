@@ -151,6 +151,18 @@ export interface TrustedRuntimeTopologyIdentities {
   r8: TrustedRuntimeIdentity;
 }
 
+export function verifiedEndpointBelongsToPid(
+  endpoint: VerifiedRuntimeEndpoint | undefined,
+  expectedPid: number
+): endpoint is VerifiedRuntimeEndpoint {
+  return (
+    !!endpoint &&
+    Number.isInteger(expectedPid) &&
+    expectedPid > 0 &&
+    endpoint.pid === expectedPid
+  );
+}
+
 export interface SanitizedVerifiedEndpoint {
   state: "ready" | "unavailable";
   source: "verified_runtime";
@@ -429,6 +441,39 @@ export interface ManagedLaunchedProcess {
   stop: () => Promise<void>;
 }
 
+export type RuntimeChainRole = "core" | "r7" | "r8";
+
+export interface RuntimeChainExitEvent {
+  role: RuntimeChainRole;
+  reason?: string;
+}
+
+export interface SuperviseRuntimeChainOptions extends LaunchRuntimeChainOptions {
+  waitForExit: (
+    started: readonly ManagedLaunchedProcess[]
+  ) => Promise<RuntimeChainExitEvent>;
+  maxRestarts: number;
+  onCycleReady?: (
+    cycle: number,
+    started: readonly ManagedLaunchedProcess[]
+  ) => Promise<void> | void;
+  onRestart?: (
+    cycle: number,
+    event: RuntimeChainExitEvent
+  ) => Promise<void> | void;
+  shouldRestart?: (
+    event: RuntimeChainExitEvent,
+    cyclesStarted: number
+  ) => Promise<boolean> | boolean;
+}
+
+export interface RuntimeChainSupervisorResult {
+  state: "stopped" | "restart_budget_exhausted";
+  cyclesStarted: number;
+  restartsPerformed: number;
+  lastExit: RuntimeChainExitEvent;
+}
+
 export interface LaunchRuntimeChainOptions {
   specs: ProcessSpec[];
   spawn: (spec: ProcessSpec) => Promise<ManagedLaunchedProcess>;
@@ -453,5 +498,61 @@ export async function launchRuntimeChain(
       await child.stop().catch(() => {});
     }
     throw error;
+  }
+}
+
+async function stopRuntimeChain(
+  started: readonly ManagedLaunchedProcess[]
+): Promise<void> {
+  for (const child of [...started].reverse()) {
+    await child.stop().catch(() => {});
+  }
+}
+
+export async function superviseRuntimeChain(
+  options: SuperviseRuntimeChainOptions
+): Promise<RuntimeChainSupervisorResult> {
+  if (!Number.isInteger(options.maxRestarts) || options.maxRestarts < 0) {
+    throw new Error("maxRestarts must be a non-negative integer.");
+  }
+
+  let cyclesStarted = 0;
+  let restartsPerformed = 0;
+
+  for (;;) {
+    const started = await launchRuntimeChain(options);
+    cyclesStarted += 1;
+    await options.onCycleReady?.(cyclesStarted, started);
+
+    let event: RuntimeChainExitEvent;
+    try {
+      event = await options.waitForExit(started);
+    } finally {
+      await stopRuntimeChain(started);
+    }
+
+    if (
+      options.shouldRestart &&
+      !(await options.shouldRestart(event!, cyclesStarted))
+    ) {
+      return {
+        state: "stopped",
+        cyclesStarted,
+        restartsPerformed,
+        lastExit: event!,
+      };
+    }
+
+    if (restartsPerformed >= options.maxRestarts) {
+      return {
+        state: "restart_budget_exhausted",
+        cyclesStarted,
+        restartsPerformed,
+        lastExit: event!,
+      };
+    }
+
+    restartsPerformed += 1;
+    await options.onRestart?.(restartsPerformed, event!);
   }
 }

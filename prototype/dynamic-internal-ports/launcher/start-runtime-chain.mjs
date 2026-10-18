@@ -8,6 +8,8 @@ import {
   createR8TlsHealthProbe,
   launchRuntimeChain,
   resolveInternalPortLaunchPlan,
+  superviseRuntimeChain,
+  verifiedEndpointBelongsToPid,
 } from "../../../dist/runtime/launcher-contract.js";
 import {
   defaultRuntimeEndpointPath,
@@ -291,111 +293,235 @@ async function main(argv = process.argv.slice(2)) {
     assertString(publicConfig.origin, "public.origin")
   ).hostname;
   const childByRole = new Map();
+  let shutdownRequested = false;
+  let currentStarted = [];
 
-  const started = await launchRuntimeChain({
-    specs,
-    spawn: async (spec) => {
-      const child = createChild(spec);
-      if (!child.pid) throw new Error(`${spec.role} process did not expose a PID.`);
-      childByRole.set(spec.role, child);
-      child.exited.then((result) => {
-        if (result?.code && result.code !== 0) {
-          process.stderr.write(
-            JSON.stringify({
-              event: "runtime_component_exited",
-              role: spec.role,
-              code: result.code,
-            }) + "\n"
-          );
-        }
+  const spawnComponent = async (spec) => {
+    const child = createChild(spec);
+    if (!child.pid) throw new Error(`${spec.role} process did not expose a PID.`);
+    childByRole.set(spec.role, child);
+    currentStarted = [
+      ...currentStarted.filter((candidate) => candidate.role !== spec.role),
+      child,
+    ];
+    child.exited.then((result) => {
+      if (result?.code && result.code !== 0) {
+        process.stderr.write(
+          JSON.stringify({
+            event: "runtime_component_exited",
+            role: spec.role,
+            code: result.code,
+          }) + "\n"
+        );
+      }
+    });
+    return child;
+  };
+
+  const resolveOwnedAutomaticEndpoint = async (role) => {
+    const child = childByRole.get(role);
+    if (!child?.pid || child.exitResult) return undefined;
+
+    let endpoint;
+    if (role === "core") {
+      endpoint = await resolveVerifiedRuntimeEndpoint({
+        role: "core",
+        expectedExecutablePath: launcherPaths.coreExecutable,
+        expectedEntrypointPath: launcherPaths.coreEntrypoint,
+        filePath: launcherPaths.coreRegistry,
       });
-      return child;
-    },
-    waitReady: async (role) => {
-      if (role === "core" && plan.mode === "fixed") {
-        const child = childByRole.get("core");
-        await waitUntil("Fixed Core", async () => {
-          if (child.exitResult) return false;
-          const observation = await observeWindowsRuntimeEndpoint({
-            pid: child.pid,
-            host: "127.0.0.1",
-            port: plan.core.selector,
-          });
-          const ownsListener = observation.listeners.some(
-            (listener) =>
-              listener.owningPid === child.pid &&
-              listener.port === plan.core.selector
-          );
-          return ownsListener &&
-            (await healthOk("127.0.0.1", plan.core.selector))
-            ? true
-            : false;
+    } else if (role === "r7") {
+      endpoint = await resolveVerifiedRuntimeEndpoint({
+        role: "r7",
+        expectedExecutablePath: launcherPaths.r7Executable,
+        expectedEntrypointPath: launcherPaths.r7Entrypoint,
+        expectedHealthServer: "winhelm-r7",
+        filePath: launcherPaths.r7Registry,
+      });
+    } else {
+      endpoint = await resolveVerifiedRuntimeEndpoint({
+        role: "r8",
+        expectedExecutablePath: launcherPaths.r8Binary,
+        expectedEntrypointPath: launcherPaths.r8Binary,
+        expectedHealthServer: "winhelm-r8",
+        filePath: launcherPaths.r8Registry,
+        probeHealth: createR8TlsHealthProbe(expectedPublicHost),
+      });
+    }
+
+    return verifiedEndpointBelongsToPid(endpoint, child.pid)
+      ? endpoint
+      : undefined;
+  };
+
+  const waitReady = async (role) => {
+    if (role === "core" && plan.mode === "fixed") {
+      const child = childByRole.get("core");
+      await waitUntil("Fixed Core", async () => {
+        if (!child?.pid || child.exitResult) return false;
+        const observation = await observeWindowsRuntimeEndpoint({
+          pid: child.pid,
+          host: "127.0.0.1",
+          port: plan.core.selector,
         });
-        return;
-      }
-
-      if (role === "core") {
-        await waitUntil("Core", () =>
-          resolveVerifiedRuntimeEndpoint({
-            role: "core",
-            expectedExecutablePath: launcherPaths.coreExecutable,
-            expectedEntrypointPath: launcherPaths.coreEntrypoint,
-            filePath: launcherPaths.coreRegistry,
-          })
+        const ownsListener = observation.listeners.some(
+          (listener) =>
+            listener.owningPid === child.pid &&
+            listener.port === plan.core.selector
         );
-        return;
-      }
+        return ownsListener &&
+          (await healthOk("127.0.0.1", plan.core.selector))
+          ? true
+          : false;
+      });
+      return;
+    }
 
-      if (role === "r7") {
-        await waitUntil("R7", () =>
-          resolveVerifiedRuntimeEndpoint({
-            role: "r7",
-            expectedExecutablePath: launcherPaths.r7Executable,
-            expectedEntrypointPath: launcherPaths.r7Entrypoint,
-            expectedHealthServer: "winhelm-r7",
-            filePath: launcherPaths.r7Registry,
-          })
-        );
-        return;
-      }
+    if (plan.mode === "automatic") {
+      await waitUntil(role.toUpperCase(), () => resolveOwnedAutomaticEndpoint(role));
+      return;
+    }
 
-      await waitUntil("R8", () =>
-        resolveVerifiedRuntimeEndpoint({
+    if (role === "r7") {
+      await waitUntil("Fixed R7", async () => {
+        const endpoint = await resolveVerifiedRuntimeEndpoint({
+          role: "r7",
+          expectedExecutablePath: launcherPaths.r7Executable,
+          expectedEntrypointPath: launcherPaths.r7Entrypoint,
+          expectedHealthServer: "winhelm-r7",
+          filePath: launcherPaths.r7Registry,
+        });
+        const child = childByRole.get("r7");
+        return endpoint && child?.pid === endpoint.pid ? endpoint : undefined;
+      });
+      return;
+    }
+
+    if (role === "r8") {
+      await waitUntil("Fixed R8", async () => {
+        const endpoint = await resolveVerifiedRuntimeEndpoint({
           role: "r8",
           expectedExecutablePath: launcherPaths.r8Binary,
           expectedEntrypointPath: launcherPaths.r8Binary,
           expectedHealthServer: "winhelm-r8",
           filePath: launcherPaths.r8Registry,
           probeHealth: createR8TlsHealthProbe(expectedPublicHost),
-        })
-      );
-    },
-  });
+        });
+        const child = childByRole.get("r8");
+        return endpoint && child?.pid === endpoint.pid ? endpoint : undefined;
+      });
+    }
+  };
 
-  process.stdout.write(
-    JSON.stringify({
-      event: "WINHELM_RUNTIME_CHAIN_READY",
-      mode: plan.mode,
-      publicPort: 443,
-      publicRoute: "inactive",
-      internalPortsUserSelected: plan.requiresUserPortInput,
-      roles: ["core", "r7", "r8"],
-    }) + "\n"
-  );
-
-  let stopping = false;
-  const stopAll = async () => {
-    if (stopping) return;
-    stopping = true;
-    for (const child of [...started].reverse()) {
+  const stopCurrent = async () => {
+    shutdownRequested = true;
+    for (const child of [...currentStarted].reverse()) {
       await child.stop().catch(() => {});
     }
   };
-  process.once("SIGINT", () => void stopAll());
-  process.once("SIGTERM", () => void stopAll());
+  process.once("SIGINT", () => void stopCurrent());
+  process.once("SIGTERM", () => void stopCurrent());
+
+  const emitReady = (event, cycle = 1) => {
+    process.stdout.write(
+      JSON.stringify({
+        event,
+        cycle,
+        mode: plan.mode,
+        publicPort: 443,
+        publicRoute: "inactive",
+        internalPortsUserSelected: plan.requiresUserPortInput,
+        roles: ["core", "r7", "r8"],
+      }) + "\n"
+    );
+  };
+
+  if (plan.mode === "automatic") {
+    const result = await superviseRuntimeChain({
+      specs,
+      spawn: spawnComponent,
+      waitReady,
+      maxRestarts: 3,
+      onCycleReady: async (cycle, started) => {
+        currentStarted = [...started];
+        emitReady(
+          cycle === 1
+            ? "WINHELM_RUNTIME_CHAIN_READY"
+            : "WINHELM_RUNTIME_CHAIN_RESTARTED",
+          cycle
+        );
+      },
+      waitForExit: async (started) => {
+        currentStarted = [...started];
+        let processExit;
+        for (const child of started) {
+          child.exited.then((exit) => {
+            if (!processExit) {
+              processExit = {
+                role: child.role,
+                reason: `process_exit:${exit?.code ?? "signal"}`,
+              };
+            }
+          });
+        }
+
+        for (;;) {
+          if (processExit) return processExit;
+          if (shutdownRequested) {
+            return { role: "r8", reason: "shutdown" };
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          if (processExit) return processExit;
+
+          for (const role of ["core", "r7", "r8"]) {
+            const endpoint = await resolveOwnedAutomaticEndpoint(role);
+            if (!endpoint) {
+              return {
+                role,
+                reason: "verified_identity_changed_or_unavailable",
+              };
+            }
+          }
+        }
+      },
+      shouldRestart: async (event) =>
+        !shutdownRequested && event.reason !== "shutdown",
+      onRestart: async (restart, event) => {
+        process.stderr.write(
+          JSON.stringify({
+            event: "WINHELM_RUNTIME_CHAIN_RESTART",
+            restart,
+            triggerRole: event.role,
+            reason: event.reason,
+          }) + "\n"
+        );
+      },
+    });
+
+    currentStarted = [];
+    if (!shutdownRequested && result.state === "restart_budget_exhausted") {
+      throw new Error(
+        `Automatic runtime restart budget exhausted after ${result.restartsPerformed} restarts.`
+      );
+    }
+    return;
+  }
+
+  const started = await launchRuntimeChain({
+    specs,
+    spawn: spawnComponent,
+    waitReady,
+  });
+  currentStarted = [...started];
+  emitReady("WINHELM_RUNTIME_CHAIN_READY", 1);
 
   await Promise.race(started.map((child) => child.exited));
-  await stopAll();
+  const userRequestedShutdown = shutdownRequested;
+  await stopCurrent();
+  if (!userRequestedShutdown) {
+    throw new Error("Fixed runtime component exited unexpectedly.");
+  }
 }
 
 const invoked = process.argv[1] ? path.resolve(process.argv[1]) : "";
