@@ -8,9 +8,6 @@ $ErrorActionPreference = 'Stop'
 $model = 'WINHELM_R7_PUBLIC_ROUTE_STATUS'
 $serviceName = 'WinHelmGoTlsIngressHardeningR1'
 
-# Read-only helper: resolves the same config-relative control surface the
-# ingress uses and reports a stable verdict. It never starts, stops, or
-# configures anything and never writes a file.
 function Resolve-RouteContext([string] $RootPath, [string] $ConfigPath) {
     $rootItem = Get-Item -LiteralPath $RootPath -ErrorAction Stop
     $configFile = if ([string]::IsNullOrWhiteSpace($ConfigPath)) { Join-Path $rootItem.FullName 'config.json' } else { $ConfigPath }
@@ -30,66 +27,145 @@ function Resolve-RouteContext([string] $RootPath, [string] $ConfigPath) {
     }
 }
 
+function Read-RouteStatus([string] $StatusPath) {
+    if (-not (Test-Path -LiteralPath $StatusPath -PathType Leaf)) { return $null }
+    try {
+        return Get-Content -LiteralPath $StatusPath -Raw | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+}
+
 $ctx = Resolve-RouteContext $Root $Config
 $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 $serviceExists = $null -ne $service
 $serviceStatus = if ($serviceExists) { [string] $service.Status } else { 'absent' }
-
-$listenerState = 'unavailable'
-$listenerCount = 0
-try {
-    $listeners = @(Get-NetTCPConnection -State Listen -LocalPort 19447 -ErrorAction Stop)
-    $listenerCount = $listeners.Count
-    $listenerState = if ($listenerCount -gt 0) { 'listening' } else { 'absent' }
-} catch {
-    # Get-NetTCPConnection raises "No matching MSFT_NetTCPConnection objects
-    # found by CIM query" when the query succeeds but nothing matches; that is
-    # definitive absence, not missing evidence. Any other failure stays
-    # unavailable.
-    if ($_.Exception.Message -match 'No matching MSFT_NetTCPConnection') { $listenerState = 'absent' }
-    else { $listenerState = 'unavailable' }
+$servicePid = 0
+if ($serviceExists) {
+    try {
+        $serviceCim = Get-CimInstance Win32_Service -Filter ("Name='" + $serviceName.Replace("'", "''") + "'") -ErrorAction Stop
+        if ($null -ne $serviceCim -and $null -ne $serviceCim.ProcessId) { $servicePid = [int] $serviceCim.ProcessId }
+    } catch {
+        $servicePid = 0
+    }
 }
 
 $statusFileExists = Test-Path -LiteralPath $ctx.StatusPath -PathType Leaf
-$publicRoute = 'unknown'
-if ($statusFileExists) {
-    try {
-        $statusObj = Get-Content -LiteralPath $ctx.StatusPath -Raw | ConvertFrom-Json
-        if ($null -ne $statusObj.public_route) { $publicRoute = [string] $statusObj.public_route }
-    } catch {
-        $publicRoute = 'unreadable'
+$statusObj = Read-RouteStatus $ctx.StatusPath
+$publicRoute = if ($null -ne $statusObj -and $null -ne $statusObj.public_route) { [string] $statusObj.public_route } elseif ($statusFileExists) { 'unreadable' } else { 'unknown' }
+$localListener = if ($null -ne $statusObj -and $null -ne $statusObj.internal_target -and $null -ne $statusObj.internal_target.listener) { [string] $statusObj.internal_target.listener } elseif ($null -ne $statusObj -and $null -ne $statusObj.local_listener) { [string] $statusObj.local_listener } else { '' }
+$targetGeneration = if ($null -ne $statusObj -and $null -ne $statusObj.internal_target -and $null -ne $statusObj.internal_target.generation) { [string] $statusObj.internal_target.generation } else { '' }
+$targetPid = if ($null -ne $statusObj -and $null -ne $statusObj.internal_target -and $null -ne $statusObj.internal_target.pid) { [int] $statusObj.internal_target.pid } else { 0 }
+$targetVerification = if ($null -ne $statusObj -and $null -ne $statusObj.internal_target -and $null -ne $statusObj.internal_target.verification) { [string] $statusObj.internal_target.verification } else { 'unavailable' }
+
+$listenerState = 'unavailable'
+$listenerPort = 0
+$listenerOwner = 0
+$expectedOwner = if ($targetPid -gt 0) { $targetPid } else { $servicePid }
+if ($localListener -match '^127[.]0[.]0[.]1:([0-9]{1,5})$') {
+    $listenerPort = [int] $Matches[1]
+    if ($listenerPort -ge 1024 -and $listenerPort -le 65535) {
+        try {
+            $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $listenerPort -ErrorAction Stop |
+                Where-Object { $_.LocalAddress -eq '127.0.0.1' -or $_.LocalAddress -eq '0.0.0.0' })
+            if ($listeners.Count -eq 0) {
+                $listenerState = 'absent'
+            } elseif ($expectedOwner -gt 0) {
+                $owned = @($listeners | Where-Object { [int] $_.OwningProcess -eq $expectedOwner })
+                if ($owned.Count -gt 0) {
+                    $listenerState = 'listening_owned'
+                    $listenerOwner = $expectedOwner
+                } else {
+                    $listenerState = 'listening_foreign'
+                    $listenerOwner = [int] $listeners[0].OwningProcess
+                }
+            } else {
+                $listenerState = 'listening_owner_unverifiable'
+                $listenerOwner = [int] $listeners[0].OwningProcess
+            }
+        } catch {
+            if ($_.Exception.Message -match 'No matching MSFT_NetTCPConnection') { $listenerState = 'absent' }
+            else { $listenerState = 'unavailable' }
+        }
+    } else {
+        $listenerState = 'invalid_target'
     }
+} elseif ([string]::IsNullOrWhiteSpace($localListener)) {
+    $listenerState = 'target_unavailable'
+} else {
+    $listenerState = 'invalid_target'
 }
 
 $verdict = 'RUNNING_STATUS_UNVERIFIABLE'
 $exitCode = 1
 if (-not $serviceExists) {
-    if ($listenerCount -gt 0) { $verdict = 'LISTENER_WITHOUT_SERVICE'; $exitCode = 1 }
-    else { $verdict = 'NOT_INSTALLED'; $exitCode = 0 }
+    if ($listenerState -eq 'listening_owned' -or $listenerState -eq 'listening_foreign' -or $listenerState -eq 'listening_owner_unverifiable') {
+        $verdict = 'LISTENER_WITHOUT_SERVICE'
+        $exitCode = 1
+    } else {
+        $verdict = 'NOT_INSTALLED'
+        $exitCode = 0
+    }
 } elseif ($serviceStatus -eq 'Stopped') {
-    if (-not $statusFileExists) { $verdict = 'STOPPED_NO_STATUS_FILE'; $exitCode = 0 }
-    elseif ($publicRoute -eq 'active') { $verdict = 'STOPPED_ROUTE_MAY_BE_STALE'; $exitCode = 1 }
-    elseif ($publicRoute -eq 'inactive') { $verdict = 'STOPPED_ROUTE_INACTIVE'; $exitCode = 0 }
-    else { $verdict = 'STOPPED_STATUS_UNVERIFIABLE'; $exitCode = 1 }
+    if (-not $statusFileExists) {
+        $verdict = 'STOPPED_NO_STATUS_FILE'
+        $exitCode = 0
+    } elseif ($publicRoute -eq 'active') {
+        $verdict = 'STOPPED_ROUTE_MAY_BE_STALE'
+        $exitCode = 1
+    } elseif ($publicRoute -eq 'inactive') {
+        $verdict = 'STOPPED_ROUTE_INACTIVE'
+        $exitCode = 0
+    } else {
+        $verdict = 'STOPPED_STATUS_UNVERIFIABLE'
+        $exitCode = 1
+    }
 } elseif ($serviceStatus -eq 'Running') {
     if ($publicRoute -eq 'active') {
-        if ($listenerCount -gt 0) { $verdict = 'RUNNING_PUBLIC_ACTIVE'; $exitCode = 0 }
-        else { $verdict = 'RUNNING_ROUTE_ACTIVE_WITHOUT_LISTENER'; $exitCode = 1 }
+        if ($listenerState -eq 'listening_owned' -and $targetVerification -eq 'verified_at_activation') {
+            $verdict = 'RUNNING_PUBLIC_ACTIVE'
+            $exitCode = 0
+        } elseif ($listenerState -eq 'listening_foreign') {
+            $verdict = 'RUNNING_ROUTE_ACTIVE_WITH_FOREIGN_LISTENER'
+            $exitCode = 1
+        } elseif ($listenerState -eq 'absent') {
+            $verdict = 'RUNNING_ROUTE_ACTIVE_WITHOUT_LISTENER'
+            $exitCode = 1
+        } else {
+            $verdict = 'RUNNING_ACTIVE_TARGET_UNVERIFIABLE'
+            $exitCode = 1
+        }
     } elseif ($publicRoute -eq 'inactive') {
-        if ($listenerCount -gt 0) { $verdict = 'RUNNING_LOCAL_READY_PUBLIC_INACTIVE'; $exitCode = 0 }
-        else { $verdict = 'RUNNING_WITHOUT_LISTENER'; $exitCode = 1 }
-    } else { $verdict = 'RUNNING_STATUS_UNVERIFIABLE'; $exitCode = 1 }
-}
-if ($listenerState -eq 'unavailable' -and (-not $serviceExists -or $serviceStatus -eq 'Running')) {
-    $verdict = 'LISTENER_EVIDENCE_UNAVAILABLE'
-    $exitCode = 1
+        if ($listenerState -eq 'listening_owned') {
+            $verdict = 'RUNNING_LOCAL_READY_PUBLIC_INACTIVE'
+            $exitCode = 0
+        } elseif ($listenerState -eq 'listening_foreign') {
+            $verdict = 'RUNNING_FOREIGN_LISTENER'
+            $exitCode = 1
+        } elseif ($listenerState -eq 'absent') {
+            $verdict = 'RUNNING_WITHOUT_LISTENER'
+            $exitCode = 1
+        } else {
+            $verdict = 'RUNNING_STATUS_UNVERIFIABLE'
+            $exitCode = 1
+        }
+    } else {
+        $verdict = 'RUNNING_STATUS_UNVERIFIABLE'
+        $exitCode = 1
+    }
 }
 
 Write-Output ("PUBLIC_ROUTE_STATUS model=" + $model +
     " service=" + $serviceName +
     " state=" + $serviceStatus +
-    " listener_19447=" + $listenerState +
     " public_route=" + $publicRoute +
+    " public_port=443" +
+    " local_listener=" + $localListener +
+    " listener_state=" + $listenerState +
+    " listener_owner=" + $listenerOwner +
+    " target_generation=" + $targetGeneration +
+    " target_pid=" + $targetPid +
+    " target_verification=" + $targetVerification +
     " status_file=" + $statusFileExists.ToString().ToLowerInvariant() +
     " host=" + $ctx.Host +
     " verdict=" + $verdict +

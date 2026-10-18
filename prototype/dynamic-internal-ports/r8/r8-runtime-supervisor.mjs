@@ -13,6 +13,7 @@ import {
   resolveR8R7Upstream,
   publishR8RuntimeEndpoint,
 } from "../../../dist/runtime/r8-runtime.js";
+import { defaultRuntimeEndpointPath } from "../../../dist/runtime/endpoint-registry.js";
 
 function parseArgs(argv) {
   const out = {};
@@ -189,7 +190,7 @@ export async function main(argv = process.argv.slice(2)) {
   const runtimeConfig = path.resolve(required(args, "runtime-config"));
   const r8Registry = args["r8-registry"]
     ? path.resolve(args["r8-registry"])
-    : undefined;
+    : defaultRuntimeEndpointPath("r8");
   const r8Preference = args["r8-preference"]
     ? path.resolve(args["r8-preference"])
     : undefined;
@@ -243,6 +244,7 @@ export async function main(argv = process.argv.slice(2)) {
     env: {
       ...process.env,
       WINHELM_R8_RUNTIME_GENERATION: generation,
+      WINHELM_R8_RUNTIME_REGISTRY: r8Registry,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

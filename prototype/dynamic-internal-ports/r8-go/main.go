@@ -1411,22 +1411,240 @@ func publicHostOf(s *tsnet.Server, statusDNS string) string {
 const winhelmServiceName = "WinHelmGoTlsIngressHardeningR1"
 
 const (
-	publicRoutePort        = 443
-	requiredRouteListen    = "127.0.0.1:19447"
-	controlDirName         = "control"
-	controlRequestName     = "request.json"
-	controlStatusName      = "status.json"
-	controlRequestMaxBytes = 4096
-	controlPollInterval    = 5 * time.Second
+	publicRoutePort         = 443
+	requiredRouteListen     = "127.0.0.1:19447"
+	controlDirName          = "control"
+	controlRequestName      = "request.json"
+	controlStatusName       = "status.json"
+	controlRequestMaxBytes  = 4096
+	controlPollInterval     = 5 * time.Second
+	routeTargetMaxBytes     = 16 * 1024
+	routeHealthMaxBytes     = 64 * 1024
+	routeHealthProbeTimeout = 3 * time.Second
 )
 
 var (
-	errRouteListenMismatch = errors.New("public route requires the exact local listener 127.0.0.1:19447")
-	errRouteStillActive    = errors.New("public route still active after apply")
-	errRouteApply          = errors.New("public route apply failed")
-	errRouteReadback       = errors.New("public route readback failed")
-	controlRequestIDRE     = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	errRouteListenMismatch   = errors.New("public route requires the exact local listener 127.0.0.1:19447 in legacy fixed mode")
+	errRouteTargetUnverified = errors.New("public route target is not the current verified R8 endpoint")
+	errRouteTargetChanged    = errors.New("public route target changed during activation")
+	errRouteStillActive      = errors.New("public route still active after apply")
+	errRouteApply            = errors.New("public route apply failed")
+	errRouteReadback         = errors.New("public route readback failed")
+	controlRequestIDRE       = regexp.MustCompile(`^[a-f0-9]{32}$`)
 )
+
+type routeTargetIdentity struct {
+	Listen     string `json:"listener"`
+	Generation string `json:"generation,omitempty"`
+	PID        int    `json:"pid,omitempty"`
+}
+
+func sameRouteTarget(a, b routeTargetIdentity) bool {
+	return a.Listen == b.Listen &&
+		a.Generation == b.Generation &&
+		a.PID == b.PID
+}
+
+type runtimeRouteEndpointRecord struct {
+	SchemaVersion    int    `json:"schemaVersion"`
+	Role             string `json:"role"`
+	Generation       string `json:"generation"`
+	State            string `json:"state"`
+	Host             string `json:"host"`
+	Port             int    `json:"port"`
+	PID              int    `json:"pid"`
+	ProcessCreatedAt string `json:"processCreatedAt"`
+	ExecutablePath   string `json:"executablePath"`
+	EntrypointPath   string `json:"entrypointPath"`
+	PublishedAt      string `json:"publishedAt"`
+}
+
+type routeTargetVerificationOptions struct {
+	RegistryPath       string
+	Generation         string
+	PID                int
+	Listen             string
+	ExpectedExecutable string
+	PublicHost         string
+	ProbeTLSHealth     func(context.Context, string, string, string, int) error
+}
+
+func sameWindowsPath(a, b string) bool {
+	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
+		return false
+	}
+	aa, err := filepath.Abs(a)
+	if err != nil {
+		return false
+	}
+	bb, err := filepath.Abs(b)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
+}
+
+func readRuntimeRouteEndpointRecord(path string) (runtimeRouteEndpointRecord, error) {
+	var record runtimeRouteEndpointRecord
+	if strings.TrimSpace(path) == "" {
+		return record, errRouteTargetUnverified
+	}
+	if err := rejectReparsePath(path); err != nil {
+		return record, errRouteTargetUnverified
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return record, errRouteTargetUnverified
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.IsDir() || info.Size() <= 0 || info.Size() > routeTargetMaxBytes {
+		return record, errRouteTargetUnverified
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, routeTargetMaxBytes+1))
+	if err != nil || len(raw) > routeTargetMaxBytes {
+		return record, errRouteTargetUnverified
+	}
+	if err := strictDecode(raw, &record); err != nil {
+		return runtimeRouteEndpointRecord{}, errRouteTargetUnverified
+	}
+	return record, nil
+}
+
+type runtimeRouteHealthIdentity struct {
+	Status  string `json:"status"`
+	Server  string `json:"server"`
+	Runtime struct {
+		Role       string `json:"role"`
+		Generation string `json:"generation"`
+		PID        int    `json:"pid"`
+	} `json:"runtime"`
+}
+
+func probeR8RouteTLSHealthWithRoots(
+	ctx context.Context,
+	listen string,
+	publicHost string,
+	generation string,
+	pid int,
+	roots *x509.CertPool,
+) error {
+	probeCtx, cancel := context.WithTimeout(ctx, routeHealthProbeTimeout)
+	defer cancel()
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			ServerName: publicHost,
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    roots,
+		},
+		DisableKeepAlives: true,
+	}
+	defer transport.CloseIdleConnections()
+
+	client := &http.Client{Transport: transport}
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, "https://"+listen+"/health", nil)
+	if err != nil {
+		return errRouteTargetUnverified
+	}
+	req.Header.Set(runtimeGenerationHeader, generation)
+	resp, err := client.Do(req)
+	if err != nil {
+		return errRouteTargetUnverified
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errRouteTargetUnverified
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, routeHealthMaxBytes+1))
+	if err != nil || len(raw) > routeHealthMaxBytes {
+		return errRouteTargetUnverified
+	}
+	var health runtimeRouteHealthIdentity
+	if err := strictDecode(raw, &health); err != nil {
+		return errRouteTargetUnverified
+	}
+	if health.Status != "ok" ||
+		health.Server != "winhelm-r8" ||
+		health.Runtime.Role != "r8" ||
+		health.Runtime.Generation != generation ||
+		health.Runtime.PID != pid {
+		return errRouteTargetUnverified
+	}
+	return nil
+}
+
+func probeCurrentR8RouteTLSHealth(
+	ctx context.Context,
+	listen string,
+	publicHost string,
+	generation string,
+	pid int,
+) error {
+	return probeR8RouteTLSHealthWithRoots(
+		ctx,
+		listen,
+		publicHost,
+		generation,
+		pid,
+		nil,
+	)
+}
+
+func verifyCurrentR8RouteTarget(
+	ctx context.Context,
+	options routeTargetVerificationOptions,
+) (routeTargetIdentity, error) {
+	var zero routeTargetIdentity
+	if !runtimeGenerationRE.MatchString(options.Generation) ||
+		options.PID <= 0 ||
+		strings.TrimSpace(options.ExpectedExecutable) == "" ||
+		!filepath.IsAbs(options.ExpectedExecutable) ||
+		validatePublicHost(strings.ToLower(strings.TrimSpace(options.PublicHost))) != nil {
+		return zero, errRouteTargetUnverified
+	}
+	host, portRaw, err := net.SplitHostPort(options.Listen)
+	if err != nil || host != "127.0.0.1" || validatePort(portRaw) != nil {
+		return zero, errRouteTargetUnverified
+	}
+	port, _ := strconv.Atoi(portRaw)
+
+	record, err := readRuntimeRouteEndpointRecord(options.RegistryPath)
+	if err != nil {
+		return zero, errRouteTargetUnverified
+	}
+	if record.SchemaVersion != 1 ||
+		record.Role != "r8" ||
+		record.State != "ready" ||
+		record.Generation != options.Generation ||
+		record.Host != "127.0.0.1" ||
+		record.Port != port ||
+		record.PID != options.PID ||
+		!runtimeGenerationRE.MatchString(record.Generation) ||
+		!sameWindowsPath(record.ExecutablePath, options.ExpectedExecutable) ||
+		!sameWindowsPath(record.EntrypointPath, options.ExpectedExecutable) {
+		return zero, errRouteTargetUnverified
+	}
+	if _, err := time.Parse(time.RFC3339Nano, record.ProcessCreatedAt); err != nil {
+		return zero, errRouteTargetUnverified
+	}
+	if _, err := time.Parse(time.RFC3339Nano, record.PublishedAt); err != nil {
+		return zero, errRouteTargetUnverified
+	}
+
+	probe := options.ProbeTLSHealth
+	if probe == nil {
+		probe = probeCurrentR8RouteTLSHealth
+	}
+	if err := probe(ctx, options.Listen, options.PublicHost, options.Generation, options.PID); err != nil {
+		return zero, errRouteTargetUnverified
+	}
+	return routeTargetIdentity{
+		Listen:     options.Listen,
+		Generation: options.Generation,
+		PID:        options.PID,
+	}, nil
+}
 
 // serveConfigClient is the minimal tailscale local-API surface the public
 // route controller uses; *local.Client as returned by tsnet satisfies it.
@@ -1437,19 +1655,83 @@ type serveConfigClient interface {
 
 // publicRouteController owns every read and mutation of the tailscale serve
 // config. Normal startup only ever confirms the public route is inactive and
-// clears a stale route with readback verification; activation is reachable
-// exclusively through an explicit admin control request and refuses any local
-// listener other than 127.0.0.1:19447.
+// clears a stale route with readback verification. Legacy fixed mode preserves
+// the accepted 127.0.0.1:19447 target; runtime mode resolves and re-verifies the
+// current generation-bound R8 listener for every explicit activation attempt.
 type publicRouteController struct {
-	client     serveConfigClient
-	publicHost string
-	listen     string
-	timeout    time.Duration
-	logger     *eventLogger
+	client            serveConfigClient
+	publicHost        string
+	listen            string
+	timeout           time.Duration
+	logger            *eventLogger
+	verifyRouteTarget func(context.Context) (routeTargetIdentity, error)
+	targetMu          sync.Mutex
+	verifiedTarget    *routeTargetIdentity
+	currentTarget     *routeTargetIdentity
 }
 
 func newPublicRouteController(client serveConfigClient, publicHost, listen string, timeout time.Duration, logger *eventLogger) *publicRouteController {
 	return &publicRouteController{client: client, publicHost: publicHost, listen: listen, timeout: timeout, logger: logger}
+}
+
+func (c *publicRouteController) setCurrentTarget(target routeTargetIdentity) {
+	c.targetMu.Lock()
+	defer c.targetMu.Unlock()
+	copy := target
+	c.currentTarget = &copy
+}
+
+func (c *publicRouteController) setLastVerifiedTarget(target routeTargetIdentity) {
+	c.targetMu.Lock()
+	defer c.targetMu.Unlock()
+	copy := target
+	c.verifiedTarget = &copy
+}
+
+func (c *publicRouteController) lastVerifiedTarget() (routeTargetIdentity, bool) {
+	c.targetMu.Lock()
+	defer c.targetMu.Unlock()
+	if c.verifiedTarget == nil {
+		return routeTargetIdentity{}, false
+	}
+	return *c.verifiedTarget, true
+}
+
+func (c *publicRouteController) statusTarget() (routeTargetIdentity, string, bool) {
+	c.targetMu.Lock()
+	defer c.targetMu.Unlock()
+	if c.verifiedTarget != nil {
+		if c.verifiedTarget.Generation == "" && c.verifiedTarget.PID == 0 {
+			return *c.verifiedTarget, "legacy_fixed", true
+		}
+		return *c.verifiedTarget, "verified_at_activation", true
+	}
+	if c.currentTarget != nil {
+		return *c.currentTarget, "awaiting_activation_verification", true
+	}
+	if c.listen != "" {
+		return routeTargetIdentity{Listen: c.listen}, "legacy_fixed", true
+	}
+	return routeTargetIdentity{}, "", false
+}
+
+func (c *publicRouteController) activationTarget(ctx context.Context) (routeTargetIdentity, error) {
+	if c.verifyRouteTarget == nil {
+		if c.listen != requiredRouteListen {
+			return routeTargetIdentity{}, errRouteListenMismatch
+		}
+		return routeTargetIdentity{Listen: c.listen}, nil
+	}
+	target, err := c.verifyRouteTarget(ctx)
+	if err != nil {
+		return routeTargetIdentity{}, errRouteTargetUnverified
+	}
+	if target.Listen != c.listen ||
+		!runtimeGenerationRE.MatchString(target.Generation) ||
+		target.PID <= 0 {
+		return routeTargetIdentity{}, errRouteTargetUnverified
+	}
+	return target, nil
 }
 
 func (c *publicRouteController) routeHostPort() ipn.HostPort {
@@ -1484,9 +1766,13 @@ func (c *publicRouteController) routeActive(sc *ipn.ServeConfig) bool {
 	return false
 }
 
-// exactActive verifies the full accepted mapping: funnel on for exactly the
-// configured host and port 443, forwarding to exactly the configured listener.
+// exactActive verifies the full accepted mapping against the controller's
+// current local listener. It is retained for legacy fixed-mode compatibility.
 func (c *publicRouteController) exactActive(sc *ipn.ServeConfig) bool {
+	return c.exactActiveTarget(sc, c.listen)
+}
+
+func (c *publicRouteController) exactActiveTarget(sc *ipn.ServeConfig, listen string) bool {
 	if sc == nil {
 		return false
 	}
@@ -1494,7 +1780,7 @@ func (c *publicRouteController) exactActive(sc *ipn.ServeConfig) bool {
 		return false
 	}
 	handler := sc.TCP[publicRoutePort]
-	return handler != nil && handler.TCPForward == c.listen
+	return handler != nil && handler.TCPForward == listen
 }
 
 func (c *publicRouteController) getConfig(ctx context.Context) (*ipn.ServeConfig, error) {
@@ -1551,28 +1837,50 @@ func (c *publicRouteController) ensureInactive(ctx context.Context, stage string
 }
 
 // activate applies the exact accepted mapping for an explicitly authorized
-// admin request. It never runs during normal startup.
+// admin request. Runtime-mode activation resolves and verifies the CURRENT R8
+// target both before and after the serve-config mutation; any identity change
+// triggers fail-closed cleanup.
 func (c *publicRouteController) activate(ctx context.Context, requestID string) error {
-	if c.listen != requiredRouteListen {
-		return errRouteListenMismatch
+	target, err := c.activationTarget(ctx)
+	if err != nil {
+		c.logger.emit("PUBLIC_ROUTE_ACTIVATION_FAILED", map[string]any{"class": "target_unverified", "request_id": requestID})
+		return err
 	}
+
 	desired := new(ipn.ServeConfig)
-	desired.SetTCPForwarding(publicRoutePort, c.listen, false, 0, "")
+	desired.SetTCPForwarding(publicRoutePort, target.Listen, false, 0, "")
 	desired.SetFunnel(c.publicHost, publicRoutePort, true)
 	if err := c.setConfig(ctx, desired); err != nil {
 		c.logger.emit("PUBLIC_ROUTE_ACTIVATION_FAILED", map[string]any{"class": "apply_error", "request_id": requestID})
 		return fmt.Errorf("%w: %v", errRouteApply, err)
 	}
+
+	confirmed, confirmErr := c.activationTarget(ctx)
+	if confirmErr != nil || !sameRouteTarget(target, confirmed) {
+		_ = c.clearRoute(ctx, "activation_target_changed")
+		c.logger.emit("PUBLIC_ROUTE_ACTIVATION_FAILED", map[string]any{"class": "target_changed", "request_id": requestID})
+		return errRouteTargetChanged
+	}
+
 	readback, err := c.getConfig(ctx)
 	if err != nil {
+		_ = c.clearRoute(ctx, "activation_readback_failed")
 		c.logger.emit("PUBLIC_ROUTE_ACTIVATION_FAILED", map[string]any{"class": "readback_error", "request_id": requestID})
 		return fmt.Errorf("%w: %v", errRouteReadback, err)
 	}
-	if !c.exactActive(readback) {
+	if !c.exactActiveTarget(readback, confirmed.Listen) {
+		_ = c.clearRoute(ctx, "activation_readback_mismatch")
 		c.logger.emit("PUBLIC_ROUTE_ACTIVATION_FAILED", map[string]any{"class": "readback_mismatch", "request_id": requestID})
 		return errRouteReadback
 	}
-	c.logger.emit("PUBLIC_SERVE_ACTIVE", map[string]any{"class": "explicit_admin_activation", "request_id": requestID})
+	c.setLastVerifiedTarget(confirmed)
+	c.logger.emit("PUBLIC_SERVE_ACTIVE", map[string]any{
+		"class":      "explicit_admin_activation",
+		"request_id": requestID,
+		"listener":   confirmed.Listen,
+		"generation": confirmed.Generation,
+		"pid":        confirmed.PID,
+	})
 	return nil
 }
 
@@ -1599,17 +1907,25 @@ type controlRequestOutcome struct {
 	Class     string `json:"class"`
 }
 
+type controlInternalTargetStatus struct {
+	Listener     string `json:"listener"`
+	Generation   string `json:"generation,omitempty"`
+	PID          int    `json:"pid,omitempty"`
+	Verification string `json:"verification"`
+}
+
 // controlStatus is the sanitized local status surface. It never carries
 // credential material, tsnet state content, or unbounded input.
 type controlStatus struct {
-	Version       int                    `json:"version"`
-	UpdatedAt     string                 `json:"updated_at"`
-	Service       string                 `json:"service"`
-	PublicRoute   string                 `json:"public_route"`
-	PublicHost    string                 `json:"public_host"`
-	PublicPort    int                    `json:"public_port"`
-	LocalListener string                 `json:"local_listener"`
-	LastRequest   *controlRequestOutcome `json:"last_request,omitempty"`
+	Version        int                          `json:"version"`
+	UpdatedAt      string                       `json:"updated_at"`
+	Service        string                       `json:"service"`
+	PublicRoute    string                       `json:"public_route"`
+	PublicHost     string                       `json:"public_host"`
+	PublicPort     int                          `json:"public_port"`
+	LocalListener  string                       `json:"local_listener"`
+	InternalTarget *controlInternalTargetStatus `json:"internal_target,omitempty"`
+	LastRequest    *controlRequestOutcome       `json:"last_request,omitempty"`
 }
 
 // controlChannel is the local one-shot admin control path: the admin helper
@@ -1688,6 +2004,10 @@ func classifyControlError(err error) string {
 	switch {
 	case errors.Is(err, errRouteListenMismatch):
 		return "route_listen_mismatch"
+	case errors.Is(err, errRouteTargetUnverified):
+		return "route_target_unverified"
+	case errors.Is(err, errRouteTargetChanged):
+		return "route_target_changed"
 	case errors.Is(err, errRouteStillActive):
 		return "route_still_active"
 	case errors.Is(err, errRouteApply):
@@ -1770,6 +2090,14 @@ func (cc *controlChannel) writeStatus() error {
 		PublicPort:    publicRoutePort,
 		LocalListener: cc.listen,
 		LastRequest:   cc.lastOutcome,
+	}
+	if target, verification, ok := cc.controller.statusTarget(); ok {
+		status.InternalTarget = &controlInternalTargetStatus{
+			Listener:     target.Listen,
+			Generation:   target.Generation,
+			PID:          target.PID,
+			Verification: verification,
+		}
 	}
 	b, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
@@ -1868,8 +2196,16 @@ func runIngress(ctx context.Context, configPath string, loginOnly bool, ready fu
 		return err
 	}
 	runtimeGeneration := strings.TrimSpace(os.Getenv("WINHELM_R8_RUNTIME_GENERATION"))
+	runtimeRegistry := strings.TrimSpace(os.Getenv("WINHELM_R8_RUNTIME_REGISTRY"))
 	if runtimeGeneration != "" && !runtimeGenerationRE.MatchString(runtimeGeneration) {
 		return errors.New("WINHELM_R8_RUNTIME_GENERATION is invalid")
+	}
+	if runtimeGeneration != "" {
+		if runtimeRegistry == "" || !filepath.IsAbs(runtimeRegistry) {
+			return errors.New("WINHELM_R8_RUNTIME_REGISTRY must be an absolute path in runtime mode")
+		}
+	} else if runtimeRegistry != "" {
+		return errors.New("WINHELM_R8_RUNTIME_REGISTRY requires WINHELM_R8_RUNTIME_GENERATION")
 	}
 	logWriter, err := newRotatingWriter(cfg.LogRoot, cfg.LogMaxBytes, cfg.LogRetentionDays)
 	if err != nil {
@@ -2027,6 +2363,35 @@ func runIngress(ctx context.Context, configPath string, loginOnly bool, ready fu
 	cfg.Listen = effectiveListen
 	control.listen = effectiveListen
 	control.controller.listen = effectiveListen
+
+	if runtimeGeneration != "" {
+		executable, err := os.Executable()
+		if err != nil {
+			closeTsnet(cfg, srv)
+			return fmt.Errorf("resolve R8 executable: %w", err)
+		}
+		executable, err = filepath.Abs(executable)
+		if err != nil {
+			closeTsnet(cfg, srv)
+			return fmt.Errorf("resolve R8 executable: %w", err)
+		}
+		current := routeTargetIdentity{
+			Listen:     effectiveListen,
+			Generation: runtimeGeneration,
+			PID:        os.Getpid(),
+		}
+		control.controller.setCurrentTarget(current)
+		control.controller.verifyRouteTarget = func(verifyCtx context.Context) (routeTargetIdentity, error) {
+			return verifyCurrentR8RouteTarget(verifyCtx, routeTargetVerificationOptions{
+				RegistryPath:       runtimeRegistry,
+				Generation:         runtimeGeneration,
+				PID:                os.Getpid(),
+				Listen:             effectiveListen,
+				ExpectedExecutable: executable,
+				PublicHost:         publicHost,
+			})
+		}
+	}
 
 	tracker := newConnTracker(logger)
 	tlsListener := &observingTLSListener{
