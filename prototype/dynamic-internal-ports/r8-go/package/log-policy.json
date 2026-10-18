@@ -1,0 +1,7 @@
+{
+  "format": "sanitized-json-lines",
+  "location": "service-local log directory",
+  "rotation": "size-and-age bounded",
+  "retentionDays": 14,
+  "forbiddenFields": ["remote_address", "remote_port", "bearer", "token", "code", "state", "pkce", "invite", "private_key", "raw_bootstrap_identifier"]
+}

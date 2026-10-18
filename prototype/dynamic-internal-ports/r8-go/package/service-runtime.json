@@ -1,0 +1,58 @@
+{
+  "serviceName": "WinHelmGoTlsIngressHardeningR1",
+  "workingDirectory": "<candidate-root>",
+  "configPath": "<candidate-root>\\config.json",
+  "binaryPath": "<candidate-root>\\winhelm-go-tls-ingress-hardening-r1.exe",
+  "stateRoot": "<candidate-root>\\state",
+  "hostStateRoot": "<candidate-root>\\state\\<host-from-config>",
+  "hostStatePolicy": "structural-only empty directory (no tsnet state, marker, or credential); pre-staged and protected by prepare-acl.ps1 -Apply; removed by rollback when created",
+  "logsRoot": "<candidate-root>\\logs",
+  "normalArguments": ["--config", "<candidate-root>\\config.json", "--service"],
+  "serviceModeArgument": "--service",
+  "forbiddenNormalArguments": ["--login"],
+  "serviceIdentity": "NT SERVICE\\WinHelmGoTlsIngressHardeningR1",
+  "startupType": "automatic",
+  "recoveryPolicy": {
+    "scmIntent": "reset=86400; actions=restart/30000,restart/300000,none/0; failureflag=true",
+    "resetPeriodSeconds": 86400,
+    "actions": [
+      { "type": "restart", "delayMs": 30000 },
+      { "type": "restart", "delayMs": 300000 },
+      { "type": "none", "delayMs": 0 }
+    ],
+    "failureActionsOnNonCrashFailures": true,
+    "boundedAutomaticRestartCount": 2,
+    "terminalFailureOwnerVisible": true,
+    "rebootAction": false,
+    "recoveryCommand": false,
+    "configureMechanism": "ChangeServiceConfig2(SERVICE_CONFIG_FAILURE_ACTIONS / SERVICE_CONFIG_FAILURE_ACTIONS_FLAG); sc.exe failure accepts only run|restart|reboot and cannot materialize the required terminal SC_ACTION_NONE, and the SCM repeats the last action beyond the configured array, so the explicit terminal none action is required for a bounded policy"
+  },
+  "readiness": "sanitized local event GO_TLS_INGRESS_READY",
+  "serviceHost": {
+    "dispatcher": "golang.org/x/sys/windows/svc",
+    "serviceModeSelection": "explicit --service argument in the registered ImagePath; production startup never depends on svc.IsWindowsService()",
+    "loginInServiceMode": false,
+    "startPendingIntervalMs": 5000,
+    "waitHintMs": 30000,
+    "readyBoundary": "Running is published only after GO_TLS_INGRESS_READY: local listener up, public route confirmed inactive (Foreground-aware), sanitized status written",
+    "acceptedControls": ["stop", "shutdown", "interrogate"],
+    "stopWaitHardCapMs": 2700000,
+    "consoleNoFlag": "fail_closed"
+  },
+  "publicRoute": {
+    "normalStartup": "inactive",
+    "inactivityCheck": "inactivity covers top-level AllowFunnel/TCP[443], any funnel entry, and the Foreground serve sessions with the same predicate; startup clear/readback proves a Foreground-aware inactive verdict",
+    "activationMode": "explicit_admin_control_request",
+    "controlDir": "<candidate-root>\\state\\<host-from-config>\\control",
+    "requestFile": "request.json",
+    "statusFile": "status.json",
+    "pollIntervalSeconds": 5,
+    "targetPublicPort": 443,
+    "targetLocalListener": "127.0.0.1:19447",
+    "controlHelper": "public-route-control.ps1",
+    "readOnlyVerifier": "public-route-status.ps1",
+    "secretsInStatus": false
+  },
+  "logPolicy": "log-policy.json",
+  "aclPolicy": "acl-policy.json"
+}

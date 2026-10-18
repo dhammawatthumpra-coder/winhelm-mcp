@@ -468,22 +468,37 @@ export async function resolveVerifiedRuntimeEndpoint(
   });
 }
 
-export async function publishCurrentRuntimeEndpoint(
-  options: PublishCurrentRuntimeEndpointOptions
+export interface PublishObservedRuntimeEndpointOptions {
+  role: string;
+  generation: string;
+  pid: number;
+  host: string;
+  port: number;
+  expectedExecutablePath: string;
+  expectedEntrypointPath: string;
+  expectedHealthServer?: string;
+  filePath?: string;
+  observe?: (target: RuntimeEndpointTarget) => Promise<RuntimeEndpointObservation>;
+  probeHealth?: (record: RuntimeEndpointRecord) => Promise<unknown>;
+}
+
+export async function publishObservedRuntimeEndpoint(
+  options: PublishObservedRuntimeEndpointOptions
 ): Promise<RuntimeEndpointRecord> {
   if (
     !/^[a-z0-9][a-z0-9_-]*$/i.test(options.role) ||
     !isValidGeneration(options.generation) ||
+    !isValidPid(options.pid) ||
     !isLoopbackHost(normalizeHost(options.host)) ||
     !isValidPort(options.port) ||
     !options.expectedExecutablePath ||
     !options.expectedEntrypointPath
   ) {
-    throw new Error("Invalid current runtime endpoint publication input.");
+    throw new Error("Invalid observed runtime endpoint publication input.");
   }
 
   const target: RuntimeEndpointTarget = {
-    pid: process.pid,
+    pid: options.pid,
     host: normalizeHost(options.host),
     port: options.port,
   };
@@ -527,7 +542,7 @@ export async function publishCurrentRuntimeEndpoint(
     }
   }
   if (!verified) {
-    throw new Error("Current runtime endpoint failed post-readiness verification.");
+    throw new Error("Observed runtime endpoint failed post-readiness verification.");
   }
 
   await publishRuntimeEndpointRecord(
@@ -535,4 +550,29 @@ export async function publishCurrentRuntimeEndpoint(
     options.filePath ?? defaultRuntimeEndpointPath(options.role)
   );
   return record;
+}
+
+export async function publishCurrentRuntimeEndpoint(
+  options: PublishCurrentRuntimeEndpointOptions
+): Promise<RuntimeEndpointRecord> {
+  try {
+    return await publishObservedRuntimeEndpoint({
+      ...options,
+      pid: process.pid,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Invalid observed runtime endpoint publication input."
+    ) {
+      throw new Error("Invalid current runtime endpoint publication input.");
+    }
+    if (
+      error instanceof Error &&
+      error.message === "Observed runtime endpoint failed post-readiness verification."
+    ) {
+      throw new Error("Current runtime endpoint failed post-readiness verification.");
+    }
+    throw error;
+  }
 }

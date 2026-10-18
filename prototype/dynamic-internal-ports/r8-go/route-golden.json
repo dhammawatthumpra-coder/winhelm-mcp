@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "node_parser_baseline": "Node v24.15.0 WHATWG URL",
+  "vectors": [
+    {
+      "id": "V01",
+      "target": "/mcp",
+      "expected_pathname": "/mcp",
+      "expected_class": "MCP"
+    },
+    {
+      "id": "V02",
+      "target": "/mcp?x=1",
+      "expected_pathname": "/mcp",
+      "expected_class": "MCP"
+    },
+    {
+      "id": "V03",
+      "target": "/mcp/",
+      "expected_pathname": "/mcp/",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V04",
+      "target": "/MCP",
+      "expected_pathname": "/MCP",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V05",
+      "target": "/.well-known/oauth-protected-resource/mcp",
+      "expected_pathname": "/.well-known/oauth-protected-resource/mcp",
+      "expected_class": "OAUTH_METADATA_PR"
+    },
+    {
+      "id": "V06",
+      "target": "/.well-known/oauth-protected-resource/mcp/",
+      "expected_pathname": "/.well-known/oauth-protected-resource/mcp/",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V07",
+      "target": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_pathname": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_class": "OAUTH_BOOTSTRAP"
+    },
+    {
+      "id": "V08",
+      "target": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_pathname": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V09",
+      "target": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_pathname": "/oauth/bootstrap/whr7bi_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V10",
+      "target": "/mcp%2Fextra",
+      "expected_pathname": "/mcp%2Fextra",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V11",
+      "target": "/mcp%5Cextra",
+      "expected_pathname": "/mcp%5Cextra",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V12",
+      "target": "/a/%2e%2e/mcp",
+      "expected_pathname": "/mcp",
+      "expected_class": "MCP"
+    },
+    {
+      "id": "V13",
+      "target": "/a/%252e%252e/mcp",
+      "expected_pathname": "/a/%252e%252e/mcp",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V14",
+      "target": "/%2e/mcp",
+      "expected_pathname": "/mcp",
+      "expected_class": "MCP"
+    },
+    {
+      "id": "V15",
+      "target": "/%2e%2e/mcp",
+      "expected_pathname": "/mcp",
+      "expected_class": "MCP"
+    },
+    {
+      "id": "V16",
+      "target": "/mcp%3Fx",
+      "expected_pathname": "/mcp%3Fx",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V17",
+      "target": "/%ZZ",
+      "expected_pathname": "/%ZZ",
+      "expected_class": "UNKNOWN"
+    },
+    {
+      "id": "V18",
+      "target": "/oauth/token?x=1",
+      "expected_pathname": "/oauth/token",
+      "expected_class": "OAUTH_TOKEN"
+    },
+    {
+      "id": "V19",
+      "target": "/",
+      "expected_pathname": "/",
+      "expected_class": "ROOT"
+    },
+    {
+      "id": "V20",
+      "target": "/config.json",
+      "expected_pathname": "/config.json",
+      "expected_class": "UNKNOWN"
+    }
+  ]
+}
