@@ -1,11 +1,11 @@
 /**
  * WinHelm v1.4.1 Dashboard UI Refresh — Phase 2 Production UI Qualification Tests
  * 
- * Verifies all 16 mandatory requirements from Owner / Main Coordinator Decision:
+ * Verifies all mandatory requirements from Owner / Main Coordinator Decision & Adjudication:
  * 1. Home operational state mapping
- * 2. Remote Access OFF/ON/unknown mapping
- * 3. Approval rendering & sanitized details
- * 4. Backend-authoritative Mandatory Confirmation
+ * 2. Remote Access OFF/ON/unknown mapping & fails closed
+ * 3. Blocker A: Native Approval status is truthful and requires authoritative adapter state
+ * 4. Mandatory Confirmation is strictly backend-authoritative (not frontend heuristic)
  * 5. Profile vs Approval Mode separation
  * 6. Power profile wording preserving security floors
  * 7. Admin locked/unlocked behavior & modal dialog
@@ -13,72 +13,124 @@
  * 9. No plaintext token persistence
  * 10. DOM/HTML injection resistance (XSS defense)
  * 11. Strict CSP compatibility & valid JS syntax
- * 12. Keyboard, focus & dialog accessibility (role="dialog", aria-modal, landmarks)
+ * 12. Accessibility landmarks and semantic dialog attributes
  * 13. Responsive layout rules in CSS
  * 14. Prototype-only controls MUST NOT ship
- * 15. English & Thai rendering parity
- * 16. Legacy /dashboard availability
+ * 15. Blocker B: Dynamic Ports production state is NOT fabricated (no 18820/18821/18822, safe default)
+ * 16. Blocker C: Setup Assistant placeholder MUST NOT ship (no alert placeholder, disabled when unintegrated)
+ * 17. Blocker D: English & Thai localization parity and full catalog-backed copy rendering
+ * 18. Legacy /dashboard availability
  */
 
-import { describe, it } from "node:test";
+import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { getProductShellHtml } from "../../src/gateway/product-shell-html.js";
+import { getProductShellHtml, type ProductShellSummary } from "../../src/gateway/product-shell-html.js";
 import { getDashboardHtml } from "../../src/gateway/dashboard-html.js";
-import { validateI18nCatalogs } from "../../src/i18n/messages.js";
+import { validateI18nCatalogs, setConfiguredLocale, getRuntimeLocale } from "../../src/i18n/messages.js";
 
-describe("Phase 2 Production UI Qualification Suite", () => {
-  const defaultHtml = getProductShellHtml("full", {
+function renderTestShell(summary?: Partial<ProductShellSummary>): string {
+  return getProductShellHtml("full", {
     schemaMode: "v2",
     preset: "balanced",
     terminalMode: "ask",
     approvalMode: "smart",
+    ...summary,
+  });
+}
+
+describe("Phase 2 Production UI Qualification Suite", () => {
+  beforeEach(() => {
+    delete process.env.WINHELM_LOCALE;
+    setConfiguredLocale("en");
   });
 
   it("1. Home operational state answers all 5 daily questions immediately", () => {
-    assert.ok(defaultHtml.includes('id="panel-overview"'));
+    const html = renderTestShell();
+    assert.ok(html.includes('id="panel-overview"'));
     // Q1: Server health
-    assert.ok(defaultHtml.includes("Server Status"));
-    assert.ok(defaultHtml.includes("statServerStatus"));
+    assert.ok(html.includes("Server Status"));
+    assert.ok(html.includes("statServerStatus"));
     // Q2: Pending approvals / attention
-    assert.ok(defaultHtml.includes("statPendingBadge"));
-    assert.ok(defaultHtml.includes("statPendingApprovals"));
+    assert.ok(html.includes("statPendingBadge"));
+    assert.ok(html.includes("statPendingApprovals"));
     // Q3: Connected clients
-    assert.ok(defaultHtml.includes("statConnectedClients"));
-    assert.ok(defaultHtml.includes("Claude Desktop, Cursor, ChatGPT, Gemini"));
+    assert.ok(html.includes("statConnectedClients"));
+    assert.ok(html.includes("Claude Desktop, Cursor, ChatGPT, Gemini"));
     // Q4: Security posture
-    assert.ok(defaultHtml.includes("statProfile"));
-    assert.ok(defaultHtml.includes("statApprovalMode"));
+    assert.ok(html.includes("statProfile"));
+    assert.ok(html.includes("statApprovalMode"));
     // Q5: Remote Access off/on
-    assert.ok(defaultHtml.includes("Remote Access"));
-    assert.ok(defaultHtml.includes("Local Ready"));
-    assert.ok(defaultHtml.includes("Remote Access Off"));
+    assert.ok(html.includes("Remote Access"));
+    assert.ok(html.includes("Local Ready"));
+    assert.ok(html.includes("Remote Access Off"));
   });
 
   it("2. Remote Access enforces 'Local Ready · Remote Access Off' and fails closed", () => {
-    assert.ok(defaultHtml.includes("Local Ready"));
-    assert.ok(defaultHtml.includes("Remote Access Off"));
-    assert.ok(defaultHtml.includes("Zero public exposure"));
+    const html = renderTestShell();
+    assert.ok(html.includes("Local Ready"));
+    assert.ok(html.includes("Remote Access Off"));
+    assert.ok(html.includes("Zero public exposure"));
     // Verify client script contains verified route checks and doesn't optimistically assume ON
-    assert.ok(defaultHtml.includes("status.active === true || status.state === 'running'"));
-    assert.ok(defaultHtml.includes("Local Ready · Remote Access Off"));
+    assert.ok(html.includes("status.active === true || status.state === 'running'"));
   });
 
-  it("3. Approvals inbox renders sanitized details and priority queue", () => {
-    assert.ok(defaultHtml.includes('id="panel-approvals"'));
-    assert.ok(defaultHtml.includes('id="approvalJobs"'));
-    assert.ok(defaultHtml.includes('aria-live="polite"'));
-    assert.ok(defaultHtml.includes("Windows Native Notifications: Available & Active"));
-    // Primary view does not dump raw JSON table
-    assert.ok(defaultHtml.includes("approval-jobs-container"));
+  it("3. Blocker A Corrective: Native Approval status is truthful and requires authoritative adapter state", () => {
+    // 3.1 Default render MUST NOT claim "Available & Active" in approvals panel markup
+    const defaultHtml = renderTestShell();
+    const approvalsPanel = defaultHtml.slice(
+      defaultHtml.indexOf('id="panel-approvals"'),
+      defaultHtml.indexOf('id="panel-activity"')
+    );
+    assert.strictEqual(
+      approvalsPanel.includes("Available &amp; Active"),
+      false,
+      "Approvals panel markup must NOT claim Available & Active without authoritative status"
+    );
+    // 3.2 Default render MUST show "Not yet integrated"
+    assert.ok(
+      approvalsPanel.includes("Windows Native Notifications: Not yet integrated"),
+      "Default state must indicate Not yet integrated"
+    );
+    assert.ok(
+      approvalsPanel.includes("Desktop notification integration is pending. Web Dashboard approvals remain your active, authoritative fallback."),
+      "Must show fallback notice to Web Dashboard"
+    );
+
+    // 3.3 Authoritative adapter state 'ready' renders Available & Active in approvals panel markup
+    const readyHtml = renderTestShell({
+      adapters: { nativeApproval: "ready" },
+    });
+    const readyPanel = readyHtml.slice(
+      readyHtml.indexOf('id="panel-approvals"'),
+      readyHtml.indexOf('id="panel-activity"')
+    );
+    assert.ok(
+      readyPanel.includes("Windows Native Notifications: Available &amp; Active"),
+      "Ready adapter must render Available & Active"
+    );
+
+    // 3.4 Authoritative adapter state 'unavailable' renders Not yet integrated
+    const unavailHtml = renderTestShell({
+      adapters: { nativeApproval: "unavailable" },
+    });
+    const unavailPanel = unavailHtml.slice(
+      unavailHtml.indexOf('id="panel-approvals"'),
+      unavailHtml.indexOf('id="panel-activity"')
+    );
+    assert.ok(
+      unavailPanel.includes("Windows Native Notifications: Not yet integrated"),
+      "Unavailable adapter must render safe default"
+    );
   });
 
   it("4. Mandatory Confirmation is strictly backend-authoritative (not frontend heuristic)", () => {
+    const html = renderTestShell();
     // Client script checks job.requiresConfirmation from backend
-    assert.ok(defaultHtml.includes("job.requiresConfirmation === true || job.requires_confirmation === true"));
-    assert.ok(defaultHtml.includes("confirm_input_"));
+    assert.ok(html.includes("job.requiresConfirmation === true || job.requires_confirmation === true"));
+    assert.ok(html.includes("confirm_input_"));
     // Script must NOT check (riskLevel === 'high') to infer confirmation requirement
-    const scriptMatch = defaultHtml.match(/<script>([\s\S]*?)<\/script>/);
+    const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
     assert.ok(scriptMatch, "Script tag must exist");
     const script = scriptMatch[1];
     assert.strictEqual(
@@ -89,47 +141,50 @@ describe("Phase 2 Production UI Qualification Suite", () => {
   });
 
   it("5. Profile and Approval Mode are distinctly separated axes without claiming expanded capability", () => {
-    assert.ok(defaultHtml.includes("Axis 1: Capability Profile"));
-    assert.ok(defaultHtml.includes("Axis 2: Approval Policy"));
-    assert.ok(defaultHtml.includes("Safe Profile restricts tool exposure; terminal mode controls execution safety."));
-    assert.ok(defaultHtml.includes("Trusted Mode only applies to routine actions inside allowed folders"));
-    assert.strictEqual(defaultHtml.includes("Power capability unlocked"), false);
-    assert.strictEqual(defaultHtml.includes("Full system access granted"), false);
+    const html = renderTestShell();
+    assert.ok(html.includes("Axis 1: Capability Profile"));
+    assert.ok(html.includes("Axis 2: Approval Policy"));
+    assert.ok(html.includes("Safe Profile restricts tool exposure; terminal mode controls execution safety."));
+    assert.ok(html.includes("Trusted Mode only applies to routine actions inside allowed folders"));
+    assert.strictEqual(html.includes("Power capability unlocked"), false);
+    assert.strictEqual(html.includes("Full system access granted"), false);
   });
 
   it("6. Power Profile copy explicitly preserves security floors (not 'Full OS control')", () => {
-    assert.ok(defaultHtml.includes("Power is the broadest supported capability profile"));
-    assert.ok(defaultHtml.includes("Absolute Deny, protected boundaries, Mandatory Confirmation"));
-    assert.ok(defaultHtml.includes("Approval Mode ceiling and configured policy still apply"));
-    assert.strictEqual(defaultHtml.includes("Full operating system control"), false);
+    const html = renderTestShell();
+    assert.ok(html.includes("Power is the broadest supported capability profile"));
+    assert.ok(html.includes("Absolute Deny, protected boundaries, Mandatory Confirmation"));
+    assert.ok(html.includes("Approval Mode ceiling and configured policy still apply"));
+    assert.strictEqual(html.includes("Full operating system control"), false);
   });
 
   it("7. Admin locked/unlocked state is explicit with accessible modal dialog", () => {
-    assert.ok(defaultHtml.includes('id="adminPill"'));
-    assert.ok(defaultHtml.includes('id="adminModal"'));
-    assert.ok(defaultHtml.includes('role="dialog"'));
-    assert.ok(defaultHtml.includes('aria-modal="true"'));
-    assert.ok(defaultHtml.includes('aria-labelledby="adminModalTitle"'));
-    assert.ok(defaultHtml.includes('id="adminCodeInput"'));
-    assert.ok(defaultHtml.includes('submitAdminCode()'));
+    const html = renderTestShell();
+    assert.ok(html.includes('id="adminPill"'));
+    assert.ok(html.includes('id="adminModal"'));
+    assert.ok(html.includes('role="dialog"'));
+    assert.ok(html.includes('aria-modal="true"'));
+    assert.ok(html.includes('aria-labelledby="adminModalTitle"'));
+    assert.ok(html.includes('id="adminCodeInput"'));
+    assert.ok(html.includes('submitAdminCode()'));
   });
 
   it("8. MCP Access Token rotation is placed in Access & Security as a privileged operation", () => {
-    // Access panel must contain token rotation
-    const accessPanel = defaultHtml.slice(defaultHtml.indexOf('id="panel-access"'), defaultHtml.indexOf('id="panel-activity"'));
-    assert.ok(accessPanel.includes("Security Credentials & Token Management"));
+    const html = renderTestShell();
+    const accessPanel = html.slice(html.indexOf('id="panel-access"'), html.indexOf('id="panel-approvals"'));
+    assert.ok(accessPanel.includes("Security Credentials &amp; Token Management"));
     assert.ok(accessPanel.includes("Privileged Operation"));
     assert.ok(accessPanel.includes("rotateToken()"));
-    assert.ok(accessPanel.includes("Rotating replaces the bearer token immediately"));
+    assert.ok(accessPanel.includes("Rotating this token invalidates all active client sessions immediately"));
 
-    // Ordinary settings panel must NOT contain the token rotation button
-    const settingsPanel = defaultHtml.slice(defaultHtml.indexOf('id="panel-settings"'), defaultHtml.indexOf('id="panel-advanced"'));
+    const settingsPanel = html.slice(html.indexOf('id="panel-settings"'), html.indexOf('id="panel-advanced"'));
     assert.strictEqual(settingsPanel.includes("rotateToken()"), false);
   });
 
   it("9. Tokens are never persisted in plaintext in DOM", () => {
-    assert.ok(defaultHtml.includes("••••••••••••••••••••••••••••••••••••••••••••••••"));
-    assert.strictEqual(defaultHtml.includes("wh_live_actual_raw_secret"), false);
+    const html = renderTestShell();
+    assert.ok(html.includes("••••••••••••••••••••••••••••••••••••••••••••••••"));
+    assert.strictEqual(html.includes("wh_live_actual_raw_secret"), false);
   });
 
   it("10. Hostile inputs are safely HTML-escaped preventing XSS markup injection", () => {
@@ -149,7 +204,8 @@ describe("Phase 2 Production UI Qualification Suite", () => {
   });
 
   it("11. Client script passes strict VM syntax compilation and uses connect-src 'self'", () => {
-    const scriptMatches = [...defaultHtml.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/gi)];
+    const html = renderTestShell();
+    const scriptMatches = [...html.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/gi)];
     assert.ok(scriptMatches.length > 0);
 
     for (const match of scriptMatches) {
@@ -164,40 +220,162 @@ describe("Phase 2 Production UI Qualification Suite", () => {
   });
 
   it("12. Accessibility landmarks and semantic dialog attributes are complete", () => {
-    assert.ok(defaultHtml.includes('<header class="app-header" role="banner">'));
-    assert.ok(defaultHtml.includes('<nav class="sidebar" id="appSidebar" role="navigation" aria-label="Primary Navigation">'));
-    assert.ok(defaultHtml.includes('<main class="main-content" role="main">'));
-    assert.ok(defaultHtml.includes('aria-current="page"'));
-    // Visible focus in CSS
-    assert.ok(defaultHtml.includes(":focus-visible"));
+    const html = renderTestShell();
+    assert.ok(html.includes('<header class="app-header" role="banner">'));
+    assert.ok(html.includes('<nav class="sidebar" id="appSidebar" role="navigation" aria-label="Primary Navigation">'));
+    assert.ok(html.includes('<main class="main-content" role="main">'));
+    assert.ok(html.includes('aria-current="page"'));
+    assert.ok(html.includes(":focus-visible"));
   });
 
   it("13. Responsive CSS rules handle desktop, tablet (900px), and mobile (640px)", () => {
-    assert.ok(defaultHtml.includes("@media (max-width: 900px)"));
-    assert.ok(defaultHtml.includes("@media (max-width: 640px)"));
-    assert.ok(defaultHtml.includes(".mobile-menu-btn"));
+    const html = renderTestShell();
+    assert.ok(html.includes("@media (max-width: 900px)"));
+    assert.ok(html.includes("@media (max-width: 640px)"));
+    assert.ok(html.includes(".mobile-menu-btn"));
   });
 
   it("14. Prototype-only controls MUST NOT ship in production shell", () => {
-    assert.strictEqual(defaultHtml.includes("reviewer-toolbar"), false);
-    assert.strictEqual(defaultHtml.includes("Review State:"), false);
-    assert.strictEqual(defaultHtml.includes("stateSelect"), false);
-    assert.strictEqual(defaultHtml.includes("viewportContainer"), false);
-    assert.strictEqual(defaultHtml.includes("toggleRemoteAccess()"), false);
-    assert.strictEqual(defaultHtml.includes("PROTOTYPE_MOCK_STATES"), false);
+    const html = renderTestShell();
+    assert.strictEqual(html.includes("reviewer-toolbar"), false);
+    assert.strictEqual(html.includes("Review State:"), false);
+    assert.strictEqual(html.includes("stateSelect"), false);
+    assert.strictEqual(html.includes("viewportContainer"), false);
+    assert.strictEqual(html.includes("toggleRemoteAccess()"), false);
+    assert.strictEqual(html.includes("PROTOTYPE_MOCK_STATES"), false);
   });
 
-  it("15. Maintains 100% Thai and English i18n catalog parity", () => {
+  it("15. Blocker B Corrective: Dynamic Ports state is NOT fabricated (no 18820/18821/18822, safe default)", () => {
+    const defaultHtml = renderTestShell();
+    // 15.1 Production output must contain NONE of the fabricated numeric ports anywhere
+    assert.strictEqual(defaultHtml.includes("18820"), false, "Port 18820 must NOT be hardcoded in production");
+    assert.strictEqual(defaultHtml.includes("18821"), false, "Port 18821 must NOT be hardcoded in production");
+    assert.strictEqual(defaultHtml.includes("18822"), false, "Port 18822 must NOT be hardcoded in production");
+
+    // 15.2 Advanced panel markup must NOT claim "Automatic Mode" without adapter
+    const advancedPanel = defaultHtml.slice(
+      defaultHtml.indexOf('id="panel-advanced"'),
+      defaultHtml.indexOf('</main>')
+    );
+    assert.strictEqual(
+      advancedPanel.includes("Automatic Mode"),
+      false,
+      "Advanced panel must NOT claim Automatic Mode without authoritative adapter"
+    );
+    assert.ok(
+      advancedPanel.includes("Dynamic Ports: Not yet integrated"),
+      "Must display safe unknown default"
+    );
+    assert.ok(
+      advancedPanel.includes("Endpoint topology will be resolved dynamically when Tranche A integration is active."),
+      "Must show empty endpoints notice"
+    );
+
+    // 15.3 Authoritative adapter state 'automatic' with real endpoints
+    const dynamicHtml = renderTestShell({
+      adapters: {
+        dynamicPorts: {
+          mode: "automatic",
+          endpoints: [
+            { service: "Test Gateway", url: "http://127.0.0.1:29050", status: "Active" }
+          ],
+        },
+      },
+    });
+    const dynamicPanel = dynamicHtml.slice(
+      dynamicHtml.indexOf('id="panel-advanced"'),
+      dynamicHtml.indexOf('</main>')
+    );
+    assert.ok(dynamicPanel.includes("Automatic Mode"), "Adapter automatic mode renders properly");
+    assert.ok(dynamicPanel.includes("http://127.0.0.1:29050"), "Verified adapter endpoint renders properly");
+    assert.ok(dynamicPanel.includes("Test Gateway"), "Verified adapter service name renders properly");
+  });
+
+  it("16. Blocker C Corrective: Setup Assistant companion does NOT contain placeholder action and is disabled when unintegrated", () => {
+    const defaultHtml = renderTestShell();
+    // 16.1 No alert placeholder anywhere in the output
+    assert.strictEqual(
+      defaultHtml.includes("alert('In production"),
+      false,
+      "Placeholder alert must NOT ship in production"
+    );
+    assert.strictEqual(
+      defaultHtml.includes("launches standalone Setup Assistant companion"),
+      false,
+      "Placeholder copy must NOT ship in production"
+    );
+
+    // 16.2 In default render, companion is not detected and launch button is disabled
+    const setupPanel = defaultHtml.slice(
+      defaultHtml.indexOf('id="panel-setup"'),
+      defaultHtml.indexOf('id="panel-access"')
+    );
+    assert.ok(setupPanel.includes("ตรวจไม่พบโปรแกรมเสริม") || setupPanel.includes("Companion Not Detected"), "Status must indicate Companion Not Detected");
+    assert.ok(
+      setupPanel.includes("disabled") && setupPanel.includes('aria-disabled="true"'),
+      "Launch button must have disabled attribute and aria-disabled='true'"
+    );
+    assert.ok(
+      setupPanel.includes("Setup Assistant companion bridge is not detected or not yet integrated."),
+      "Must explain that companion bridge is not detected"
+    );
+
+    // 16.3 When adapter confirms installed_ready, button is enabled
+    const readyHtml = renderTestShell({
+      adapters: { setupAssistant: "installed_ready" },
+    });
+    const readyPanel = readyHtml.slice(
+      readyHtml.indexOf('id="panel-setup"'),
+      readyHtml.indexOf('id="panel-access"')
+    );
+    assert.ok(readyPanel.includes("Companion Installed &amp; Ready"), "Status must indicate Companion Installed & Ready");
+    assert.ok(readyPanel.includes("launchSetupAssistant()"), "Enabled button invokes launcher function");
+  });
+
+  it("17. Blocker D Corrective: Thai & English localization parity and truthful catalog-backed rendering", () => {
+    // 17.1 Zero catalog discrepancies
     const issues = validateI18nCatalogs();
     assert.deepStrictEqual(issues, [], "i18n catalogs must have 0 discrepancies");
 
-    const thaiHtml = getProductShellHtml("full", { schemaMode: "v2" });
-    assert.ok(thaiHtml.length > 0);
+    const initialLocale = getRuntimeLocale();
+    const oldEnvLocale = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+    try {
+      // 17.2 English rendering verification
+      setConfiguredLocale("en");
+      const enHtml = renderTestShell();
+      assert.ok(enHtml.includes('lang="en"'));
+      assert.ok(enHtml.includes("Server Status"));
+      assert.ok(enHtml.includes("Local Ready"));
+      assert.ok(enHtml.includes("Remote Access Off"));
+      assert.ok(enHtml.includes("Dynamic Ports: Not yet integrated"));
+      assert.ok(enHtml.includes("Companion Not Detected"));
+
+      // 17.3 Thai rendering verification
+      setConfiguredLocale("th");
+      const thHtml = renderTestShell();
+      assert.ok(thHtml.includes('lang="th"'));
+      assert.ok(thHtml.includes("WinHelm | ศูนย์ควบคุม"));
+      assert.ok(thHtml.includes("ภาพรวม"));
+      assert.ok(thHtml.includes("สถานะเซิร์ฟเวอร์"));
+      assert.ok(thHtml.includes("พอร์ตไดนามิก: ยังไม่ได้รวมระบบ"));
+      assert.ok(thHtml.includes("ตรวจไม่พบโปรแกรมเสริม"));
+      assert.ok(thHtml.includes("ปิดการเข้าถึงระยะไกล"));
+      assert.ok(thHtml.includes("พร้อมใช้งานในเครื่อง"));
+    } finally {
+      if (oldEnvLocale !== undefined) {
+        process.env.WINHELM_LOCALE = oldEnvLocale;
+      } else {
+        delete process.env.WINHELM_LOCALE;
+      }
+      setConfiguredLocale(initialLocale);
+    }
   });
 
-  it("16. Legacy engineering monitor remains available at /dashboard", () => {
-    assert.ok(defaultHtml.includes('href="/dashboard"'));
-    assert.ok(defaultHtml.includes("Advanced / Diagnostics"));
+  it("18. Legacy engineering monitor remains available at /dashboard", () => {
+    const html = renderTestShell();
+    assert.ok(html.includes('href="/dashboard"'));
+    assert.ok(html.includes("Advanced / Diagnostics"));
 
     const legacyHtml = getDashboardHtml("full");
     assert.ok(legacyHtml.includes("WinHelm | Monitor Dashboard"));

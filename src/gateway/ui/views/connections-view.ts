@@ -14,7 +14,7 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
     <section id="panel-connections" class="panel" aria-labelledby="heading-connections">
       <div class="panel-header">
         <h1 id="heading-connections" class="panel-title">${escapeHtml(messages.connTitle)}</h1>
-        <p class="panel-desc">Manage client connections and inbound routing posture.</p>
+        <p class="panel-desc">${escapeHtml(messages.shellConnectionsDesc || "Manage local AI client applications, reverse tunnels, and network access.")}</p>
       </div>
 
       <!-- REMOTE ACCESS & INGRESS CONTROL BANNER -->
@@ -22,9 +22,9 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">🔒</span>
           <div>
-            <strong id="connRemoteStatusHeading">Local Ready · Remote Access Off</strong>
+            <strong id="connRemoteStatusHeading">${escapeHtml(messages.shellHomeLocalReady || "Local Ready")} · ${escapeHtml(messages.shellHomeRemoteOff || "Remote Access Off")}</strong>
             <div id="connRemoteStatusDetail" style="font-size:12px; margin-top:2px;">
-              WinHelm is listening on local loopback only (127.0.0.1). Local client connections do NOT expose WinHelm to the internet.
+              ${escapeHtml(messages.shellHomeRemoteDetail || "Listening on 127.0.0.1 loopback only. Zero public exposure.")}
             </div>
           </div>
         </div>
@@ -40,12 +40,12 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
             <span class="status-pill status-ready">${escapeHtml(messages.connClaudeType)}</span>
           </div>
           <div class="card-sub">
-            Direct local client connection via native config update.
+            ${escapeHtml(messages.shellConnectionsClaudeDesc || "Direct local client connection via native config update.")}
             <div id="connClaudeStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(messages.connRestartHint || "If this client was running, restart it or reconnect so the new configuration is loaded.")}</div>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn-secondary" onclick="handleClientPreview('claude')">Preview</button>
+            <button class="btn-secondary" onclick="handleClientPreview('claude')">${escapeHtml(messages.shellConnectionsBtnPreview || "Preview")}</button>
             <button class="btn-primary" onclick="handleClientApply('claude')">${escapeHtml(messages.connConfigure)}</button>
           </div>
         </div>
@@ -57,12 +57,12 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
             <span class="status-pill status-ready">${escapeHtml(messages.connCursorType)}</span>
           </div>
           <div class="card-sub">
-            Workspace and editor client integration via local config.
+            ${escapeHtml(messages.shellConnectionsCursorDesc || "Workspace and editor client integration via local config.")}
             <div id="connCursorStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(messages.connRestartHint || "If this client was running, restart it or reconnect so the new configuration is loaded.")}</div>
           </div>
           <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn-secondary" onclick="handleClientPreview('cursor')">Preview</button>
+            <button class="btn-secondary" onclick="handleClientPreview('cursor')">${escapeHtml(messages.shellConnectionsBtnPreview || "Preview")}</button>
             <button class="btn-primary" onclick="handleClientApply('cursor')">${escapeHtml(messages.connConfigure)}</button>
           </div>
         </div>
@@ -74,7 +74,7 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
             <span class="status-pill status-info">${escapeHtml(messages.connChatgptType)}</span>
           </div>
           <div class="card-sub">
-            Managed reverse tunnel for ChatGPT actions.
+            ${escapeHtml(messages.shellConnectionsChatgptDesc || "Managed reverse tunnel for ChatGPT actions.")}
             <div id="connChatgptStatus" style="font-size:12px; margin-top:4px;">Checking status…</div>
           </div>
 
@@ -119,14 +119,14 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
             <span class="status-pill status-neutral">${escapeHtml(messages.connTailscaleType)}</span>
           </div>
           <div class="card-sub">
-            Manual Configuration
+            ${escapeHtml(messages.shellConnectionsTailscaleManual || "Manual Configuration")}
             <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">
-              Requires manual Tailscale Funnel / Serve configuration. Tailscale exposes a secure loopback proxy endpoint without modifying WinHelm process boundaries.
+              ${escapeHtml(messages.shellConnectionsTailscaleDesc || "End-to-end encrypted mesh remote access. Requires manual Tailscale Funnel / Serve configuration.")}
             </p>
           </div>
           <div style="margin-top:auto;">
             <a href="https://tailscale.com/kb/1223/funnel" target="_blank" rel="noopener noreferrer" class="card-action-link">
-              Tailscale Documentation ↗
+              ${escapeHtml(messages.shellConnectionsTailscaleDoc || "Tailscale Documentation ↗")}
             </a>
           </div>
         </div>
@@ -135,22 +135,22 @@ export function renderConnectionsView(ctx: ShellRenderContext): string {
       <div id="clientActionResult" style="display:none; margin-top:var(--space-4); font-size:12px;"></div>
 
       <!-- ACTIVE MCP CLIENT SESSIONS TABLE -->
-      <h2 class="policy-group-title" style="margin-top:var(--space-5);">Active Client Sessions</h2>
+      <h2 class="policy-group-title" style="margin-top:var(--space-5);">${escapeHtml(messages.shellConnectionsSessionsTitle || "Active Client Sessions")}</h2>
       <div class="data-table-container" role="region" aria-label="Active Client Sessions">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Client Name</th>
-              <th>Host Address</th>
-              <th>Transport Protocol</th>
-              <th>Session ID</th>
-              <th>Status</th>
+              <th>${escapeHtml(messages.shellConnectionsThClientName || "Client Name")}</th>
+              <th>${escapeHtml(messages.shellConnectionsThHostAddr || "Host Address")}</th>
+              <th>${escapeHtml(messages.shellConnectionsThTransport || "Transport Protocol")}</th>
+              <th>${escapeHtml(messages.shellConnectionsThSessionId || "Session ID")}</th>
+              <th>${escapeHtml(messages.shellConnectionsThStatus || "Status")}</th>
             </tr>
           </thead>
           <tbody id="clientSessions">
             <tr>
               <td colspan="5" style="text-align:center; color:var(--text-muted); padding:var(--space-4);">
-                No active MCP client sessions announced yet.
+                ${escapeHtml(messages.shellConnectionsNoSessions || "No active MCP client sessions announced yet.")}
               </td>
             </tr>
           </tbody>

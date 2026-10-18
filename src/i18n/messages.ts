@@ -372,6 +372,234 @@ export const EN_MESSAGES = {
     "Approve or deny pending tool actions under Approvals. Review every tool call and security event under Activity.",
   "shell.connections.restart_hint":
     "If this client was running, restart it or reconnect so the new configuration is loaded.",
+  "shell.home.desc":
+    "WinHelm runtime status, security boundary, and client overview.",
+  "shell.home.urgent_title":
+    "Action Required",
+  "shell.home.urgent_inbox":
+    "Review in Inbox",
+  "shell.home.pending_desc":
+    "Tool executions requiring your authorization",
+  "shell.home.open_inbox":
+    "Open Inbox \u2192",
+  "shell.home.policy_desc":
+    "Safe Profile restricts tool exposure; terminal mode controls execution safety.",
+  "shell.home.review_policy":
+    "Review Policy \u2192",
+  "shell.home.remote_title":
+    "Remote Access",
+  "shell.home.remote_off":
+    "Remote Access Off",
+  "shell.home.remote_on":
+    "Remote Access On",
+  "shell.home.local_ready":
+    "Local Ready",
+  "shell.home.local_ready_desc":
+    "Listening on 127.0.0.1 loopback only. Zero public exposure.",
+  "shell.home.configure_ingress":
+    "Configure Ingress \u2192",
+  "shell.home.view_clients":
+    "View Clients \u2192",
+  "shell.home.server_status":
+    "Server Status",
+  "shell.home.server_info":
+    "WinHelm MCP Server",
+  "shell.home.shortcuts":
+    "Operational Shortcuts",
+  "shell.home.shortcut_approvals":
+    "Review Pending Approvals",
+  "shell.home.shortcut_connections":
+    "Verify AI Client Integrations",
+  "shell.home.shortcut_access":
+    "Manage Allowed Folders & Security Policy",
+  "shell.approvals.queue_title":
+    "Active Queue",
+  "shell.approvals.history_title":
+    "Recent Approval Decisions",
+  "shell.approvals.history_empty":
+    "No recent decisions recorded in this session.",
+  "shell.approvals.empty_sub":
+    "When AI clients request sensitive or mutating actions, they will appear here.",
+  "shell.approvals.native_ready":
+    "Windows Native Notifications: Available & Active",
+  "shell.approvals.native_ready_desc":
+    "Approval prompts can be received as Windows desktop notifications. You can also safely approve or deny actions directly from this dashboard.",
+  "shell.approvals.native_unavailable":
+    "Windows Native Notifications: Not yet integrated",
+  "shell.approvals.native_unavailable_desc":
+    "Desktop notification integration is pending. Web Dashboard approvals remain your active, authoritative fallback.",
+  "shell.approvals.native_needs_repair":
+    "Windows Native Notifications: Needs Attention",
+  "shell.approvals.native_unknown":
+    "Windows Native Notifications: Unknown Status",
+  "shell.advanced.desc":
+    "Technical plumbing, dynamic routing targets, and diagnostic probes.",
+  "shell.advanced.ports_title":
+    "Internal Port Routing (Tranche A)",
+  "shell.advanced.ports_desc":
+    "WinHelm dynamically assigns internal loopback ports to prevent port conflicts with other local software.",
+  "shell.advanced.ports_automatic":
+    "Automatic Mode",
+  "shell.advanced.ports_fixed":
+    "Fixed Mode",
+  "shell.advanced.ports_unavailable":
+    "Dynamic Ports: Unavailable",
+  "shell.advanced.ports_unknown":
+    "Dynamic Ports: Not yet integrated",
+  "shell.advanced.table_target":
+    "Internal Endpoint Target",
+  "shell.advanced.table_address":
+    "Resolved Loopback Address",
+  "shell.advanced.table_state":
+    "Allocation State",
+  "shell.advanced.no_endpoints":
+    "Endpoint topology will be resolved dynamically when Tranche A integration is active.",
+  "shell.advanced.telemetry_title":
+    "Host Process Telemetry",
+  "shell.advanced.lbl_host":
+    "HOST PROCESS",
+  "shell.advanced.lbl_loopback":
+    "LOOPBACK INTERFACE",
+  "shell.advanced.lbl_sessions":
+    "ACTIVE SESSIONS",
+  "shell.advanced.lbl_auth":
+    "AUTHORIZATION PLANE",
+  "shell.advanced.legacy_title":
+    "Preserved Engineering Dashboard (/dashboard)",
+  "shell.advanced.legacy_desc":
+    "Need raw hardware metrics, low-level socket inspection, or complete tool lists? Access the preserved engineering monitor directly.",
+  "shell.advanced.legacy_link":
+    "Open Advanced / Diagnostics Monitor \u2197",
+  "shell.setup.companion_title":
+    "Setup Assistant Companion",
+  "shell.setup.companion_desc":
+    "The standalone WinHelm Setup Assistant companion manages Windows service registration, prerequisites installation, and automated client configuration.",
+  "shell.setup.companion_ready":
+    "Companion Installed & Ready",
+  "shell.setup.companion_attention":
+    "Companion Needs Attention",
+  "shell.setup.companion_unavailable":
+    "Companion Unavailable",
+  "shell.setup.companion_unknown":
+    "Companion Not Detected",
+  "shell.setup.companion_launch":
+    "\uD83D\uDE80 Open Setup Assistant",
+  "shell.setup.companion_diagnostics":
+    "\uD83D\uDD0D Run Diagnostics / Check Installation",
+  "shell.setup.companion_disabled_hint":
+    "Setup Assistant companion bridge is not detected or not yet integrated.",
+  "shell.access.desc":
+    "Govern what tools AI models can run and when human approval is required.",
+  "shell.access.model_title":
+    "Dual-Axis Security Model:",
+  "shell.access.model_desc":
+    "Safe Profile restricts tool exposure; terminal mode controls execution safety. Capability Profile determines what tools exist; Approval Mode determines when WinHelm prompts you. Trusted Mode only applies to routine actions inside allowed folders and never expands capability or bypasses security floors.",
+  "shell.access.axis1_title":
+    "Axis 1: Capability Profile (Tool Exposure)",
+  "shell.access.axis1_desc":
+    "Controls which tool schemas are loaded and available to AI clients.",
+  "shell.access.profile_preset":
+    "Profile Preset",
+  "shell.access.preset_safe":
+    "Safe Profile (Read-Only & Search)",
+  "shell.access.preset_balanced":
+    "Balanced Profile (Standard Development)",
+  "shell.access.preset_power":
+    "Power Profile (Broadest Supported Capability)",
+  "shell.access.power_notice_title":
+    "Power Profile Notice:",
+  "shell.access.power_notice_body":
+    "Power is the broadest supported capability profile, but Absolute Deny, protected boundaries, Mandatory Confirmation, Approval Mode ceiling and configured policy still apply. Execution remains constrained by current Windows user authority.",
+  "shell.access.terminal_safety_hint":
+    "Dangerous terminal mode is not permitted in product settings.",
+  "shell.access.axis2_title":
+    "Axis 2: Approval Policy (Prompt Frequency)",
+  "shell.access.axis2_desc":
+    "Controls how often WinHelm prompts for permitted actions.",
+  "shell.access.mode_manual":
+    "Manual (Prompt on every mutating action)",
+  "shell.access.mode_smart":
+    "Smart (Prompt on high-risk & boundary crosses)",
+  "shell.access.mode_trusted":
+    "Trusted (Skip routine prompts inside allowed folders)",
+  "shell.access.trusted_constraint_title":
+    "Trusted Mode Constraint:",
+  "shell.access.trusted_constraint_body":
+    "Trusted mode reduces routine prompts for permitted actions strictly inside authorized workspace folders. It never claims power or full capability, and cannot bypass security floors.",
+  "shell.access.folders_desc":
+    "File operations are confined to these paths. Paths outside require explicit elevated approval.",
+  "shell.access.folders_label":
+    "Folders (one per line, optional :ro for read-only)",
+  "shell.access.cred_title":
+    "Security Credentials & Token Management",
+  "shell.access.cred_pill":
+    "Privileged Operation",
+  "shell.access.cred_desc":
+    "The MCP Bearer Access Token authenticates AI client applications. Rotating this token invalidates all active client sessions immediately.",
+  "shell.access.cred_active_label":
+    "Active Bearer Token",
+  "shell.access.cred_admin_note":
+    "Requires local AdminAuth unlock. Keep this token private.",
+  "shell.settings.desc":
+    "Everyday application preferences and presentation options.",
+  "shell.settings.lang_desc":
+    "Select interface language. Both English and Thai catalogs maintain 100% key parity.",
+  "shell.settings.theme_title":
+    "Appearance & Theme",
+  "shell.settings.theme_desc":
+    "Choose visual theme or follow operating system preferences.",
+  "shell.settings.theme_system":
+    "System Default (Auto)",
+  "shell.settings.theme_dark":
+    "Dark Theme",
+  "shell.settings.theme_light":
+    "Light Theme",
+  "shell.settings.notif_title":
+    "Desktop Notifications",
+  "shell.settings.notif_desc":
+    "Toast notification delivery preferences.",
+  "shell.settings.notif_toast":
+    "Show Windows Toast notification when approvals arrive",
+  "shell.settings.danger_note":
+    "All security parameters, Capability Profiles, and Bearer Tokens must be configured under Access & Security.",
+  "shell.activity.desc":
+    "Comprehensive timeline of AI tool executions and security decisions.",
+  "shell.activity.export":
+    "\uD83D\uDCE5 Download Full Audit Log (JSON)",
+  "shell.modal.cancel":
+    "Cancel",
+  "shell.modal.secret_warning":
+    "\uD83D\uDD12 Never share or paste the admin code into an AI chat.",
+  "shell.connections.desc":
+    "Manage local AI client applications, reverse tunnels, and network access.",
+  "shell.connections.claude_desc":
+    "Direct local client connection via native config update.",
+  "shell.connections.cursor_desc":
+    "Workspace and editor client integration via local config.",
+  "shell.connections.chatgpt_desc":
+    "Managed reverse tunnel for ChatGPT actions.",
+  "shell.connections.tailscale_desc":
+    "End-to-end encrypted mesh remote access. Requires manual Tailscale Funnel / Serve configuration.",
+  "shell.connections.tailscale_manual":
+    "Manual Configuration",
+  "shell.connections.tailscale_doc":
+    "Tailscale Documentation \u2197",
+  "shell.connections.btn_preview":
+    "Preview",
+  "shell.connections.sessions_title":
+    "Active Client Sessions",
+  "shell.connections.th_client_name":
+    "Client Name",
+  "shell.connections.th_host_addr":
+    "Host Address",
+  "shell.connections.th_transport":
+    "Transport Protocol",
+  "shell.connections.th_session_id":
+    "Session ID",
+  "shell.connections.th_status":
+    "Status",
+  "shell.connections.no_sessions":
+    "No active MCP client sessions announced yet.",
 } as const;
 
 export type MessageKey = keyof typeof EN_MESSAGES;
@@ -748,6 +976,234 @@ export const TH_MESSAGES: Record<MessageKey, string> = {
     "อนุมัติหรือปฏิเสธการทำงานที่รออยู่ในหน้าการอนุมัติ และตรวจทุกการเรียกเครื่องมือรวมถึงเหตุการณ์ด้านความปลอดภัยในหน้ากิจกรรม",
   "shell.connections.restart_hint":
     "หากไคลเอนต์นี้เปิดค้างอยู่ ให้รีสตาร์ตหรือเชื่อมต่อใหม่เพื่อโหลดการกำหนดค่าใหม่",
+  "shell.home.desc":
+    "สถานะการทำงาน ขอบเขตความปลอดภัย และภาพรวมไคลเอนต์ของ WinHelm",
+  "shell.home.urgent_title":
+    "ต้องดำเนินการ",
+  "shell.home.urgent_inbox":
+    "ตรวจสอบในกล่องงาน",
+  "shell.home.pending_desc":
+    "คำสั่งเครื่องมือที่รอการอนุมัติจากคุณ",
+  "shell.home.open_inbox":
+    "เปิดกล่องงาน \u2192",
+  "shell.home.policy_desc":
+    "Safe Profile จำกัดการเข้าถึงเครื่องมือ โหมดเทอร์มินัลควบคุมความปลอดภัยในการรัน",
+  "shell.home.review_policy":
+    "ตรวจสอบนโยบาย \u2192",
+  "shell.home.remote_title":
+    "การเข้าถึงระยะไกล",
+  "shell.home.remote_off":
+    "ปิดการเข้าถึงระยะไกล",
+  "shell.home.remote_on":
+    "เปิดการเข้าถึงระยะไกล",
+  "shell.home.local_ready":
+    "พร้อมใช้งานในเครื่อง",
+  "shell.home.local_ready_desc":
+    "รับการเชื่อมต่อเฉพาะ 127.0.0.1 ลูปแบ็กเท่านั้น ไม่เปิดสู่สาธารณะ",
+  "shell.home.configure_ingress":
+    "กำหนดค่า Ingress \u2192",
+  "shell.home.view_clients":
+    "ดูไคลเอนต์ \u2192",
+  "shell.home.server_status":
+    "สถานะเซิร์ฟเวอร์",
+  "shell.home.server_info":
+    "เซิร์ฟเวอร์ WinHelm MCP",
+  "shell.home.shortcuts":
+    "ทางลัดการทำงาน",
+  "shell.home.shortcut_approvals":
+    "ตรวจสอบคำขออนุมัติที่รอดำเนินการ",
+  "shell.home.shortcut_connections":
+    "ตรวจสอบการเชื่อมต่อไคลเอนต์ AI",
+  "shell.home.shortcut_access":
+    "จัดการโฟลเดอร์ที่อนุญาตและนโยบายความปลอดภัย",
+  "shell.approvals.queue_title":
+    "คิวที่รอดำเนินการ",
+  "shell.approvals.history_title":
+    "ประวัติการตัดสินใจอนุมัติล่าสุด",
+  "shell.approvals.history_empty":
+    "ยังไม่มีประวัติการตัดสินใจในเซสชันนี้",
+  "shell.approvals.empty_sub":
+    "เมื่อไคลเอนต์ AI ร้องขอคำสั่งที่ละเอียดอ่อนหรือแก้ไขข้อมูล คำขอจะปรากฏที่นี่",
+  "shell.approvals.native_ready":
+    "การแจ้งเตือนเนทีฟของ Windows: พร้อมใช้งานและทำงานอยู่",
+  "shell.approvals.native_ready_desc":
+    "คำขออนุมัติสามารถแจ้งเตือนผ่านเดสก์ท็อป Windows ได้ และคุณยังสามารถอนุมัติหรือปฏิเสธผ่านแดชบอร์ดนี้ได้เช่นกัน",
+  "shell.approvals.native_unavailable":
+    "การแจ้งเตือนเนทีฟของ Windows: ยังไม่ได้รวมระบบ",
+  "shell.approvals.native_unavailable_desc":
+    "การแจ้งเตือนบนเดสก์ท็อปยังอยู่ระหว่างรอการรวมระบบ การอนุมัติผ่านเว็บแดชบอร์ดนี้ยังคงเป็นช่องทางหลักที่พร้อมทำงานเสมอ",
+  "shell.approvals.native_needs_repair":
+    "การแจ้งเตือนเนทีฟของ Windows: ต้องตรวจสอบ",
+  "shell.approvals.native_unknown":
+    "การแจ้งเตือนเนทีฟของ Windows: ไม่ทราบสถานะ",
+  "shell.advanced.desc":
+    "โครงสร้างทางเทคนิค ปลายทางเราต์ติงไดนามิก และการตรวจสอบวินิจฉัย",
+  "shell.advanced.ports_title":
+    "การจัดเส้นทางพอร์ตภายใน (Tranche A)",
+  "shell.advanced.ports_desc":
+    "WinHelm กำหนดพอร์ตลูปแบ็กภายในแบบไดนามิกเพื่อป้องกันการชนกับซอฟต์แวร์อื่นในเครื่อง",
+  "shell.advanced.ports_automatic":
+    "โหมดอัตโนมัติ",
+  "shell.advanced.ports_fixed":
+    "โหมดพอร์ตคงที่",
+  "shell.advanced.ports_unavailable":
+    "พอร์ตไดนามิก: ไม่พร้อมใช้งาน",
+  "shell.advanced.ports_unknown":
+    "พอร์ตไดนามิก: ยังไม่ได้รวมระบบ",
+  "shell.advanced.table_target":
+    "ปลายทางเอนด์พอยต์ภายใน",
+  "shell.advanced.table_address":
+    "ที่อยู่ลูปแบ็กที่จัดสรร",
+  "shell.advanced.table_state":
+    "สถานะการจัดสรร",
+  "shell.advanced.no_endpoints":
+    "โครงสร้างเอนด์พอยต์จะถูกจัดสรรแบบไดนามิกเมื่อเปิดใช้การรวมระบบ Tranche A",
+  "shell.advanced.telemetry_title":
+    "ข้อมูลกระบวนการทำงานหลัก",
+  "shell.advanced.lbl_host":
+    "กระบวนการหลัก",
+  "shell.advanced.lbl_loopback":
+    "อินเทอร์เฟซลูปแบ็ก",
+  "shell.advanced.lbl_sessions":
+    "เซสชันที่ทำงานอยู่",
+  "shell.advanced.lbl_auth":
+    "ระดับการยืนยันสิทธิ์",
+  "shell.advanced.legacy_title":
+    "แดชบอร์ดวิศวกรรมดั้งเดิม (/dashboard)",
+  "shell.advanced.legacy_desc":
+    "ต้องการดูข้อมูลฮาร์ดแวร์ดิบ ตรวจสอบซ็อกเก็ตระดับล่าง หรือดูรายการเครื่องมือทั้งหมดหรือไม่? เข้าสู่หน้าวิศวกรรมได้โดยตรง",
+  "shell.advanced.legacy_link":
+    "เปิดมอนิเตอร์การวินิจฉัยขั้นสูง \u2197",
+  "shell.setup.companion_title":
+    "โปรแกรมเสริม Setup Assistant",
+  "shell.setup.companion_desc":
+    "โปรแกรมเสริม WinHelm Setup Assistant จัดการการลงทะเบียนเซอร์วิส Windows การติดตั้งข้อกำหนดเบื้องต้น และการตั้งค่าไคลเอนต์อัตโนมัติ",
+  "shell.setup.companion_ready":
+    "ติดตั้งโปรแกรมเสริมพร้อมใช้งาน",
+  "shell.setup.companion_attention":
+    "โปรแกรมเสริมต้องได้รับการตรวจสอบ",
+  "shell.setup.companion_unavailable":
+    "โปรแกรมเสริมไม่พร้อมใช้งาน",
+  "shell.setup.companion_unknown":
+    "ตรวจไม่พบโปรแกรมเสริม",
+  "shell.setup.companion_launch":
+    "\uD83D\uDE80 เปิด Setup Assistant",
+  "shell.setup.companion_diagnostics":
+    "\uD83D\uDD0D รันการวินิจฉัย / ตรวจสอบการติดตั้ง",
+  "shell.setup.companion_disabled_hint":
+    "ยังไม่พบหรือยังไม่ได้รวมระบบบริดจ์สำหรับ Setup Assistant",
+  "shell.access.desc":
+    "ควบคุมเครื่องมือที่โมเดล AI สามารถรันได้ และกำหนดเงื่อนไขที่ต้องขออนุมัติจากผู้ใช้",
+  "shell.access.model_title":
+    "โมเดลความปลอดภัย 2 แกน:",
+  "shell.access.model_desc":
+    "Safe Profile จำกัดการมองเห็นเครื่องมือ โหมดเทอร์มินัลควบคุมความปลอดภัยในการรัน Capability Profile กำหนดว่ามีเครื่องมือใดบ้าง และ Approval Mode กำหนดความถี่ในการถาม Trusted Mode มีผลเฉพาะงานปกติในโฟลเดอร์ที่อนุญาตเท่านั้น และไม่สามารถขยายสิทธิ์หรือข้ามนโยบายความปลอดภัยได้",
+  "shell.access.axis1_title":
+    "แกนที่ 1: Capability Profile (ขอบเขตเครื่องมือ)",
+  "shell.access.axis1_desc":
+    "ควบคุมสกีมาของเครื่องมือที่โหลดและเปิดให้ไคลเอนต์ AI ใช้งาน",
+  "shell.access.profile_preset":
+    "โปรไฟล์สำเร็จรูป",
+  "shell.access.preset_safe":
+    "Safe Profile (อ่านและค้นหาเท่านั้น)",
+  "shell.access.preset_balanced":
+    "Balanced Profile (งานพัฒนาทั่วไป)",
+  "shell.access.preset_power":
+    "Power Profile (ขอบเขตความสามารถสูงสุดที่รองรับ)",
+  "shell.access.power_notice_title":
+    "ข้อควรทราบเกี่ยวกับ Power Profile:",
+  "shell.access.power_notice_body":
+    "Power เป็นโปรไฟล์ที่มีความสามารถกว้างที่สุดที่รองรับ แต่ข้อห้ามเด็ดขาด (Absolute Deny) ขอบเขตการป้องกัน การพิมพ์ยืนยัน (Mandatory Confirmation) เพดานของ Approval Mode และนโยบายที่ตั้งค่ายังคงมีผลบังคับใช้อย่างสมบูรณ์ การทำงานยังคงถูกจำกัดภายใต้สิทธิ์บัญชีผู้ใช้ Windows ปัจจุบัน",
+  "shell.access.terminal_safety_hint":
+    "ไม่อนุญาตให้ใช้โหมดเทอร์มินัลที่เป็นอันตรายในการตั้งค่าผลิตภัณฑ์",
+  "shell.access.axis2_title":
+    "แกนที่ 2: นโยบายการอนุมัติ (ความถี่ในการถาม)",
+  "shell.access.axis2_desc":
+    "ควบคุมความถี่ที่ WinHelm จะขอคำยืนยันสำหรับคำสั่งที่ได้รับอนุญาต",
+  "shell.access.mode_manual":
+    "Manual (ถามทุกครั้งที่มีการแก้ไขข้อมูล)",
+  "shell.access.mode_smart":
+    "Smart (ถามเมื่อมีความเสี่ยงสูงหรือข้ามขอบเขต)",
+  "shell.access.mode_trusted":
+    "Trusted (ข้ามการถามสำหรับงานปกติในโฟลเดอร์ที่อนุญาต)",
+  "shell.access.trusted_constraint_title":
+    "ข้อจำกัดของ Trusted Mode:",
+  "shell.access.trusted_constraint_body":
+    "Trusted mode ช่วยลดการถามซ้ำซากสำหรับคำสั่งที่ได้รับอนุญาตเฉพาะภายในโฟลเดอร์พื้นที่ทำงานที่กำหนดเท่านั้น โหมดนี้ไม่ได้ให้สิทธิ์เพิ่มขึ้น และไม่สามารถข้ามเกณฑ์ความปลอดภัยขั้นต่ำได้",
+  "shell.access.folders_desc":
+    "การจัดการไฟล์จะถูกจำกัดเฉพาะในเส้นทางเหล่านี้ เส้นทางภายนอกต้องได้รับการอนุมัติระดับสูงเป็นกรณีพิเศษ",
+  "shell.access.folders_label":
+    "โฟลเดอร์ (บรรทัดละหนึ่งโฟลเดอร์ เติม :ro ท้ายบรรทัดได้หากให้อ่านอย่างเดียว)",
+  "shell.access.cred_title":
+    "ข้อมูลรับรองความปลอดภัยและการจัดการโทเค็น",
+  "shell.access.cred_pill":
+    "การดำเนินการระดับอภิสิทธิ์",
+  "shell.access.cred_desc":
+    "MCP Bearer Access Token ใช้สำหรับยืนยันตัวตนของแอปพลิเคชันไคลเอนต์ AI การหมุนเวียนโทเค็นนี้จะยกเลิกเซสชันของไคลเอนต์ทั้งหมดทันที",
+  "shell.access.cred_active_label":
+    "โทเค็น Bearer ที่ใช้งานอยู่",
+  "shell.access.cred_admin_note":
+    "ต้องปลดล็อกด้วย AdminAuth ในเครื่องก่อน เก็บโทเค็นนี้ไว้เป็นความลับ",
+  "shell.settings.desc":
+    "การตั้งค่าทั่วไปของแอปพลิเคชันและการแสดงผล",
+  "shell.settings.lang_desc":
+    "เลือกภาษาของอินเทอร์เฟซ ทั้งภาษาอังกฤษและภาษาไทยมีความสอดคล้องของคีย์ 100%",
+  "shell.settings.theme_title":
+    "รูปแบบและการแสดงผล",
+  "shell.settings.theme_desc":
+    "เลือกธีมสีหรือปรับตามการตั้งค่าของระบบปฏิบัติการ",
+  "shell.settings.theme_system":
+    "ตามค่าเริ่มต้นของระบบ (อัตโนมัติ)",
+  "shell.settings.theme_dark":
+    "ธีมมืด",
+  "shell.settings.theme_light":
+    "ธีมสว่าง",
+  "shell.settings.notif_title":
+    "การแจ้งเตือนบนเดสก์ท็อป",
+  "shell.settings.notif_desc":
+    "การกำหนดค่าการส่งการแจ้งเตือนแบบ Toast",
+  "shell.settings.notif_toast":
+    "แสดงการแจ้งเตือน Windows Toast เมื่อมีคำขออนุมัติเข้ามา",
+  "shell.settings.danger_note":
+    "พารามิเตอร์ความปลอดภัยทั้งหมด Capability Profile และ Bearer Token ต้องกำหนดค่าในแท็บ Access & Security",
+  "shell.activity.desc":
+    "ไทม์ไลน์บันทึกเหตุการณ์การเรียกใช้เครื่องมือ AI และการตัดสินใจด้านความปลอดภัย",
+  "shell.activity.export":
+    "\uD83D\uDCE5 ดาวน์โหลดบันทึกการตรวจสอบทั้งหมด (JSON)",
+  "shell.modal.cancel":
+    "ยกเลิก",
+  "shell.modal.secret_warning":
+    "\uD83D\uDD12 ห้ามแชร์หรือวางรหัสผู้ดูแลนี้ลงในแชต AI เด็ดขาด",
+  "shell.connections.desc":
+    "จัดการแอปพลิเคชันไคลเอนต์ AI ในเครื่อง ทันเนลย้อนกลับ และการเข้าถึงเครือข่าย",
+  "shell.connections.claude_desc":
+    "เชื่อมต่อไคลเอนต์ในเครื่องโดยตรงผ่านการอัปเดตไฟล์คอนฟิกเนทีฟ",
+  "shell.connections.cursor_desc":
+    "เชื่อมต่อกับตัวแก้ไขโค้ดและพื้นที่ทำงานผ่านไฟล์คอนฟิกในเครื่อง",
+  "shell.connections.chatgpt_desc":
+    "ทันเนลย้อนกลับแบบจัดการสำหรับ ChatGPT Actions",
+  "shell.connections.tailscale_desc":
+    "การเข้าถึงระยะไกลแบบเข้ารหัสต้นทางถึงปลายทาง ต้องกำหนดค่า Tailscale Funnel / Serve ด้วยตนเอง",
+  "shell.connections.tailscale_manual":
+    "การกำหนดค่าด้วยตนเอง",
+  "shell.connections.tailscale_doc":
+    "เอกสารประกอบ Tailscale \u2197",
+  "shell.connections.btn_preview":
+    "ดูตัวอย่าง",
+  "shell.connections.sessions_title":
+    "เซสชันไคลเอนต์ที่กำลังทำงาน",
+  "shell.connections.th_client_name":
+    "ชื่อไคลเอนต์",
+  "shell.connections.th_host_addr":
+    "ที่อยู่โฮสต์",
+  "shell.connections.th_transport":
+    "โปรโตคอลรับส่งข้อมูล",
+  "shell.connections.th_session_id":
+    "รหัสเซสชัน",
+  "shell.connections.th_status":
+    "สถานะ",
+  "shell.connections.no_sessions":
+    "ยังไม่มีเซสชันไคลเอนต์ MCP ที่เปิดใช้งานในขณะนี้",
 };
 
 export const MESSAGE_CATALOGS: Record<

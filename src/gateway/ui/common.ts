@@ -15,6 +15,41 @@ export function escapeHtml(str: any): string {
     .replace(/'/g, "&#39;");
 }
 
+export type NativeApprovalIntegrationStatus =
+  | "ready"
+  | "needs_repair"
+  | "unavailable"
+  | "unknown";
+
+export type DynamicInternalPortsMode =
+  | "automatic"
+  | "fixed"
+  | "unavailable"
+  | "unknown";
+
+export interface DynamicEndpointInfo {
+  service: string;
+  url: string;
+  status: string;
+}
+
+export interface DynamicInternalPortsStatus {
+  mode: DynamicInternalPortsMode;
+  endpoints?: DynamicEndpointInfo[];
+}
+
+export type SetupAssistantIntegrationStatus =
+  | "installed_ready"
+  | "needs_attention"
+  | "unavailable"
+  | "unknown";
+
+export interface CrossTrancheAdapters {
+  nativeApproval?: NativeApprovalIntegrationStatus;
+  dynamicPorts?: DynamicInternalPortsStatus;
+  setupAssistant?: SetupAssistantIntegrationStatus;
+}
+
 export interface ShellRenderContext {
   activeProfile: string;
   schemaMode: "legacy" | "v2" | "invalid";
@@ -27,4 +62,5 @@ export interface ShellRenderContext {
   locale: string;
   messages: Record<string, string>;
   clientScriptMessages: string;
+  adapters?: CrossTrancheAdapters;
 }

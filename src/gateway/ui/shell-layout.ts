@@ -126,7 +126,7 @@ export function renderProductShell(ctx: ShellRenderContext): string {
 
       <div class="sidebar-footer">
         <a href="/dashboard" class="sidebar-external-link" title="Open engineering dashboard for raw hardware metrics and tool registry">
-          <span>Advanced / Diagnostics ↗</span>
+          <span>${escapeHtml(messages.shellNavAdvancedMonitor || "Advanced / Diagnostics ↗")}</span>
         </a>
       </div>
     </nav>
@@ -163,11 +163,11 @@ export function renderProductShell(ctx: ShellRenderContext): string {
         </div>
         <div id="adminUnlockError" style="color:var(--status-offline-text); font-size:12px; margin-bottom:var(--space-2);"></div>
         <div style="font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:var(--space-2); border-radius:4px;">
-          🔒 Never share or paste the admin code into an AI chat.
+          ${escapeHtml(messages.shellModalSecretWarning || "🔒 Never share or paste the admin code into an AI chat.")}
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeAdminModal()">Cancel</button>
+        <button class="btn-secondary" onclick="closeAdminModal()">${escapeHtml(messages.shellModalCancel || "Cancel")}</button>
         <button class="btn-approve" onclick="submitAdminCode()">${escapeHtml(messages.adminUnlock || "Unlock")}</button>
       </div>
     </div>

@@ -9,6 +9,18 @@ import { escapeHtml, type ShellRenderContext } from "../common.js";
 
 export function renderSetupView(ctx: ShellRenderContext): string {
   const { messages } = ctx;
+  const companionStatus = ctx.adapters?.setupAssistant ?? "unknown";
+  const isCompanionReady = companionStatus === "installed_ready";
+
+  const companionBadge = isCompanionReady
+    ? escapeHtml(messages.shellSetupCompanionReady || "Companion Installed & Ready")
+    : escapeHtml(messages.shellSetupCompanionUnknown || "Companion Not Detected");
+
+  const companionPillClass = isCompanionReady ? "status-pill status-ready" : "status-pill status-neutral";
+
+  const openButtonHtml = isCompanionReady
+    ? `<button class="btn-primary" onclick="launchSetupAssistant()">${escapeHtml(messages.shellSetupCompanionLaunch || "🚀 Open Setup Assistant")}</button>`
+    : `<button class="btn-primary" disabled aria-disabled="true" style="opacity:0.6; cursor:not-allowed;" title="${escapeHtml(messages.shellSetupCompanionDisabledHint || "Setup Assistant companion bridge is not detected or not yet integrated.")}">${escapeHtml(messages.shellSetupCompanionLaunch || "🚀 Open Setup Assistant")}</button>`;
 
   return `
     <section id="panel-setup" class="panel" aria-labelledby="heading-setup">
@@ -25,24 +37,24 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         ${escapeHtml(messages.setupLocked)}
       </div>
 
-      <!-- COMPANION APPLICATION STATUS (Constraint 3) -->
+      <!-- COMPANION APPLICATION STATUS (Blocker C Fix) -->
       <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="Setup Assistant Companion">
         <div class="card-header">
-          <span class="card-label">Setup Assistant Companion</span>
-          <span class="status-pill status-ready">Companion Supported</span>
+          <span class="card-label">${escapeHtml(messages.shellSetupCompanionTitle || "Setup Assistant Companion")}</span>
+          <span class="${companionPillClass}">${companionBadge}</span>
         </div>
         <div style="font-size:13px; color:var(--text-secondary); margin-bottom:var(--space-3);">
-          The standalone WinHelm Setup Assistant companion manages Windows service registration, prerequisites installation, and automated client configuration.
+          ${escapeHtml(messages.shellSetupCompanionDesc || "The standalone WinHelm Setup Assistant companion manages Windows service registration, prerequisites installation, and automated client configuration.")}
         </div>
 
-        <div style="display:flex; gap:var(--space-3); flex-wrap:wrap;">
-          <button class="btn-primary" onclick="alert('In production, launches standalone Setup Assistant companion application if detected on disk.')">
-            🚀 Open Setup Assistant
-          </button>
+        <div style="display:flex; gap:var(--space-3); flex-wrap:wrap; align-items:center;">
+          ${openButtonHtml}
           <button class="btn-secondary" onclick="checkInstallationHealth()">
-            🔍 Run Diagnostics / Check Installation
+            ${escapeHtml(messages.shellSetupCompanionDiagnostics || "🔍 Run Diagnostics / Check Installation")}
           </button>
         </div>
+
+        ${!isCompanionReady ? `<div style="font-size:12px; color:var(--text-muted); margin-top:var(--space-2);">${escapeHtml(messages.shellSetupCompanionDisabledHint || "Setup Assistant companion bridge is not detected or not yet integrated.")}</div>` : ""}
 
         <div id="setupDiagnosticResult" style="margin-top:var(--space-3); font-size:12px; display:none;"></div>
       </div>

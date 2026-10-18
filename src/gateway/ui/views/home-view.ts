@@ -23,7 +23,7 @@ export function renderHomeView(ctx: ShellRenderContext): string {
     <section id="panel-overview" class="panel active" aria-labelledby="heading-home">
       <div class="panel-header">
         <h1 id="heading-home" class="panel-title">${escapeHtml(messages.navOverview)}</h1>
-        <p class="panel-desc">WinHelm runtime status, security boundary, and client overview.</p>
+        <p class="panel-desc">${escapeHtml(messages.shellHomeDesc || "WinHelm runtime status, security boundary, and client overview.")}</p>
       </div>
 
       <!-- SYSTEM WARNINGS & NOTICES -->
@@ -34,11 +34,11 @@ export function renderHomeView(ctx: ShellRenderContext): string {
           <div class="banner-content">
             <span aria-hidden="true" style="font-size:18px;">⚠️</span>
             <div>
-              <strong id="urgentBannerTitle">Action Required</strong>
+              <strong id="urgentBannerTitle">${escapeHtml(messages.shellHomeUrgentTitle || "Action Required")}</strong>
               <div id="urgentBannerSubtitle" style="font-size:12px; margin-top:2px;"></div>
             </div>
           </div>
-          <button class="banner-btn" onclick="showTab('approvals')">Review in Inbox</button>
+          <button class="banner-btn" onclick="showTab('approvals')">${escapeHtml(messages.shellHomeUrgentReview || "Review in Inbox")}</button>
         </div>
       </div>
 
@@ -53,8 +53,8 @@ export function renderHomeView(ctx: ShellRenderContext): string {
             </span>
           </div>
           <div class="card-value" id="statPendingApprovals">0</div>
-          <div class="card-sub">Tool executions requiring your authorization</div>
-          <a href="javascript:void(0)" class="card-action-link">Open Inbox →</a>
+          <div class="card-sub">${escapeHtml(messages.shellHomeApprovalsSub || "Tool executions requiring your authorization")}</div>
+          <a href="javascript:void(0)" class="card-action-link">${escapeHtml(messages.shellHomeOpenInbox || "Open Inbox →")}</a>
         </div>
 
         <!-- 2. ACCESS POSTURE -->
@@ -69,38 +69,38 @@ export function renderHomeView(ctx: ShellRenderContext): string {
           <div class="card-sub">
             Policy: <strong id="statApprovalMode">${escapeHtml(approvalMode.toUpperCase())}</strong>
             <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
-              Safe Profile restricts tool exposure; terminal mode controls execution safety.
+              ${escapeHtml(messages.shellHomePolicyDesc || "Safe Profile restricts tool exposure; terminal mode controls execution safety.")}
             </div>
           </div>
-          <a href="javascript:void(0)" class="card-action-link">Review Policy →</a>
+          <a href="javascript:void(0)" class="card-action-link">${escapeHtml(messages.shellHomeReviewPolicy || "Review Policy →")}</a>
         </div>
 
         <!-- 3. REMOTE ACCESS POSTURE -->
         <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="Remote Access Summary">
           <div class="card-header">
-            <span class="card-label">Remote Access</span>
+            <span class="card-label">${escapeHtml(messages.shellHomeRemoteTitle || "Remote Access")}</span>
             <span id="statRemotePill" class="status-pill status-ready">
-              <span class="status-dot green"></span> Remote Access Off
+              <span class="status-dot green"></span> ${escapeHtml(messages.shellHomeRemoteOff || "Remote Access Off")}
             </span>
           </div>
-          <div class="card-value" id="statRemoteText">Local Ready</div>
+          <div class="card-value" id="statRemoteText">${escapeHtml(messages.shellHomeLocalReady || "Local Ready")}</div>
           <div class="card-sub" id="statRemoteDetail">
-            Listening on 127.0.0.1 loopback only. Zero public exposure.
+            ${escapeHtml(messages.shellHomeRemoteDetail || "Listening on 127.0.0.1 loopback only. Zero public exposure.")}
           </div>
-          <a href="javascript:void(0)" class="card-action-link">Configure Ingress →</a>
+          <a href="javascript:void(0)" class="card-action-link">${escapeHtml(messages.shellHomeConfigureIngress || "Configure Ingress →")}</a>
         </div>
 
         <!-- 4. CLIENT ECOSYSTEM -->
         <div class="card" onclick="showTab('connections')" style="cursor:pointer;" role="region" aria-label="Client Ecosystem Summary">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.connectionsTitle)}</span>
-            <span class="status-pill status-ready" id="statClientBadge">Connected</span>
+            <span class="status-pill status-ready" id="statClientBadge">${escapeHtml(messages.connConnected || "Connected")}</span>
           </div>
           <div class="card-value" id="statConnectedClients">0 Connected</div>
           <div class="card-sub" id="statClientList">
             Claude Desktop, Cursor, ChatGPT, Gemini
           </div>
-          <a href="javascript:void(0)" class="card-action-link">View Clients →</a>
+          <a href="javascript:void(0)" class="card-action-link">${escapeHtml(messages.shellHomeViewClients || "View Clients →")}</a>
         </div>
       </div>
 
@@ -108,13 +108,13 @@ export function renderHomeView(ctx: ShellRenderContext): string {
       <div class="card-grid-2">
         <div class="card" role="region" aria-label="Runtime Status">
           <div class="card-header">
-            <span class="card-label">Server Status</span>
+            <span class="card-label">${escapeHtml(messages.shellHomeServerStatus || "Server Status")}</span>
             <span class="status-pill status-ready"><span class="status-dot green"></span> Running</span>
           </div>
           <div class="card-value">
             <span id="statServerStatus">${escapeHtml(messages.statusRunning)}</span>
           </div>
-          <div class="card-sub" id="statServerInfo">WinHelm MCP Server</div>
+          <div class="card-sub" id="statServerInfo">${escapeHtml(messages.shellHomeServerInfo || "WinHelm MCP Server")}</div>
           <div id="statWarnings" style="font-size:12px; color:var(--text-muted);">
             ${escapeHtml(messages.warningsNone)}
           </div>
@@ -122,17 +122,17 @@ export function renderHomeView(ctx: ShellRenderContext): string {
 
         <div class="card" role="region" aria-label="Quick Actions">
           <div class="card-header">
-            <span class="card-label">Operational Shortcuts</span>
+            <span class="card-label">${escapeHtml(messages.shellHomeShortcutsTitle || "Operational Shortcuts")}</span>
           </div>
           <div style="display:flex; flex-direction:column; gap:var(--space-2); margin-top:var(--space-1);">
             <button class="btn-secondary" style="text-align:left; font-size:13px;" onclick="showTab('approvals')">
-              🛡️ Review Pending Approvals (<span id="quickApprovalCount">0</span>)
+              🛡️ ${escapeHtml(messages.shellHomeShortcutApprovals || "Review Pending Approvals")} (<span id="quickApprovalCount">0</span>)
             </button>
             <button class="btn-secondary" style="text-align:left; font-size:13px;" onclick="showTab('connections')">
-              🔗 Verify AI Client Integrations
+              🔗 ${escapeHtml(messages.shellHomeShortcutConnections || "Verify AI Client Integrations")}
             </button>
             <button class="btn-secondary" style="text-align:left; font-size:13px;" onclick="showTab('access')">
-              🔒 Manage Allowed Folders & Security Policy
+              🔒 ${escapeHtml(messages.shellHomeShortcutAccess || "Manage Allowed Folders & Security Policy")}
             </button>
           </div>
         </div>

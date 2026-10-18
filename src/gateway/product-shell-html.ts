@@ -7,7 +7,7 @@
 
 import { PROFILES, type ToolProfile } from "../config/profiles.js";
 import { getRuntimeLocale, translate as t } from "../i18n/messages.js";
-import { escapeHtml, type ShellRenderContext } from "./ui/common.js";
+import { escapeHtml, type CrossTrancheAdapters, type ShellRenderContext } from "./ui/common.js";
 import { renderProductShell } from "./ui/shell-layout.js";
 
 export { escapeHtml };
@@ -19,6 +19,7 @@ export interface ProductShellSummary {
   terminalMode?: string | null;
   approvalMode?: string | null;
   focusJobId?: string | null;
+  adapters?: CrossTrancheAdapters;
 }
 
 /**
@@ -163,9 +164,139 @@ export function getProductShellHtml(
     setupFirstActionBody: t("shell.setup.first_action.body"),
     setupOrientationBody: t("shell.setup.orientation.body"),
     connRestartHint: t("shell.connections.restart_hint"),
+
+    // Phase 2 R2 i18n Keys
+    shellHomeDesc: t("shell.home.desc"),
+    shellHomeUrgentTitle: t("shell.home.urgent_title"),
+    shellHomeUrgentReview: t("shell.home.urgent_inbox"),
+    shellHomeApprovalsSub: t("shell.home.pending_desc"),
+    shellHomeOpenInbox: t("shell.home.open_inbox"),
+    shellHomePolicyDesc: t("shell.home.policy_desc"),
+    shellHomeReviewPolicy: t("shell.home.review_policy"),
+    shellHomeRemoteTitle: t("shell.home.remote_title"),
+    shellHomeRemoteOff: t("shell.home.remote_off"),
+    shellHomeRemoteOn: t("shell.home.remote_on"),
+    shellHomeLocalReady: t("shell.home.local_ready"),
+    shellHomeRemoteDetail: t("shell.home.local_ready_desc"),
+    shellHomeConfigureIngress: t("shell.home.configure_ingress"),
+    shellHomeViewClients: t("shell.home.view_clients"),
+    shellHomeServerStatus: t("shell.home.server_status"),
+    shellHomeServerInfo: t("shell.home.server_info"),
+    shellHomeShortcutsTitle: t("shell.home.shortcuts"),
+    shellHomeShortcutApprovals: t("shell.home.shortcut_approvals"),
+    shellHomeShortcutConnections: t("shell.home.shortcut_connections"),
+    shellHomeShortcutAccess: t("shell.home.shortcut_access"),
+
+    shellApprovalsQueueTitle: t("shell.approvals.queue_title"),
+    shellApprovalsHistoryTitle: t("shell.approvals.history_title"),
+    shellApprovalsHistoryEmpty: t("shell.approvals.history_empty"),
+    shellApprovalsEmptySub: t("shell.approvals.empty_sub"),
+    shellApprovalsNativeReady: t("shell.approvals.native_ready"),
+    shellApprovalsNativeReadyDesc: t("shell.approvals.native_ready_desc"),
+    shellApprovalsNativeUnavailable: t("shell.approvals.native_unavailable"),
+    shellApprovalsNativeUnavailableDesc: t("shell.approvals.native_unavailable_desc"),
+    shellApprovalsNativeNeedsRepair: t("shell.approvals.native_needs_repair"),
+    shellApprovalsNativeUnknown: t("shell.approvals.native_unknown"),
+
+    shellAdvancedDesc: t("shell.advanced.desc"),
+    shellAdvancedPortsTitle: t("shell.advanced.ports_title"),
+    shellAdvancedPortsDesc: t("shell.advanced.ports_desc"),
+    shellAdvancedPortsAutomatic: t("shell.advanced.ports_automatic"),
+    shellAdvancedPortsFixed: t("shell.advanced.ports_fixed"),
+    shellAdvancedPortsUnavailable: t("shell.advanced.ports_unavailable"),
+    shellAdvancedPortsUnknown: t("shell.advanced.ports_unknown"),
+    shellAdvancedTableTarget: t("shell.advanced.table_target"),
+    shellAdvancedTableAddress: t("shell.advanced.table_address"),
+    shellAdvancedTableState: t("shell.advanced.table_state"),
+    shellAdvancedNoEndpoints: t("shell.advanced.no_endpoints"),
+    shellAdvancedTelemetryTitle: t("shell.advanced.telemetry_title"),
+    shellAdvancedLblHost: t("shell.advanced.lbl_host"),
+    shellAdvancedLblLoopback: t("shell.advanced.lbl_loopback"),
+    shellAdvancedLblSessions: t("shell.advanced.lbl_sessions"),
+    shellAdvancedLblAuth: t("shell.advanced.lbl_auth"),
+    shellAdvancedLegacyTitle: t("shell.advanced.legacy_title"),
+    shellAdvancedLegacyDesc: t("shell.advanced.legacy_desc"),
+    shellAdvancedLegacyLink: t("shell.advanced.legacy_link"),
+
+    shellSetupCompanionTitle: t("shell.setup.companion_title"),
+    shellSetupCompanionDesc: t("shell.setup.companion_desc"),
+    shellSetupCompanionReady: t("shell.setup.companion_ready"),
+    shellSetupCompanionAttention: t("shell.setup.companion_attention"),
+    shellSetupCompanionUnavailable: t("shell.setup.companion_unavailable"),
+    shellSetupCompanionUnknown: t("shell.setup.companion_unknown"),
+    shellSetupCompanionLaunch: t("shell.setup.companion_launch"),
+    shellSetupCompanionDiagnostics: t("shell.setup.companion_diagnostics"),
+    shellSetupCompanionDisabledHint: t("shell.setup.companion_disabled_hint"),
+
+    shellAccessDesc: t("shell.access.desc"),
+    shellAccessModelTitle: t("shell.access.model_title"),
+    shellAccessModelDesc: t("shell.access.model_desc"),
+    shellAccessAxis1Title: t("shell.access.axis1_title"),
+    shellAccessAxis1Desc: t("shell.access.axis1_desc"),
+    shellAccessProfilePreset: t("shell.access.profile_preset"),
+    shellAccessPresetSafe: t("shell.access.preset_safe"),
+    shellAccessPresetBalanced: t("shell.access.preset_balanced"),
+    shellAccessPresetPower: t("shell.access.preset_power"),
+    shellAccessPowerNoticeTitle: t("shell.access.power_notice_title"),
+    shellAccessPowerNoticeBody: t("shell.access.power_notice_body"),
+    shellAccessTerminalSafetyHint: t("shell.access.terminal_safety_hint"),
+    shellAccessAxis2Title: t("shell.access.axis2_title"),
+    shellAccessAxis2Desc: t("shell.access.axis2_desc"),
+    shellAccessModeManual: t("shell.access.mode_manual"),
+    shellAccessModeSmart: t("shell.access.mode_smart"),
+    shellAccessModeTrusted: t("shell.access.mode_trusted"),
+    shellAccessTrustedConstraintTitle: t("shell.access.trusted_constraint_title"),
+    shellAccessTrustedConstraintBody: t("shell.access.trusted_constraint_body"),
+    shellAccessFoldersDesc: t("shell.access.folders_desc"),
+    shellAccessFoldersLabel: t("shell.access.folders_label"),
+    shellAccessCredTitle: t("shell.access.cred_title"),
+    shellAccessCredPill: t("shell.access.cred_pill"),
+    shellAccessCredDesc: t("shell.access.cred_desc"),
+    shellAccessCredActiveLabel: t("shell.access.cred_active_label"),
+    shellAccessCredAdminNote: t("shell.access.cred_admin_note"),
+
+    shellSettingsDesc: t("shell.settings.desc"),
+    shellSettingsLangDesc: t("shell.settings.lang_desc"),
+    shellSettingsThemeTitle: t("shell.settings.theme_title"),
+    shellSettingsThemeDesc: t("shell.settings.theme_desc"),
+    shellSettingsThemeSystem: t("shell.settings.theme_system"),
+    shellSettingsThemeDark: t("shell.settings.theme_dark"),
+    shellSettingsThemeLight: t("shell.settings.theme_light"),
+    shellSettingsNotifTitle: t("shell.settings.notif_title"),
+    shellSettingsNotifDesc: t("shell.settings.notif_desc"),
+    shellSettingsNotifToast: t("shell.settings.notif_toast"),
+    shellSettingsDangerNote: t("shell.settings.danger_note"),
+
+    shellActivityDesc: t("shell.activity.desc"),
+    shellActivityExport: t("shell.activity.export"),
+
+    shellModalCancel: t("shell.modal.cancel"),
+    shellModalSecretWarning: t("shell.modal.secret_warning"),
+
+    shellConnectionsDesc: t("shell.connections.desc"),
+    shellConnectionsClaudeDesc: t("shell.connections.claude_desc"),
+    shellConnectionsCursorDesc: t("shell.connections.cursor_desc"),
+    shellConnectionsChatgptDesc: t("shell.connections.chatgpt_desc"),
+    shellConnectionsTailscaleDesc: t("shell.connections.tailscale_desc"),
+    shellConnectionsTailscaleManual: t("shell.connections.tailscale_manual"),
+    shellConnectionsTailscaleDoc: t("shell.connections.tailscale_doc"),
+    shellConnectionsBtnPreview: t("shell.connections.btn_preview"),
+    shellConnectionsSessionsTitle: t("shell.connections.sessions_title"),
+    shellConnectionsThClientName: t("shell.connections.th_client_name"),
+    shellConnectionsThHostAddr: t("shell.connections.th_host_addr"),
+    shellConnectionsThTransport: t("shell.connections.th_transport"),
+    shellConnectionsThSessionId: t("shell.connections.th_session_id"),
+    shellConnectionsThStatus: t("shell.connections.th_status"),
+    shellConnectionsNoSessions: t("shell.connections.no_sessions"),
   };
 
   const clientScriptMessages = JSON.stringify(messages).replace(/</g, "\\u003c");
+
+  const adapters: CrossTrancheAdapters = {
+    nativeApproval: summary?.adapters?.nativeApproval ?? "unknown",
+    dynamicPorts: summary?.adapters?.dynamicPorts ?? { mode: "unknown", endpoints: [] },
+    setupAssistant: summary?.adapters?.setupAssistant ?? "unknown",
+  };
 
   const context: ShellRenderContext = {
     activeProfile,
@@ -179,7 +310,9 @@ export function getProductShellHtml(
     locale,
     messages,
     clientScriptMessages,
+    adapters,
   };
 
   return renderProductShell(context);
 }
+

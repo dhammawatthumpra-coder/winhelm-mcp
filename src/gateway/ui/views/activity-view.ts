@@ -13,7 +13,7 @@ export function renderActivityView(ctx: ShellRenderContext): string {
     <section id="panel-activity" class="panel" aria-labelledby="heading-activity">
       <div class="panel-header">
         <h1 id="heading-activity" class="panel-title">${escapeHtml(messages.activityTitle)}</h1>
-        <p class="panel-desc">Comprehensive timeline of AI tool executions and security decisions.</p>
+        <p class="panel-desc">${escapeHtml(messages.shellActivityDesc || "Comprehensive timeline of AI tool executions and security decisions.")}</p>
       </div>
 
       <!-- FILTER PILLS -->
@@ -35,7 +35,7 @@ export function renderActivityView(ctx: ShellRenderContext): string {
 
       <div style="margin-top:var(--space-5); display:flex; gap:var(--space-3);">
         <a href="/api/monitor/export" class="btn-secondary" style="font-size:12px; display:inline-flex; align-items:center; gap:6px;">
-          📥 Download Full Audit Log (JSON)
+          ${escapeHtml(messages.shellActivityExport || "📥 Download Full Audit Log (JSON)")}
         </a>
       </div>
     </section>
