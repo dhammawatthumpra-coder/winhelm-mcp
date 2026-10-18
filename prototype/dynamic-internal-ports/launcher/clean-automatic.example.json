@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "installation": {
+    "kind": "clean"
+  },
+  "internalPorts": {
+    "mode": "automatic"
+  },
+  "paths": {
+    "coreExecutable": "C:\\Program Files\\nodejs\\node.exe",
+    "coreEntrypoint": "D:\\mcp\\winhelm-v1.4.1-dynamic-internal-ports-r1\\dist\\index.js",
+    "r7Executable": "C:\\Program Files\\nodejs\\node.exe",
+    "r7Entrypoint": "D:\\mcp\\winhelm-v1.4.1-dynamic-internal-ports-r1\\prototype\\dynamic-internal-ports\\r7\\live-server-dynamic-upstream.mjs",
+    "r7SourceRoot": "D:\\mcp\\winhelm-r7-gemini-static-oauth-compat-r2-20261015",
+    "r7Store": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE6_EXAMPLE\\state\\r7-store.json",
+    "r7Receipt": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE6_EXAMPLE\\state\\r7-receipt.json",
+    "r7Registry": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE6_EXAMPLE\\runtime\\r7.json",
+    "r8SupervisorExecutable": "C:\\Program Files\\nodejs\\node.exe",
+    "r8SupervisorEntrypoint": "D:\\mcp\\winhelm-v1.4.1-dynamic-internal-ports-r1\\prototype\\dynamic-internal-ports\\r8\\r8-runtime-supervisor.mjs",
+    "r8Binary": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE5_PUBLIC_ROUTE_20261018_R2\\winhelm-r8-phase5.exe",
+    "r8ConfigTemplate": "D:\\mcp\\winhelm-v1.4.1-dynamic-internal-ports-r1\\prototype\\dynamic-internal-ports\\r8-go\\package\\config.template.json",
+    "r8RuntimeConfig": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE6_EXAMPLE\\state\\r8-runtime-config.json",
+    "r8Registry": "D:\\mcp\\uat-reports\\_WINHELM_V1_4_1_PHASE6_EXAMPLE\\runtime\\r8.json"
+  },
+  "oauth": {
+    "clientId": "phase6-example-client-id",
+    "redirectUri": "https://oauth-redirect.googleusercontent.com/r/winhelm-phase6"
+  },
+  "public": {
+    "origin": "https://winhelm-gemini-go-hardening-01.tailabb39e.ts.net"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "winhelm://v1.4.1/setup-assistant-dynamic-port-contract-r1",
+  "title": "WinHelm Setup Assistant Dynamic Internal Port Contract R1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "installation", "internalPorts", "paths", "oauth", "public"],
+  "properties": {
+    "schema": { "const": 1 },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["clean", "existing"] },
+        "existingMode": { "enum": ["automatic", "fixed"] },
+        "existingFixedPorts": { "$ref": "#/$defs/fixedPorts" }
+      }
+    },
+    "internalPorts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["automatic", "fixed"] },
+        "fixedPorts": { "$ref": "#/$defs/fixedPorts" },
+        "explicitModeChange": { "type": "boolean" }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "description": "Trusted component paths. These are product/internal values, not user-selected ports.",
+      "additionalProperties": false,
+      "required": [
+        "coreExecutable", "coreEntrypoint",
+        "r7Executable", "r7Entrypoint", "r7SourceRoot", "r7Store", "r7Receipt",
+        "r8SupervisorExecutable", "r8SupervisorEntrypoint", "r8Binary",
+        "r8ConfigTemplate", "r8RuntimeConfig", "r7Registry", "r8Registry"
+      ],
+      "properties": {
+        "coreExecutable": { "type": "string" },
+        "coreEntrypoint": { "type": "string" },
+        "coreConfig": { "type": "string" },
+        "coreRegistry": { "type": "string" },
+        "r7Executable": { "type": "string" },
+        "r7Entrypoint": { "type": "string" },
+        "r7SourceRoot": { "type": "string" },
+        "r7Store": { "type": "string" },
+        "r7Receipt": { "type": "string" },
+        "r7Registry": { "type": "string" },
+        "r7Preference": { "type": "string" },
+        "r8SupervisorExecutable": { "type": "string" },
+        "r8SupervisorEntrypoint": { "type": "string" },
+        "r8Binary": { "type": "string" },
+        "r8ConfigTemplate": { "type": "string" },
+        "r8RuntimeConfig": { "type": "string" },
+        "r8Registry": { "type": "string" },
+        "r8Preference": { "type": "string" }
+      }
+    },
+    "oauth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientId", "redirectUri"],
+      "properties": {
+        "clientId": { "type": "string" },
+        "redirectUri": { "type": "string", "format": "uri" }
+      }
+    },
+    "public": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin"],
+      "properties": {
+        "origin": { "type": "string", "format": "uri" }
+      }
+    }
+  },
+  "$defs": {
+    "fixedPorts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core", "r7", "r8"],
+      "properties": {
+        "core": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "r7": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "r8": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+      }
+    }
+  }
+}
