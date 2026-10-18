@@ -25,6 +25,9 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getProductShellHtml, type ProductShellSummary } from "../../src/gateway/product-shell-html.js";
 import { getDashboardHtml } from "../../src/gateway/dashboard-html.js";
 import { validateI18nCatalogs, setConfiguredLocale, getRuntimeLocale } from "../../src/i18n/messages.js";
@@ -511,6 +514,83 @@ describe("Phase 2 Production UI Qualification Suite", () => {
       assert.ok(dict.shellRemoteStatusOn && dict.shellRemoteStatusOn.includes("เปิดการเข้าถึงระยะไกล"), "TH remote status on");
       assert.ok(dict.shellConnectionsDoctorPassed && dict.shellConnectionsDoctorPassed.includes("ผ่าน"), "TH doctor passed");
       assert.ok(dict.shellSetupDiagnosticHealthy && dict.shellSetupDiagnosticHealthy.includes("เกตเวย์ WinHelm สมบูรณ์ดี"), "TH setup healthy");
+    } finally {
+      if (oldEnvLocale !== undefined) {
+        process.env.WINHELM_LOCALE = oldEnvLocale;
+      } else {
+        delete process.env.WINHELM_LOCALE;
+      }
+      setConfiguredLocale(initialLocale);
+    }
+  });
+
+  it("22. Blocker D Corrective: UI source files under src/gateway/ui contain ZERO English fallback literals masking missing catalog keys", () => {
+    const testDir = path.dirname(fileURLToPath(import.meta.url));
+    const uiDir = path.resolve(testDir, "../../src/gateway/ui");
+
+    function getSourceFiles(dir: string): string[] {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...getSourceFiles(fullPath));
+        } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+          files.push(fullPath);
+        }
+      }
+      return files;
+    }
+
+    const uiSourceFiles = getSourceFiles(uiDir);
+    assert.ok(uiSourceFiles.length > 0, "Must locate UI source files under src/gateway/ui");
+
+    const fallbackPattern = /messages\.[a-zA-Z0-9_]+\s*\|\|/g;
+    const violations: { file: string; line: number; text: string }[] = [];
+
+    for (const filePath of uiSourceFiles) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const lines = content.split("\n");
+      lines.forEach((lineText, idx) => {
+        if (fallbackPattern.test(lineText)) {
+          violations.push({
+            file: path.relative(path.resolve(testDir, "../.."), filePath),
+            line: idx + 1,
+            text: lineText.trim(),
+          });
+        }
+        fallbackPattern.lastIndex = 0;
+      });
+    }
+
+    assert.strictEqual(
+      violations.length,
+      0,
+      `Detected ${violations.length} forbidden English fallback literal(s) masking missing catalog keys:\n` +
+      violations.map(v => `  ${v.file}:${v.line} -> ${v.text}`).join("\n")
+    );
+
+    // Also assert that rendered shell in both locales contains no 'undefined' literals
+    const initialLocale = getRuntimeLocale();
+    const oldEnvLocale = process.env.WINHELM_LOCALE;
+    delete process.env.WINHELM_LOCALE;
+
+    try {
+      for (const locale of ["en", "th"] as const) {
+        setConfiguredLocale(locale);
+        const rendered = renderTestShell();
+        // Check that no undefined values leaked into rendered markup
+        assert.strictEqual(
+          rendered.includes(">undefined<"),
+          false,
+          `Rendered HTML (${locale}) must not leak '>undefined<' as content`
+        );
+        assert.strictEqual(
+          rendered.includes('="undefined"'),
+          false,
+          `Rendered HTML (${locale}) must not leak '="undefined"' as attribute`
+        );
+      }
     } finally {
       if (oldEnvLocale !== undefined) {
         process.env.WINHELM_LOCALE = oldEnvLocale;

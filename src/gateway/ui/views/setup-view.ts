@@ -13,18 +13,18 @@ export function renderSetupView(ctx: ShellRenderContext): string {
   const isCompanionReady = companionStatus === "installed_ready";
 
   const companionBadge = isCompanionReady
-    ? escapeHtml(messages.shellSetupCompanionReady || "Companion Installed & Ready")
-    : escapeHtml(messages.shellSetupCompanionUnknown || "Companion Not Detected");
+    ? escapeHtml(messages.shellSetupCompanionReady)
+    : escapeHtml(messages.shellSetupCompanionUnknown);
 
   const companionPillClass = isCompanionReady ? "status-pill status-ready" : "status-pill status-neutral";
 
   // Blocker C Corrective: Launch button remains safely disabled in Phase 2 across all states.
   // Never invokes an undefined function. Explains that companion bridge connects in Phase 3.
   const openButtonTitle = isCompanionReady
-    ? escapeHtml(messages.shellSetupCompanionConnectedNotice || "Setup Assistant companion bridge will be connected during Phase 3 cross-tranche integration.")
-    : escapeHtml(messages.shellSetupCompanionDisabledHint || "Setup Assistant companion bridge is not detected or not yet integrated.");
+    ? escapeHtml(messages.shellSetupCompanionConnectedNotice)
+    : escapeHtml(messages.shellSetupCompanionDisabledHint);
 
-  const openButtonHtml = `<button class="btn-primary" disabled aria-disabled="true" style="opacity:0.6; cursor:not-allowed;" title="${openButtonTitle}">${escapeHtml(messages.shellSetupCompanionLaunch || "🚀 Open Setup Assistant")}</button>`;
+  const openButtonHtml = `<button class="btn-primary" disabled aria-disabled="true" style="opacity:0.6; cursor:not-allowed;" title="${openButtonTitle}">${escapeHtml(messages.shellSetupCompanionLaunch)}</button>`;
 
   return `
     <section id="panel-setup" class="panel" aria-labelledby="heading-setup">
@@ -42,19 +42,19 @@ export function renderSetupView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- COMPANION APPLICATION STATUS (Blocker C Fix) -->
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaCompanion || "Setup Assistant Companion")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaCompanion)}">
         <div class="card-header">
-          <span class="card-label">${escapeHtml(messages.shellSetupCompanionTitle || "Setup Assistant Companion")}</span>
+          <span class="card-label">${escapeHtml(messages.shellSetupCompanionTitle)}</span>
           <span class="${companionPillClass}">${companionBadge}</span>
         </div>
         <div style="font-size:13px; color:var(--text-secondary); margin-bottom:var(--space-3);">
-          ${escapeHtml(messages.shellSetupCompanionDesc || "The standalone WinHelm Setup Assistant companion manages Windows service registration, prerequisites installation, and automated client configuration.")}
+          ${escapeHtml(messages.shellSetupCompanionDesc)}
         </div>
 
         <div style="display:flex; gap:var(--space-3); flex-wrap:wrap; align-items:center;">
           ${openButtonHtml}
           <button class="btn-secondary" onclick="checkInstallationHealth()">
-            ${escapeHtml(messages.shellSetupCompanionDiagnostics || "🔍 Run Diagnostics / Check Installation")}
+            ${escapeHtml(messages.shellSetupCompanionDiagnostics)}
           </button>
         </div>
 
@@ -66,7 +66,7 @@ export function renderSetupView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- GUIDED READINESS JOURNEY STEPS -->
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaWorkspace || "Workspace Folders Setup Step")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaWorkspace)}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:14px;">${escapeHtml(messages.setupStepWorkspace)}</strong>
           <span id="setupWorkspaceStatus" class="status-pill status-neutral">—</span>
@@ -77,7 +77,7 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaProfile || "Capability Profile Setup Step")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaProfile)}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:14px;">${escapeHtml(messages.setupStepProfile)}</strong>
           <span id="setupProfileStatus" class="status-pill status-neutral">—</span>
@@ -88,7 +88,7 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaApproval || "Approval Mode Setup Step")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaApproval)}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:14px;">${escapeHtml(messages.setupStepApproval)}</strong>
           <span id="setupApprovalStatus" class="status-pill status-neutral">—</span>
@@ -99,7 +99,7 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaClient || "Client Configuration Setup Step")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaClient)}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:14px;">${escapeHtml(messages.setupStepClient)}</strong>
         </div>
@@ -118,7 +118,7 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaObserve || "Connection Observation Setup Step")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaObserve)}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:14px;">${escapeHtml(messages.setupStepObserve)}</strong>
           <span id="setupSessionsStatus" class="status-pill status-neutral">—</span>
@@ -126,12 +126,12 @@ export function renderSetupView(ctx: ShellRenderContext): string {
         <div id="setupSessionsDetail" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaFirstAction || "First Safe Action Guidance")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaFirstAction)}">
         <div class="card-label">${escapeHtml(messages.setupStepFirstAction)}</div>
         <div style="font-size:13px; color:var(--text-secondary); margin-top:6px; line-height:1.6;">${escapeHtml(messages.setupFirstActionBody)}</div>
       </div>
 
-      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaOrientation || "Navigation Orientation")}">
+      <div class="card" style="margin-bottom:var(--space-4);" role="region" aria-label="${escapeHtml(messages.shellSetupAriaOrientation)}">
         <div class="card-label">${escapeHtml(messages.setupStepOrientation)}</div>
         <div style="font-size:13px; color:var(--text-secondary); margin-top:6px; line-height:1.6;">${escapeHtml(messages.setupOrientationBody)}</div>
         <div style="display:flex; gap:var(--space-2); margin-top:12px; flex-wrap:wrap;">

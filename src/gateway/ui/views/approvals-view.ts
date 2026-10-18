@@ -13,24 +13,24 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
   const isNativeReady = nativeStatus === "ready";
 
   const nativeStatusBadge = isNativeReady
-    ? escapeHtml(messages.shellApprovalsNativeReady || "Windows Native Notifications: Available & Active")
-    : escapeHtml(messages.shellApprovalsNativeUnavailable || "Windows Native Notifications: Not yet integrated");
+    ? escapeHtml(messages.shellApprovalsNativeReady)
+    : escapeHtml(messages.shellApprovalsNativeUnavailable);
 
   const nativeStatusDesc = isNativeReady
-    ? escapeHtml(messages.shellApprovalsNativeReadyDesc || "Approval prompts can be received as Windows desktop notifications.")
-    : escapeHtml(messages.shellApprovalsNativeUnavailableDesc || "Desktop notification integration is pending. Web Dashboard approvals remain your active, authoritative fallback.");
+    ? escapeHtml(messages.shellApprovalsNativeReadyDesc)
+    : escapeHtml(messages.shellApprovalsNativeUnavailableDesc);
 
   const nativeBannerClass = isNativeReady ? "banner banner-info" : "banner banner-info";
 
   return `
     <section id="panel-approvals" class="panel" aria-labelledby="heading-approvals">
       <div class="panel-header">
-        <h1 id="heading-approvals" class="panel-title">${escapeHtml(messages.approvalsTitle)} — ${escapeHtml(messages.shellApprovalsHeadingSuffix || "Approval Jobs")}</h1>
-        <p class="panel-desc">${escapeHtml(messages.approvalsOnce || "One-time action")} · ${escapeHtml(messages.approvalsNote || "Pending approvals are local-only.")}</p>
+        <h1 id="heading-approvals" class="panel-title">${escapeHtml(messages.approvalsTitle)} — ${escapeHtml(messages.shellApprovalsHeadingSuffix)}</h1>
+        <p class="panel-desc">${escapeHtml(messages.approvalsOnce)} · ${escapeHtml(messages.approvalsNote)}</p>
       </div>
 
       <!-- TRANCHE B: WINDOWS NATIVE NOTIFICATIONS STATUS (Blocker A Fix) -->
-      <div class="${nativeBannerClass}" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaNativeNotif || "Notification Integration")}">
+      <div class="${nativeBannerClass}" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaNativeNotif)}">
         <div class="banner-content">
           <span aria-hidden="true" style="font-size:18px;">${isNativeReady ? "🔔" : "ℹ️"}</span>
           <div>
@@ -43,27 +43,27 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
       </div>
 
       <!-- INBOX PENDING LIST -->
-      <div class="card" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaQueue || "Pending Approvals Queue")}">
+      <div class="card" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaQueue)}">
         <div class="card-header">
-          <span class="card-label">${escapeHtml(messages.shellApprovalsQueueTitle || "Active Queue")}</span>
-          <span id="approvalQueueCountPill" class="status-pill status-ready">${escapeHtml((messages.shellApprovalsCountPendingBadge || "{count} Pending").replace("{count}", "0"))}</span>
+          <span class="card-label">${escapeHtml(messages.shellApprovalsQueueTitle)}</span>
+          <span id="approvalQueueCountPill" class="status-pill status-ready">${escapeHtml(messages.shellApprovalsCountPendingBadge.replace("{count}", "0"))}</span>
         </div>
         <div id="approvalJobs" class="approval-jobs-container" aria-live="polite">
           <div style="text-align:center; padding:var(--space-6); color:var(--text-muted);">
             <div style="font-size:28px; margin-bottom:var(--space-2);">✓</div>
             <div style="font-size:var(--text-base); font-weight:600; color:var(--text-primary);">${escapeHtml(messages.approvalsEmpty)}</div>
-            <div style="font-size:var(--text-xs); margin-top:4px;">${escapeHtml(messages.shellApprovalsEmptySub || "When AI clients request sensitive or mutating actions, they will appear here.")}</div>
+            <div style="font-size:var(--text-xs); margin-top:4px;">${escapeHtml(messages.shellApprovalsEmptySub)}</div>
           </div>
         </div>
       </div>
 
       <!-- RECENT DECISIONS AUDIT -->
-      <div class="card" style="margin-top:var(--space-5);" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaHistory || "Recent Approval History")}">
+      <div class="card" style="margin-top:var(--space-5);" role="region" aria-label="${escapeHtml(messages.shellApprovalsAriaHistory)}">
         <div class="card-header">
-          <span class="card-label">${escapeHtml(messages.shellApprovalsHistoryTitle || "Recent Approval Decisions")}</span>
+          <span class="card-label">${escapeHtml(messages.shellApprovalsHistoryTitle)}</span>
         </div>
         <div id="approvalHistoryList" class="timeline-list">
-          <div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">${escapeHtml(messages.shellApprovalsHistoryEmpty || "No recent decisions recorded in this session.")}</div>
+          <div style="color:var(--text-muted); font-size:var(--text-xs); padding:var(--space-2);">${escapeHtml(messages.shellApprovalsHistoryEmpty)}</div>
         </div>
       </div>
     </section>

@@ -25,7 +25,7 @@ export function renderProductShell(ctx: ShellRenderContext): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(messages.title || "WinHelm Product Shell")}</title>
+  <title>${escapeHtml(messages.title)}</title>
   <style>
     ${getDesignTokensCss()}
   </style>
@@ -44,18 +44,18 @@ export function renderProductShell(ctx: ShellRenderContext): string {
 
     <div class="header-actions">
       <!-- ADMIN UNLOCK PILL -->
-      <div id="adminPill" class="admin-pill" onclick="handleAdminPillClick()" role="button" tabindex="0" title="${escapeHtml(messages.adminHint || "Click to unlock local admin privileges")}">
+      <div id="adminPill" class="admin-pill" onclick="handleAdminPillClick()" role="button" tabindex="0" title="${escapeHtml(messages.adminHint)}">
         <span class="status-dot yellow" id="adminDot"></span>
-        <span id="adminText">${escapeHtml(messages.adminLocked || "Admin Locked")}</span>
+        <span id="adminText">${escapeHtml(messages.adminLocked)}</span>
       </div>
 
       <!-- THEME TOGGLE -->
-      <button class="icon-btn" onclick="handleThemeChange(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')" title="${escapeHtml(messages.shellHeaderThemeToggleTitle || "Toggle Theme")}" aria-label="${escapeHtml(messages.shellHeaderThemeToggleAria || "Toggle visual theme")}">
+      <button class="icon-btn" onclick="handleThemeChange(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')" title="${escapeHtml(messages.shellHeaderThemeToggleTitle)}" aria-label="${escapeHtml(messages.shellHeaderThemeToggleAria)}">
         ☼
       </button>
 
       <!-- LANGUAGE SELECT -->
-      <button class="icon-btn" style="font-size:11px; font-weight:700;" onclick="handleLanguageChange('${locale === "en" ? "th" : "en"}')" title="${escapeHtml(messages.shellHeaderLangToggleTitle || "Switch Language")}" aria-label="${escapeHtml(messages.shellHeaderLangToggleAria || "Switch interface language")}">
+      <button class="icon-btn" style="font-size:11px; font-weight:700;" onclick="handleLanguageChange('${locale === "en" ? "th" : "en"}')" title="${escapeHtml(messages.shellHeaderLangToggleTitle)}" aria-label="${escapeHtml(messages.shellHeaderLangToggleAria)}">
         ${locale === "en" ? "TH" : "EN"}
       </button>
     </div>
@@ -64,7 +64,7 @@ export function renderProductShell(ctx: ShellRenderContext): string {
   <!-- APP BODY -->
   <div class="app-body">
     <!-- SEMANTIC NAVIGATION SIDEBAR -->
-    <nav class="sidebar" id="appSidebar" role="navigation" aria-label="${escapeHtml(messages.shellNavPrimaryAria || "Primary Navigation")}">
+    <nav class="sidebar" id="appSidebar" role="navigation" aria-label="${escapeHtml(messages.shellNavPrimaryAria)}">
       <div class="nav-group">
         <button class="nav-item active" data-tab="overview" onclick="showTab('overview')" aria-current="page">
           <div class="nav-item-left">
@@ -125,8 +125,8 @@ export function renderProductShell(ctx: ShellRenderContext): string {
       </div>
 
       <div class="sidebar-footer">
-        <a href="/dashboard" class="sidebar-external-link" title="${escapeHtml(messages.shellNavAdvancedMonitorTitle || "Open engineering dashboard for raw hardware metrics and tool registry")}">
-          <span>${escapeHtml(messages.shellNavAdvancedMonitor || "Advanced / Diagnostics ↗")}</span>
+        <a href="/dashboard" class="sidebar-external-link" title="${escapeHtml(messages.shellNavAdvancedMonitorTitle)}">
+          <span>${escapeHtml(messages.shellNavAdvancedMonitor)}</span>
         </a>
       </div>
     </nav>
@@ -148,27 +148,27 @@ export function renderProductShell(ctx: ShellRenderContext): string {
   <div id="adminModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h2 id="adminModalTitle" class="modal-title">${escapeHtml(messages.shellModalAdminTitle || messages.adminRequired || "Admin Authorization Required")}</h2>
-        <button class="icon-btn" onclick="closeAdminModal()" aria-label="${escapeHtml(messages.shellModalCloseAria || "Close dialog")}">✕</button>
+        <h2 id="adminModalTitle" class="modal-title">${escapeHtml(messages.shellModalAdminTitle)}</h2>
+        <button class="icon-btn" onclick="closeAdminModal()" aria-label="${escapeHtml(messages.shellModalCloseAria)}">✕</button>
       </div>
       <div class="modal-body">
         <p style="margin-bottom:var(--space-3);">
-          ${escapeHtml(messages.adminInstructions || "Run 'winhelm admin-code' in a local terminal, then enter the one-time code here.")}
+          ${escapeHtml(messages.adminInstructions)}
         </p>
         <div style="margin-bottom:var(--space-3);">
           <label for="adminCodeInput" style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">
-            ${escapeHtml(messages.shellModalAdminCodeLabel || messages.adminPlaceholder || "One-time admin code")}
+            ${escapeHtml(messages.shellModalAdminCodeLabel)}
           </label>
-          <input type="password" id="adminCodeInput" class="mandatory-confirm-input" style="max-width:100%; width:100%;" placeholder="${escapeHtml(messages.shellModalAdminCodePlaceholder || messages.adminPlaceholder || "Enter code")}" autocomplete="one-time-code" />
+          <input type="password" id="adminCodeInput" class="mandatory-confirm-input" style="max-width:100%; width:100%;" placeholder="${escapeHtml(messages.shellModalAdminCodePlaceholder)}" autocomplete="one-time-code" />
         </div>
         <div id="adminUnlockError" style="color:var(--status-offline-text); font-size:12px; margin-bottom:var(--space-2);"></div>
         <div style="font-size:11px; color:var(--text-muted); background:var(--bg-subtle); padding:var(--space-2); border-radius:4px;">
-          ${escapeHtml(messages.shellModalSecretWarning || "🔒 Never share or paste the admin code into an AI chat.")}
+          ${escapeHtml(messages.shellModalSecretWarning)}
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeAdminModal()">${escapeHtml(messages.shellModalCancel || "Cancel")}</button>
-        <button class="btn-approve" onclick="submitAdminCode()">${escapeHtml(messages.adminUnlock || "Unlock")}</button>
+        <button class="btn-secondary" onclick="closeAdminModal()">${escapeHtml(messages.shellModalCancel)}</button>
+        <button class="btn-approve" onclick="submitAdminCode()">${escapeHtml(messages.adminUnlock)}</button>
       </div>
     </div>
   </div>

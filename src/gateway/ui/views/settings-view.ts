@@ -14,17 +14,17 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
     <section id="panel-settings" class="panel" aria-labelledby="heading-settings">
       <div class="panel-header">
         <h1 id="heading-settings" class="panel-title">${escapeHtml(messages.settingsTitle)}</h1>
-        <p class="panel-desc">${escapeHtml(messages.shellSettingsDesc || "Everyday application preferences and presentation options.")}</p>
+        <p class="panel-desc">${escapeHtml(messages.shellSettingsDesc)}</p>
       </div>
 
       <div class="card-grid-2">
         <!-- LOCALIZATION PREFERENCES -->
-        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaLocale || "Localization Preferences")}">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaLocale)}">
           <div class="card-header">
             <span class="card-label">${escapeHtml(messages.settingsLanguage)}</span>
           </div>
           <div style="font-size:12px; color:var(--text-secondary); margin-bottom:var(--space-3);">
-            ${escapeHtml(messages.shellSettingsLangDesc || "Select interface language. Both English and Thai catalogs maintain 100% key parity.")}
+            ${escapeHtml(messages.shellSettingsLangDesc)}
           </div>
 
           <div style="margin-bottom:var(--space-3);">
@@ -36,47 +36,47 @@ export function renderSettingsView(ctx: ShellRenderContext): string {
         </div>
 
         <!-- THEME PREFERENCES -->
-        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaTheme || "Theme Preferences")}">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaTheme)}">
           <div class="card-header">
-            <span class="card-label">${escapeHtml(messages.shellSettingsThemeTitle || "Appearance & Theme")}</span>
+            <span class="card-label">${escapeHtml(messages.shellSettingsThemeTitle)}</span>
           </div>
           <div style="font-size:12px; color:var(--text-secondary); margin-bottom:var(--space-3);">
-            ${escapeHtml(messages.shellSettingsThemeDesc || "Choose visual theme or follow operating system preferences.")}
+            ${escapeHtml(messages.shellSettingsThemeDesc)}
           </div>
 
           <div style="margin-bottom:var(--space-3);">
             <select id="settingThemeSelect" style="width:100%; padding:8px;" onchange="handleThemeChange(this.value)">
-              <option value="system">${escapeHtml(messages.shellSettingsThemeSystem || "System Default (Auto)")}</option>
-              <option value="dark">${escapeHtml(messages.shellSettingsThemeDark || "Dark Theme")}</option>
-              <option value="light">${escapeHtml(messages.shellSettingsThemeLight || "Light Theme")}</option>
+              <option value="system">${escapeHtml(messages.shellSettingsThemeSystem)}</option>
+              <option value="dark">${escapeHtml(messages.shellSettingsThemeDark)}</option>
+              <option value="light">${escapeHtml(messages.shellSettingsThemeLight)}</option>
             </select>
           </div>
         </div>
 
         <!-- NOTIFICATION PREFERENCES -->
-        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaNotif || "Notification Preferences")}">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaNotif)}">
           <div class="card-header">
-            <span class="card-label">${escapeHtml(messages.shellSettingsNotifTitle || "Desktop Notifications")}</span>
+            <span class="card-label">${escapeHtml(messages.shellSettingsNotifTitle)}</span>
           </div>
           <div style="font-size:12px; color:var(--text-secondary); margin-bottom:var(--space-3);">
-            ${escapeHtml(messages.shellSettingsNotifDesc || "Toast notification delivery preferences.")}
+            ${escapeHtml(messages.shellSettingsNotifDesc)}
           </div>
 
           <div style="display:flex; flex-direction:column; gap:var(--space-2);">
             <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
               <input type="checkbox" id="settingToastToggle" checked />
-              <span>${escapeHtml(messages.shellSettingsNotifToast || "Show Windows Toast notification when approvals arrive")}</span>
+              <span>${escapeHtml(messages.shellSettingsNotifToast)}</span>
             </label>
           </div>
         </div>
 
         <!-- SECURITY SAFETY FLOOR NOTICE -->
-        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaFloor || "Security Safety Floor")}">
+        <div class="card" role="region" aria-label="${escapeHtml(messages.shellSettingsAriaFloor)}">
           <div class="card-header">
-            <span class="card-label">${escapeHtml(messages.shellSettingsContainmentTitle || "Security Containment Floor")}</span>
+            <span class="card-label">${escapeHtml(messages.shellSettingsContainmentTitle)}</span>
           </div>
           <div style="font-size:12px; color:var(--text-secondary);">
-            ${escapeHtml(messages.shellSettingsDangerNote || "All security parameters, Capability Profiles, and Bearer Tokens must be configured under Access & Security.")}
+            ${escapeHtml(messages.shellSettingsDangerNote)}
           </div>
         </div>
       </div>
