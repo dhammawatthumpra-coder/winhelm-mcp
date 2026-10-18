@@ -20,11 +20,17 @@ import type { GpuInfoResult, SystemInfo } from "../types/index.js";
 import { SERVER_VERSION } from "../utils/version.js";
 import { registerAdminRoutes } from "../admin/routes.js";
 import { getAdminAuthManager } from "../admin/runtime.js";
+import {
+  bindInternalListener,
+  type InternalPortSelection,
+} from "../runtime/internal-port.js";
 
 export interface ServerOptions {
   port: number;
   host: string;
   authToken?: string | null;
+  internalPortSelection?: InternalPortSelection;
+  preferredPort?: number;
 }
 
 export function safeCompare(a: string, b: string): boolean {
@@ -731,37 +737,41 @@ export function createServer(options: ServerOptions): {
   app.get("/sse", (req: Request, res: Response) => sseGateway.handleSseConnect(req, res));
   app.post("/message", (req: Request, res: Response) => sseGateway.handlePostMessage(req, res));
 
-  const start = (): Promise<Server> => {
-    return new Promise((resolve) => {
-      const server = app.listen(options.port, options.host, () => {
-        const boundAddress = server.address();
-        const effectivePort =
-          boundAddress && typeof boundAddress === "object"
-            ? boundAddress.port
-            : options.port;
-        configManager.setRuntimeEffectivePort(effectivePort);
-        configManager.startWatchingConfig();
+  const start = async (): Promise<Server> => {
+    const selection: InternalPortSelection =
+      options.internalPortSelection ?? {
+        mode: "fixed",
+        port: options.port,
+      };
 
-        const startupToken = configuredAuthToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
-        const monitorUrl = startupToken
-          ? `http://localhost:${effectivePort}/?exchange=${startupToken}`
-          : `http://localhost:${effectivePort}/`;
-
-        console.log(`\n======================================================`);
-        console.log(`  🚀 WinHelm MCP Server is running!`);
-        console.log(`======================================================`);
-        console.log(`  - Web Monitor:     ${monitorUrl}`);
-        if (startupToken) {
-          console.log(`    (One-time login link valid for 10 minutes)`);
-        }
-        console.log(`  - Streamable HTTP: http://${options.host}:${effectivePort}/mcp`);
-        console.log(`  - SSE Endpoint:    http://${options.host}:${effectivePort}/sse`);
-        console.log(`  - SSE Message:     http://${options.host}:${effectivePort}/message`);
-        console.log(`  - Health Check:    http://${options.host}:${effectivePort}/health`);
-        console.log(`======================================================\n`);
-        resolve(server);
-      });
+    const { server, port: effectivePort } = await bindInternalListener({
+      selection,
+      host: options.host,
+      preferredPort: options.preferredPort,
+      listen: (port, host) => app.listen(port, host),
     });
+
+    configManager.setRuntimeEffectivePort(effectivePort);
+    configManager.startWatchingConfig();
+
+    const startupToken = configuredAuthToken ? sessionManager.createExchangeToken(10 * 60 * 1000) : null;
+    const monitorUrl = startupToken
+      ? `http://localhost:${effectivePort}/?exchange=${startupToken}`
+      : `http://localhost:${effectivePort}/`;
+
+    console.log(`\n======================================================`);
+    console.log(`  🚀 WinHelm MCP Server is running!`);
+    console.log(`======================================================`);
+    console.log(`  - Web Monitor:     ${monitorUrl}`);
+    if (startupToken) {
+      console.log(`    (One-time login link valid for 10 minutes)`);
+    }
+    console.log(`  - Streamable HTTP: http://${options.host}:${effectivePort}/mcp`);
+    console.log(`  - SSE Endpoint:    http://${options.host}:${effectivePort}/sse`);
+    console.log(`  - SSE Message:     http://${options.host}:${effectivePort}/message`);
+    console.log(`  - Health Check:    http://${options.host}:${effectivePort}/health`);
+    console.log(`======================================================\n`);
+    return server;
   };
 
   const stop = async (server: Server): Promise<void> => {
