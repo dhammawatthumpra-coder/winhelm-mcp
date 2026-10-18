@@ -25,8 +25,9 @@ import {
   StrictFloat,
 } from "../../src/engine/json-strict.js";
 
-const CORPUS_PATH =
-  "D:/mcp/spike/fixtures/python-sorted-json-v1-conformance.jsonl";
+const CORPUS_PATH = path.resolve(
+  "test/fixtures/python-sorted-json-v1-conformance.jsonl"
+);
 const CORPUS_SHA256 =
   "9f61189b84a4698dab095cc4de073233b62fb7d8c08a1f8872313ed5cc87606c";
 

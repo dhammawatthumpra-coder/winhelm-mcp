@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BuildRoot = "D:\mcp\winhelm-native-build\m2a-nb2",
+    [string]$BuildRoot = "native/build",
     [ValidateSet("Release","Debug")]
     [string]$Configuration = "Release"
 )

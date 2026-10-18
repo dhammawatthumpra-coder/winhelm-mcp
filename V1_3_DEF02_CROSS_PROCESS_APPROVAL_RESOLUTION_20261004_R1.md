@@ -223,6 +223,6 @@ synchronization phase that only starts after adjudication.
 
 Rollback/evidence material retained: both client config backups, smoke-config
 backups, `~/.winhelm/approval-jobs.json.rc-smoke-archive-20261004.json`,
-`D:\mcp\_acl-recovery`, the pre-token-migration backup, and the GUI
+`<RECOVERY_ROOT>\_acl-recovery`, the pre-token-migration backup, and the GUI
 screenshots referenced by the GUI smoke report. Working tree has no
 uncommitted tracked changes.

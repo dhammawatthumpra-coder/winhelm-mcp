@@ -139,7 +139,7 @@ Enforce zero-mutation mode via `MCP_READ_ONLY=1`, `--read-only`, or config:
 
 ### 4. Path Boundaries & Full-Drive Support
 Supports strict sandboxing or full drive access:
-- Single paths: `D:\mcp`, `C:\Projects`
+- Single paths: `D:\Workspace`, `C:\Projects`
 - Full drives: `D:\`, `D:`, `D`
 
 ### 5. Persistent Daily File Logging & Audit Export
@@ -202,6 +202,6 @@ npm run build:exe          # Generates dist/winhelm.exe via Node SEA
 - `PORT`: Port to listen on (default `8788`)
 - `HOST`: Host address (default `0.0.0.0`)
 - `MCP_AUTH_TOKEN`: If set, requires `Authorization: Bearer <token>` for all requests
-- `MCP_ALLOWED_DIRECTORIES`: Comma-separated list of permitted paths (e.g. `D:\mcp,D:\`)
+- `MCP_ALLOWED_DIRECTORIES`: Comma-separated list of permitted paths (e.g. `D:\Workspace,C:\Projects`)
 - `MCP_BLOCKED_COMMANDS`: Comma-separated list of dangerous command substrings to deny
 - `MCP_READ_ONLY`: If `1` or `true`, enables strict read-only mode
