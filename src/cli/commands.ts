@@ -7,6 +7,10 @@ import {
   decideSharedApprovalJob,
   listSharedApprovalJobs,
 } from "./decision-cli.js";
+import {
+  executeNativeDecision,
+  parseApprovalProtocolUri,
+} from "../approval/decision-activator.js";
 
 export const CONTROL_CLI_COMMANDS = new Set([
   "status",
@@ -14,6 +18,7 @@ export const CONTROL_CLI_COMMANDS = new Set([
   "approve",
   "deny",
   "admin-code",
+  "approval-activate",
 ]);
 
 export interface ControlCliResult {
@@ -101,6 +106,64 @@ export async function runControlCliCommand(
           " (" +
           outcome.state +
           ")",
+      };
+    }
+
+    if (command === "approval-activate") {
+      let jobId: string | undefined;
+      let decision: "approved" | "denied" | undefined;
+
+      const rawArg = args[1] || "";
+      if (rawArg.startsWith("winhelm-approval:")) {
+        const parsed = parseApprovalProtocolUri(rawArg);
+        jobId = parsed.jobId;
+        decision = parsed.decision;
+      } else {
+        for (let i = 1; i < args.length; i++) {
+          if (args[i] === "--job" && args[i + 1]) {
+            jobId = args[++i];
+          } else if (args[i].startsWith("--job=")) {
+            jobId = args[i].slice(6);
+          } else if (args[i] === "--decision" && args[i + 1]) {
+            const d = args[++i];
+            if (d === "approved" || d === "denied") decision = d;
+          } else if (args[i].startsWith("--decision=")) {
+            const d = args[i].slice(11);
+            if (d === "approved" || d === "denied") decision = d;
+          } else if (!jobId && args[i].startsWith("job_")) {
+            jobId = args[i];
+          } else if (!decision && (args[i] === "approved" || args[i] === "denied")) {
+            decision = args[i] as "approved" | "denied";
+          }
+        }
+      }
+
+      if (!jobId || !decision) {
+        return {
+          handled: true,
+          exitCode: 2,
+          error:
+            "Usage: winhelm approval-activate --job <jobId> --decision <approved|denied> OR winhelm approval-activate <protocol-uri>",
+        };
+      }
+
+      const outcome = await executeNativeDecision(jobId, decision, {
+        channel: "native_toast",
+        notifyOutcome: false,
+      });
+
+      if (!outcome.ok) {
+        return {
+          handled: true,
+          exitCode: 1,
+          error: outcome.message || outcome.code || "Activation failed",
+        };
+      }
+
+      return {
+        handled: true,
+        exitCode: 0,
+        output: `${decision === "approved" ? "Approved" : "Denied"} ${jobId} (${outcome.state})`,
       };
     }
 

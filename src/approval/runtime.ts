@@ -5,6 +5,7 @@ import {
   type RecoverableApprovalJob,
 } from "./approval-engine.js";
 import { notifyApprovalPending } from "./notify.js";
+import { issueDecisionCapability } from "./decision-capability.js";
 import {
   logApprovalDecision,
   type ApprovalDecision,
@@ -137,20 +138,23 @@ export function initializeApprovalPersistence(
       mirrorJob?.(job);
     },
     journalIntegrityFailed: loaded.integrityFailure !== null,
-    ...(options.notifyApprovals
-      ? {
-          onCreated: (job: ApprovalJob) => {
-            if (options.notifier) {
-              options.notifier(job);
-            } else {
-              const meta = options.requestMetaProvider
-                ? options.requestMetaProvider(job)
-                : undefined;
-              void notifyApprovalPending(job, { meta });
-            }
-          },
+    onCreated: (job: ApprovalJob) => {
+      try {
+        issueDecisionCapability(job, journalPath);
+      } catch {
+        // Advisory capability write; fails closed if unreadable later
+      }
+      if (options.notifyApprovals) {
+        if (options.notifier) {
+          options.notifier(job);
+        } else {
+          const meta = options.requestMetaProvider
+            ? options.requestMetaProvider(job)
+            : undefined;
+          void notifyApprovalPending(job, { meta });
         }
-      : {}),
+      }
+    },
     ...(options.auditDecisions
       ? {
           onDecision: (
