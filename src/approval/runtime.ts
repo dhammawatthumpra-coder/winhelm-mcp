@@ -140,7 +140,14 @@ export function initializeApprovalPersistence(
     ...(options.notifyApprovals
       ? {
           onCreated: (job: ApprovalJob) => {
-            (options.notifier ?? notifyApprovalPending)(job);
+            if (options.notifier) {
+              options.notifier(job);
+            } else {
+              const meta = options.requestMetaProvider
+                ? options.requestMetaProvider(job)
+                : undefined;
+              void notifyApprovalPending(job, { meta });
+            }
           },
         }
       : {}),
