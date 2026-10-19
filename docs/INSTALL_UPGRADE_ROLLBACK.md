@@ -1,6 +1,6 @@
-# WinHelm v1.4.0 — Install, Upgrade, and Rollback Guide
+# WinHelm v1.4.1 — Install, Upgrade, and Rollback Guide
 
-Status: `FINAL_RC__PUBLISH_PENDING_OWNER_AUTHORIZATION`
+Status: `RELEASE_CANDIDATE__PUBLISH_AND_PRODUCTION_CUTOVER_GATED`
 
 ## 1. Requirements
 
@@ -20,7 +20,7 @@ npm run build
 npm test
 ```
 
-Until the Owner authorizes publication, install from the exact Final RC artifact/commit recorded in the release report rather than assuming a public `v1.4.0` tag exists.
+Until the Owner authorizes publication, install from the exact accepted v1.4.1 candidate/artifact recorded in the release evidence rather than assuming a public `v1.4.1` tag exists.
 
 ## 3. Initial configuration
 
@@ -64,9 +64,11 @@ Copy-Item "$HOME\.winhelm" "$HOME\.winhelm.backup-pre-v1.4" -Recurse
 
 If migrating a legacy config, use the product's migration/setup path and review the resulting Schema-v2 profile/folder/approval settings before activation.
 
-Key behavioral change:
+Key behavioral rules:
 - v1.4 product profiles and Approval Modes are distinct dimensions.
 - Approval Mode cannot expand profile/capability authority.
+- Existing fixed internal topology remains fixed unless an explicit migration is authorized; do not silently switch Fixed -> Automatic.
+- Native Approval integration derives ownership from exact live Registry/Shortcut state; persisted receipt history is advisory and cannot authorize destructive mutation.
 
 ## 6. RC upgrade checklist
 
@@ -110,12 +112,14 @@ A Core rollback must not silently modify:
 
 Any R7 replacement/rollback requires its own accepted plan.
 
-## 9. v1.4.0 exclusions
+## 9. v1.4.1 exclusions and gated actions
 
-Do not install/enable D1 live mode as part of v1.4.0.
+Do not install/enable D1 live mode as part of active v1.4.1 production scope. Port 18791 remains excluded unless separately re-adjudicated.
 
-D1 port 18791 is deferred and should remain absent.
+The standalone Setup Assistant companion remains unavailable and must not be treated as an installed executable.
+
+Do not perform a live active-backend marker switch until the marker guarded-commit primitive is separately qualified. Production adoption is Fixed-first; no silent Fixed -> Automatic migration is allowed.
 
 ## 10. Final artifact identity
 
-The consolidated Final RC report records the exact release commit candidate, npm tarball filename/size/SHA-256, and rollback parent. The prospective public tag is `v1.4.0`; do not push/create the final external tag or publish npm until explicit Owner authorization.
+Final release evidence must record the exact accepted release commit, npm tarball filename/size/SHA-256, and rollback parent. The prospective public tag is `v1.4.1`; do not push/create the external tag or publish npm until explicit Owner authorization.

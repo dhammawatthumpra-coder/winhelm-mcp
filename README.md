@@ -14,11 +14,11 @@
 
 ---
 
-## Product Status: v1.4.0 Final Release Candidate
+## Product Status: v1.4.1 Release Candidate — Final Production Gates Pending
 
-This repository contains the **WinHelm v1.4.0 Final RC**: the accepted 56-tool Schema-v2 integration lineage plus the independently reviewed Local-Control Registry R2 corrective. Final build/test/package qualification is part of the RC freeze; external tag push and npm publication remain subject to explicit Owner authorization.
+This repository contains the accepted/frozen **WinHelm v1.4.1 source candidate**: the 56-tool Schema-v2 runtime, Dynamic Internal Ports, Native Approval UX with live-state-authoritative installer integration, refreshed Product Dashboard, and authoritative operational adapters. Package/runtime identity is `1.4.1`. Public publication and live production cutover remain separate gated actions.
 
-The accepted R8 public-ingress posture is conservative by default: the Windows ingress service is Manual, the public route is inactive until explicitly activated, and D1 live mode/port 18791 is not shipped as active v1.4.0 functionality.
+The accepted R8 public-ingress posture remains conservative by default: the Windows ingress service is Manual, the public route is inactive until explicitly activated, and D1 live mode/port 18791 is not part of active v1.4.1 production scope. The standalone Setup Assistant companion is not yet shipped and its Dashboard launch action remains unavailable/disabled.
 
 ---
 
@@ -65,11 +65,12 @@ The accepted R8 public-ingress posture is conservative by default: the Windows i
 ## Key Features
 
 1. **All-in-One Gateway & Web Monitor:**
-   - **Streamable HTTP:** `http://<HOST>:8788/mcp` (Modern MCP standard)
-   - **SSE Stream & POST:** `http://<HOST>:8788/sse` and `/message`
-   - **Web Monitor & Approval Dashboard:** `http://<HOST>:8788/` (Interactive metrics, pending approvals, sessions, drives, memory, GPU, and live audit logs)
-   - **Interactive File Viewer:** `http://<HOST>:8788/preview?path=...` (Rich Markdown & code viewer with syntax formatting)
-   - **Health Check:** `http://<HOST>:8788/health`
+   - **Streamable HTTP:** `http://<HOST>:<PORT>/mcp` (Modern MCP standard)
+   - **SSE Stream & POST:** `http://<HOST>:<PORT>/sse` and `/message`
+   - **Web Monitor & Approval Dashboard:** `http://<HOST>:<PORT>/` (Interactive metrics, pending approvals, sessions, drives, memory, GPU, and live audit logs)
+   - **Interactive File Viewer:** `http://<HOST>:<PORT>/preview?path=...` (Rich Markdown & code viewer with syntax formatting)
+   - **Health Check:** `http://<HOST>:<PORT>/health`
+   - **Port behavior:** v1.4.1 supports OS-selected internal ports for clean/automatic topology while existing fixed deployments remain fixed unless explicitly migrated; fixed `8788` remains a supported compatibility configuration.
 2. **Schema-v2 Governance & Human Approvals:**
    - Granular folder scoping (`read`, `readwrite`) preventing unauthorized filesystem traversal.
    - Terminal policies (`off`, `ask`, `full`) and risk classifications (R0 to R5).
@@ -118,7 +119,7 @@ flowchart TD
         AdminCode["admin-code-store.json (Digest Store)"]
     end
 
-    subgraph Gateway["WinHelm Web Gateway & Dashboard (Port 8788)"]
+    subgraph Gateway["WinHelm Web Gateway & Dashboard (Resolved Local Port)"]
         Dashboard["Web Dashboard (/admin/approvals, /dashboard)"]
         HTTPGateway["Streamable HTTP (/mcp) & SSE (/sse)"]
         DecisionPlane["Decision Plane (Approves / Denies foreign & local jobs)"]
@@ -165,7 +166,7 @@ winhelm setup --migrate-legacy --folder "D:\Workspace" --yes
 ### 2. Starting WinHelm
 
 ```powershell
-# Start HTTP/SSE gateway and Web Dashboard on port 8788
+# Start HTTP/SSE gateway and Web Dashboard using the configured/resolved local port
 npm start
 # or:
 winhelm
@@ -201,13 +202,13 @@ winhelm connect all --yes
 
 ### 4. Dashboard & Human Approvals
 
-The WinHelm Web Dashboard at `http://127.0.0.1:8788/` allows monitoring system health and reviewing pending tool approval jobs:
+The WinHelm Web Dashboard is served on the active local gateway endpoint. Existing fixed-port installations commonly use `http://127.0.0.1:8788/`; automatic-topology installs resolve the current verified local endpoint at runtime.
 
 1. Request a single-use local admin code from your interactive terminal:
    ```powershell
    winhelm admin-code
    ```
-2. Open `http://127.0.0.1:8788/` in your browser and enter the admin code when prompted.
+2. Open the active local Dashboard endpoint (for example `http://127.0.0.1:8788/` on an unchanged fixed-port install) and enter the admin code when prompted.
 3. Review pending cross-process approvals initiated by Claude Desktop or Cursor, inspecting client identity, tool name, risk level, folder access, and parameter diffs.
 4. Click **Approve** or **Deny**. The Dashboard records the decision, and the owning process executes the action.
 5. Alternatively, inspect and decide jobs directly from the terminal:
@@ -248,14 +249,14 @@ In schema-v2, profiles represent policy presets that configure folder permission
 | **`balanced`** (Recommended) | `readwrite` | `ask` (approval required) | R0/R1 `auto`; R2/R3/R4 `ask` (approval); shell execution gated by terminal policy | Daily interactive engineering with human approval for elevated actions |
 | **`power`** | `readwrite` | `full` (autonomous) | R0/R1/R2 `auto`; R3/R4 `ask`; terminal & command execution `auto` | Trusted automated agent pipelines requiring unrestricted shell workflows |
 
-> ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not shipped** in v1.4.0. Safe / Balanced / Power remain the supported product profiles, with Manual / Smart / Trusted as a separate Approval Mode dimension.
+> ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not shipped** in v1.4.1. Safe / Balanced / Power remain the supported product profiles, with Manual / Smart / Trusted as a separate Approval Mode dimension.
 > 💡 **Legacy Presets:** Named presets (`minimal`, `core`, `dev`, `sysadmin`, `full`) remain supported in schema-v2 as compatibility presets that map to specific tool policy subsets.
 
 ---
 
 ## Canonical Tool Registry (56 Tools)
 
-WinHelm v1.4.0 defines **56 canonical public tools** in its single source of truth registry (`src/tools/registry.ts`), validated via `npm run lint:tools`:
+WinHelm v1.4.1 defines **56 canonical public tools** in its single source of truth registry (`src/tools/registry.ts`), validated via `npm run lint:tools`:
 
 - **38 legacy tools** across terminal/background tasks, filesystem/search/document, desktop, system/services, and network diagnostics.
 - **3 Schema-v2 execution/recovery tools:** `command_run`, `winhelm_status`, and `winhelm_job_status`.
@@ -264,8 +265,8 @@ WinHelm v1.4.0 defines **56 canonical public tools** in its single source of tru
 
 ### Runtime exposure
 
-- **Legacy configuration compatibility:** the historical legacy surface remains bounded for compatibility and does not define the v1.4.0 public release count.
-- **Schema-v2 v1.4.0:** all **56** canonical public tools are registered; profile/capability policy and Approval Mode are evaluated at call time.
+- **Legacy configuration compatibility:** the historical legacy surface remains bounded for compatibility and does not define the v1.4.1 public release count.
+- **Schema-v2 v1.4.1:** all **56** canonical public tools are registered; profile/capability policy and Approval Mode are evaluated at call time.
 - Capability denial, absolute deny, and mandatory/explicit confirmation remain stronger than Manual / Smart / Trusted Approval Mode.
 
 ---
@@ -275,7 +276,7 @@ WinHelm v1.4.0 defines **56 canonical public tools** in its single source of tru
 WinHelm v1.3 introduces a robust cross-process approval architecture (post DEF-02):
 
 1. **Separation of Concerns:**
-   - **Decision Plane:** The local Web Dashboard (`http://127.0.0.1:8788/`) or local CLI (`winhelm approve/deny`).
+   - **Decision Plane:** The local Web Dashboard on the verified active endpoint or local CLI (`winhelm approve/deny`).
    - **Execution Plane:** The **owning WinHelm process** (e.g. the stdio process spawned by Claude Desktop or Cursor). The Dashboard never executes tool actions directly.
 2. **Durable Per-Job Mirroring:**
    - On approval gating, the owning process durably persists the request to `~/.winhelm/approval-requests/<jobId>.json` along with sanitized display metadata (`clientInfo`, `risk`, `folderAccess`, `expiresAt`).
@@ -340,7 +341,7 @@ mcp:
 winhelm --host 0.0.0.0 --auth my-secret-token
 ```
 
-- **Endpoint:** `http://<TAILSCALE_IP>:8788/mcp`
+- **Endpoint:** `http://<TAILSCALE_IP>:<PORT>/mcp` for a direct configured listener; the accepted hosted/public R8 route uses HTTPS/443 when explicitly active.
 - **Header:** `Authorization: Bearer my-secret-token`
 - **Host Safety Gate:** WinHelm enforces a fail-closed startup check that terminates immediately if bound to a non-loopback host without an authentication token.
 
@@ -359,7 +360,7 @@ winhelm --host 0.0.0.0 --auth my-secret-token
 - **`/sse`** — Server-Sent Events transport endpoint.
 - **`/message`** — POST endpoint for incoming JSON-RPC messages in SSE mode.
 - **`/preview`** — Interactive browser file viewer (`/preview?path=D:\project\README.md`).
-- **`/health`** — Health check probe (`{"status": "ok", "version": "1.4.0"}`).
+- **`/health`** — Health check probe (`{"status": "ok", "version": "1.4.1"}`).
 - **`/admin/approvals`** — Admin approvals list and decision API.
 
 ---
@@ -391,17 +392,19 @@ Run standalone executable:
 
 ## Known Limitations & Deferred Items
 
-The following features are intentionally out of scope for v1.3 and deferred to v1.4:
-- **Dangerous Mode:** Unrestricted mode is disabled/reserved.
-- **Full Dashboard i18n:** Partial localization exists; comprehensive Thai/English translation is scheduled for v1.4.
-- **System Tray Application (Tauri):** Scheduled for v1.4; v1.3 uses Web Dashboard and Windows Toast notifications.
-- **`.mcpb` Bundle Packaging:** Scheduled for v1.4.
+The following items remain deferred or separately gated for v1.4.1:
+- **Dangerous Mode:** Unrestricted mode remains disabled/reserved.
+- **Standalone Setup Assistant:** the companion executable is not yet shipped; the Dashboard launch action remains unavailable/disabled.
+- **System Tray Application:** richer tray/desktop lifecycle controls remain deferred.
+- **MCP Harbor:** remains a separate future MCP control-plane/gateway product.
+- **Production cutover:** remains blocked until the marker guarded-commit primitive is separately qualified.
+- **Public publication:** npm/tag/GitHub release remains subject to explicit Owner authorization after all release gates close.
 
 ---
 
 ## Documentation & Deep Dive
 
-- 📖 **[Tools Reference](docs/TOOLS.md)**: Full parameter specifications for all 41 tools.
+- 📖 **[Tools Reference](docs/TOOLS.md)**: Full parameter specifications for all 56 canonical public tools.
 - ⚙️ **[Tool Profiles](docs/PROFILES.md)**: Safe, Balanced, Power profiles and legacy preset mapping.
 - 🛡️ **[Security Architecture](docs/SECURITY.md)**: Permissions model, approval lifecycle, and cross-process architecture.
 - 🎯 **[Threat Model](docs/THREAT_MODEL.md)**: STRIDE analysis and trust boundary diagrams.

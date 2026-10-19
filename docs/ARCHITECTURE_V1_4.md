@@ -1,6 +1,6 @@
-# WinHelm v1.4.0 — Architecture Overview
+# WinHelm v1.4.1 — Architecture Overview
 
-Status: `FINAL_RC`
+Status: `RELEASE_CANDIDATE__PRODUCTION_CUTOVER_GATED`
 
 ## Layers
 
@@ -64,15 +64,26 @@ Decision and execution are separated:
 - the owning process executes the approved work;
 - ambiguous/recovered side effects are not blindly replayed.
 
+## v1.4.1 operational UX integration
+
+The v1.4.1 source candidate adds three accepted product-facing capabilities without collapsing their authority boundaries:
+- **Dynamic Internal Ports:** clean/automatic topology may use OS-selected internal listeners; existing fixed deployments remain fixed unless explicitly migrated.
+- **Native Approval UX:** Windows toast activation reaches the existing approval decision plane; installer ownership decisions come from exact live Registry/Shortcut state, not receipt history.
+- **Product Dashboard:** displays factual runtime/approval/setup state through authoritative adapters; the standalone Setup Assistant companion remains unavailable/disabled.
+
 ## R7 / R8 public ingress
 
-R7 is the hosted/public compatibility layer; the accepted v1.4.0 production edge is the qualified R8 TLS/service posture. It remains a separate deployment/security boundary from Core so client/OAuth compatibility work does not require mutating the Core runtime. The service is Manual and the public route is inactive by default.
+R7 is the hosted/public compatibility layer; the accepted production edge remains the qualified R8 TLS/service posture. It stays a separate deployment/security boundary from Core so client/OAuth compatibility work does not require mutating the Core runtime. The service is Manual and the public route is inactive by default; the public protocol identity remains HTTPS/443 when explicitly active.
+
+## Production adoption and marker authority
+
+The v1.4.1 source candidate is not equivalent to a completed production cutover. Initial adoption is Fixed-first. Switching the active-backend marker remains blocked until a separately qualified guarded-commit primitive can protect expected-current authority through commit without silently overwriting an external writer.
 
 ## D1
 
-D1 is not part of v1.4.0 active architecture.
+D1 is not part of active v1.4.1 production architecture.
 
-Its live-mode/cutover work is deferred pending stronger lifetime provenance.
+Port 18791 remains excluded unless a separate accepted design and cutover decision changes that boundary.
 
 ## Future MCP Harbor
 

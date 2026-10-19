@@ -1,6 +1,6 @@
-# WinHelm v1.4.0 — Clients, R7, and Connectivity
+# WinHelm v1.4.1 — Clients, R7, and Connectivity
 
-Status: `FINAL_RC`
+Status: `RELEASE_CANDIDATE__PRODUCTION_CUTOVER_GATED`
 
 ## Local clients
 
@@ -37,7 +37,7 @@ Notion compatibility is accepted in the R7 production lineage.
 
 ### Gemini
 
-Gemini Static OAuth is **release-qualified for v1.4.0**. The actual Gemini UI/client consumed the OAuth metadata, completed browser authorization and confidential-client token exchange, saved the WinHelm custom MCP connector, displayed all 56 actions, and executed a real read-only `system_info` call through authenticated MCP.
+Gemini Static OAuth remains **release-qualified in the v1.4.1 lineage**. The actual Gemini UI/client consumed the OAuth metadata, completed browser authorization and confidential-client token exchange, saved the WinHelm custom MCP connector, displayed all 56 actions, and executed a real read-only `system_info` call through authenticated MCP.
 
 ## Gemini credential and route rule
 
@@ -45,9 +45,9 @@ The accepted static OAuth identity and admitted Gemini registration are retained
 
 ## Production route policy
 
-Public hostnames and internal loopback ports remain deployment-specific rather than API guarantees. v1.4.0 fixes the public protocol expectation at HTTPS/443 when the accepted R8 route is explicitly active; internal port redesign remains deferred.
+Public hostnames and internal loopback ports remain deployment-specific rather than API guarantees. v1.4.1 preserves the public protocol expectation at HTTPS/443 when the accepted R8 route is explicitly active. Dynamic Internal Port capability is accepted for clean/automatic internal topology, while existing fixed deployments remain fixed unless explicitly migrated.
 
-Do not use D1 port 18791 in v1.4.0 connectivity guidance.
+Do not use D1 port 18791 in active v1.4.1 connectivity guidance. The standalone Setup Assistant companion is not a supported connection path yet.
 
 ## Failure isolation
 

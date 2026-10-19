@@ -10,8 +10,8 @@ Only the latest minor release is actively maintained and receives security patch
 
 | Version | Supported          | Security Status |
 | ------- | ------------------ | --------------- |
-| 1.4.x   | :white_check_mark: | Active Support after v1.4.0 publication |
-| 1.2.x   | :x:                | Superseded by v1.4.0 |
+| 1.4.x   | :white_check_mark: | Active support; current release candidate is v1.4.1 |
+| 1.2.x   | :x:                | Superseded by the v1.4.x line |
 | 1.1.x   | :x:                | End of Life     |
 | 1.0.x   | :x:                | End of Life     |
 
@@ -42,9 +42,9 @@ For in-depth architectural details, please refer to:
 - [Security Architecture & Guidelines](docs/SECURITY.md) — Detailed explanation of multi-layered controls, path confinement, and credential masking.
 - [Terms of Use & Shared Responsibility](TERMS_OF_USE.md) — Clarification of administrator responsibilities and software limitations.
 
-## v1.4.0 Security Posture
+## v1.4.1 Security Posture
 
-WinHelm v1.4.0 uses layered authorization. Capability/profile and protected-boundary checks happen before Approval Mode. Manual / Smart / Trusted can change prompting for an already-permitted action, but cannot turn a denied capability into an allowed one.
+WinHelm v1.4.1 uses layered authorization. Capability/profile and protected-boundary checks happen before Approval Mode. Manual / Smart / Trusted can change prompting for an already-permitted action, but cannot turn a denied capability into an allowed one.
 
 Non-bypassable release floors include:
 - absolute-deny/preflight checks before approval/job creation;
@@ -55,9 +55,13 @@ Non-bypassable release floors include:
 
 The direct production dependency `@modelcontextprotocol/sdk` is pinned to the patched v1.32.x line in this RC; release qualification requires `npm audit --omit=dev` to report zero known production vulnerabilities.
 
-**D1 live mode is not shipped as active v1.4.0 functionality.** Port 18791 remains disabled because the deferred D1 design requires stronger process-lifetime provenance than mutable timestamp metadata can provide.
+**D1 live mode is not part of active v1.4.1 production scope.** Port 18791 remains excluded unless a separate accepted design and cutover decision changes that boundary.
 
-The accepted R8 public-ingress service is Manual and its public route is inactive by default; exposure is explicitly activated rather than left permanently open.
+The accepted R8 public-ingress service remains Manual and its public route is inactive by default; exposure is explicitly activated rather than left permanently open.
+
+Native Approval installer ownership is derived from exact live Registry/Shortcut state. Persisted installer receipts are advisory metadata and cannot authorize destructive repair/uninstall. Approval activation tokens are transient and must not be persisted in plaintext.
+
+Live production cutover remains blocked until the active-backend marker can be changed through a separately qualified guarded-commit primitive that protects expected-current authority through commit.
 
 ---
 

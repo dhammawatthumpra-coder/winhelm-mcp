@@ -1,6 +1,6 @@
-# WinHelm v1.4.0 — Daily Operations Guide
+# WinHelm v1.4.1 — Daily Operations Guide
 
-Status: `FINAL_RC`
+Status: `RELEASE_CANDIDATE__PRODUCTION_CUTOVER_GATED`
 
 ## Recommended daily posture
 
@@ -15,7 +15,7 @@ For normal interactive engineering:
 
 ## Starting WinHelm
 
-Use the installed launcher for Core/stdio operation. Public R8 ingress is a separate boundary: its Windows service is Manual and its public route is inactive by default. Installation-specific owner paths are not public API guarantees.
+Use the installed launcher for Core/stdio operation. Resolve the active local endpoint from verified runtime state rather than assuming a universal internal port; existing fixed installations remain fixed unless explicitly migrated. Public R8 ingress is a separate boundary: its Windows service is Manual and its public route is inactive by default. Installation-specific owner paths are not public API guarantees.
 
 ## First health checks
 
@@ -60,7 +60,7 @@ For ordinary work:
 - confirm that the operation is not under a mandatory-confirmation floor;
 - do not weaken profile/capability policy just to suppress prompts.
 
-Windows toast/batch approval UX is planned for v1.4.1+.
+v1.4.1 includes Native Approval toast activation for routine approval flow. CLI/dashboard approval remains available as a fallback; capability denial and mandatory/explicit-confirmation floors remain stronger than Approval Mode.
 
 ## Public ingress
 
@@ -85,9 +85,13 @@ When sharing diagnostics:
 - avoid raw OAuth secrets;
 - prefer hashes, counts, statuses, and redaction-safe identities.
 
-## D1 in v1.4.0
+## D1 in v1.4.1
 
-D1 live mode is disabled/deferred. Do not bind/use port 18791 as part of routine v1.4.0 operation.
+D1 live mode/port 18791 remains outside active production scope. Do not treat its absence as an operational failure.
+
+## Production-adoption boundary
+
+The v1.4.1 source candidate supports Dynamic Internal Ports, but initial production adoption remains Fixed-first. Do not silently migrate an existing fixed installation to automatic topology. A live active-backend marker switch remains blocked until the guarded-commit primitive is separately qualified.
 
 ## End-of-day state
 

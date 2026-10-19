@@ -60,11 +60,11 @@ Designed for trusted automation scripts and end-to-end development workflows whe
   - **Recovery tools:** `auto`.
 
 ### Unrestricted `dangerous` mode
-> ⚠️ **Notice:** An unrestricted `dangerous` profile is **not shipped** in v1.4.0. Safe / Balanced / Power are the supported product profiles.
+> ⚠️ **Notice:** An unrestricted `dangerous` profile is **not shipped** in v1.4.1. Safe / Balanced / Power are the supported product profiles.
 
 ## Approval Modes are separate from profiles
 
-Schema-v2 v1.4.0 separates capability posture from prompting behavior:
+Schema-v2 v1.4.1 separates capability posture from prompting behavior:
 
 - **Manual** — R0 read-only/recovery work can run automatically; permitted state-changing work normally asks.
 - **Smart** — the default for product profiles; bounded low-risk work can proceed automatically while higher-risk work asks.

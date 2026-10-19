@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-10-20 — Release candidate, publication pending final gates
+
+### Added
+- Added Dynamic Internal Port capability for clean/automatic topology while preserving existing fixed deployments unless explicitly migrated.
+- Added Native Approval UX with Windows toast activation and a live-current-state-authoritative installer integration; persisted installer receipts are advisory rather than destructive-ownership authority.
+- Added the refreshed Product Dashboard and authoritative operational adapters for truthful Dynamic Port, Native Approval, and Setup Assistant status presentation.
+
+### Changed
+- Synchronized WinHelm product/package/runtime identity at `1.4.1`.
+- Preserved the canonical public MCP surface at **56 tools**.
+- Production-adoption planning uses a **Fixed-first** strategy; source support for automatic topology does not silently migrate an existing fixed production installation.
+
+### Security
+- Preserves Absolute Deny, Mandatory/Explicit Confirmation, protected-path, OAuth/TLS, and redaction floors.
+- Native Approval activation tokens remain transient and are not persisted as plaintext.
+- Native Approval uninstall/repair authorization is derived from exact live Registry/Shortcut state; receipt history cannot authorize destructive mutation.
+- Live production cutover remains blocked until the marker guarded-commit primitive is separately qualified.
+
+### Deferred / gated
+- The standalone Setup Assistant companion remains unavailable; the Dashboard launch action is disabled.
+- D1 port 18791 remains outside active production scope.
+- MCP Harbor remains a separate future product.
+- External tag creation, npm publication, GitHub release, and production cutover require separate final Owner authorization.
+
 ## [1.4.0] - 2026-10-18 — Final RC, publication pending Owner authorization
 
 ### Added

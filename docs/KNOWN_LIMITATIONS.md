@@ -1,71 +1,69 @@
-# WinHelm v1.4.0 — Known Limitations and Deferred Items
+# WinHelm v1.4.1 — Known Limitations and Deferred Items
 
-Status: `FINAL_RC__SHIP_WITH_V1_4_0`
+Status: `RELEASE_CANDIDATE__PRODUCTION_CUTOVER_GATED`
 
-This file intentionally documents items that are **not** release blockers because they are disabled, deferred, or UX improvements rather than unsafe active functionality.
+This file documents items that remain disabled, separately gated, or deferred in the accepted v1.4.1 source candidate.
 
-## 1. D1 live mode — deferred to v1.4.1+
+## 1. D1 live mode / port 18791
 
-D1 live-mode materialization and production cutover are not part of v1.4.0 active scope.
+D1 live mode and port 18791 remain outside active v1.4.1 production scope. Their absence is intentional and is not an operational error.
 
-Reason:
-Fresh independent review found that mutable `createdAt` metadata could be backdated by an in-scope same-user writer and cause a current wrong-root process/pointer to be treated as stale PID-reuse history.
+Any future D1 activation requires a separate accepted design and cutover decision.
 
-v1.4.0 policy:
-- D1 is disabled/not active;
-- port 18791 remains absent;
-- no D1 live cutover is performed.
+## 2. Native Approval UX
 
-Follow-up:
-v1.4.1 should redesign lifetime provenance rather than add another timestamp heuristic.
+v1.4.1 closes the prior lack of Windows toast approval. Native Approval toast activation is accepted, and the installer uses exact live Registry/Shortcut state as the authority for repair/uninstall decisions.
 
-## 2. Approval UX
+Persisted installer receipts are advisory metadata only. They cannot authorize destructive mutation or restore arbitrary historical commands.
 
-Current approval workflows are safe but can be cumbersome for frequent daily use.
+CLI and Web Dashboard approval remain supported fallback paths.
 
-v1.4.0 retains:
-- web dashboard approval;
-- CLI approve/deny;
-- single-use local admin-code flow for privileged dashboard actions.
+## 3. Standalone Setup Assistant
 
-Deferred:
-- Windows toast approval;
-- approve/deny from notification;
-- bounded batch/session approval;
-- smoother desktop-native flow.
+The standalone Setup Assistant companion executable is not yet shipped. Product Dashboard status must report it as unavailable and its launch action remains disabled.
 
-Target: v1.4.1+.
+## 4. Marker guarded-commit prerequisite
 
-## 3. Tray / desktop UX
+Live production cutover remains blocked until the active-backend marker can be changed with a separately qualified guarded-commit primitive that protects expected-current authority through commit without silently overwriting an external writer.
 
-Native tray and richer desktop lifecycle controls are deferred.
+The existing generic `file_write_atomic(expected_current_sha256)` primitive is not accepted as that race-free external-writer CAS.
 
-Target: v1.4.2+.
+## 5. Dynamic Internal Ports and production adoption
 
-## 4. Connector console
+The source supports OS-selected internal ports for clean/automatic topology. Existing fixed installations remain fixed unless explicitly migrated. Initial production adoption is Fixed-first; no silent Fixed -> Automatic migration is permitted.
 
-Additional connector list/revoke/management UX is deferred beyond the v1.4.0 core release.
+## 6. Tray / desktop UX
 
-## 5. Public ingress operating posture
+Richer native tray and desktop lifecycle controls remain deferred beyond the v1.4.1 core release candidate.
 
-Gemini Static OAuth and the actual Gemini client/UI flow are release-qualified. The remaining limitation is operational by design: the accepted R8 Windows service is **Manual** and its public route is **inactive by default**. Operators must explicitly activate public exposure when needed; v1.4.0 does not convert this into an always-on service.
+## 7. Connector console
 
-## 6. Native Windows boundary
+Additional connector list/revoke/management UX remains deferred beyond the current core release candidate.
 
-The v1.4.0 npm package is Windows-targeted and includes the qualified production native boundary addon required by governed file/process operations. The addon is fail-closed: if it is missing or incompatible, native-dependent operations do not silently fall back to weaker behavior.
+## 8. Public ingress operating posture
 
-## 7. Approval convenience vs. security floors
+Gemini Static OAuth and the accepted hosted-client flow remain qualified. The R8 Windows ingress service is Manual and its public route is inactive by default. Operators must explicitly activate public exposure through the accepted control path.
 
-Trusted mode is not an "unsafe everything" mode. It cannot bypass capability denial or mandatory confirmation. Users seeking completely prompt-free high-impact system control may still encounter required confirmation by design.
+## 9. Native Windows boundary
 
-## 8. MCP Harbor
+The Windows-targeted package includes the qualified native boundary addon required by governed file/process operations. Native-dependent operations fail closed if the addon is missing or incompatible.
 
-MCP Harbor is a separate future MCP control-plane/gateway product. It is not included in WinHelm v1.4.0.
+## 10. Approval convenience vs. security floors
 
-## 9. Public endpoint topology
+Trusted mode is not an unrestricted mode. Capability denial, Absolute Deny, Explicit Confirmation, and Mandatory Confirmation remain stronger than Approval Mode.
 
-Internal development ports/hostnames and owner-specific launch paths are not public API guarantees. Final supported connection instructions must come from the release package documentation.
+## 11. MCP Harbor
 
-## 10. Historical evidence volume
+MCP Harbor is a separate future MCP control-plane/gateway product. It is not included in WinHelm v1.4.1.
 
-The v1.4 development line contains extensive internal qualification/review artifacts. These are not intended to ship as end-user documentation. The release pack consolidates them into user-facing README/CHANGELOG/SECURITY/operations docs.
+## 12. Public endpoint topology
+
+Owner-specific internal ports, hostnames, paths, and launch details are not public API guarantees. The accepted hosted/public R8 protocol identity is HTTPS/443 when explicitly active; internal topology is resolved from verified runtime state.
+
+## 13. Publication status
+
+The accepted source candidate is not automatically a public release. npm publication, Git tag/GitHub release, and live production cutover remain separately authorized gates.
+
+## 14. Historical evidence
+
+Historical v1.4.0 release notes, migration guides, phase reports, and baseline evidence intentionally retain their original version references. They are not stale current-product claims and must not be globally rewritten.

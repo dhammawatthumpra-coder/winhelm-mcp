@@ -1,6 +1,6 @@
-# WinHelm v1.4.0 — Troubleshooting Guide
+# WinHelm v1.4.1 — Troubleshooting Guide
 
-Status: `FINAL_RC`
+Status: `RELEASE_CANDIDATE__PRODUCTION_CUTOVER_GATED`
 
 ## Principle: diagnose the smallest layer first
 
@@ -124,12 +124,22 @@ A denied protected path should not be made writable by switching Approval Mode.
 
 ## 11. D1 / port 18791
 
-For v1.4.0:
-- D1 live mode is deferred;
-- port 18791 should remain absent;
+For active v1.4.1 production scope:
+- D1 live mode remains excluded;
+- port 18791 should remain absent unless separately re-adjudicated;
 - do not treat absence as an error.
 
-## 12. When to rollback
+## 12. Dynamic-port / active-backend confusion
+
+Do not assume a fixed internal port is authoritative on an automatic-topology install. Use verified runtime state. Existing fixed installations remain fixed unless explicitly migrated.
+
+If an active-backend marker switch is involved, stop rather than overwriting unexpected marker state: live cutover remains gated on the separately qualified marker guarded-commit primitive.
+
+## 13. Native Approval conflict
+
+If Native Approval status reports a foreign Registry command or foreign shortcut, do not overwrite it. The v1.4.1 installer fails closed unless exact live WinHelm ownership is proven. Missing/corrupt advisory receipt data does not itself make an exact live WinHelm registration foreign.
+
+## 14. When to rollback
 
 Rollback when an accepted current production component itself is proven unhealthy and an exact prior baseline is available.
 
