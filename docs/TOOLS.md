@@ -377,7 +377,7 @@ Retrieves local IP addresses, network adapters, Default Gateway, DNS servers, an
 ## 7. MCP Resources
 
 ### `preview://file`
-Interactive file preview resource registered on the MCP Server (`text/html;profile=mcp-app`). Allows MCP client apps and web browsers to view syntax-highlighted code and rendered Markdown at `http://localhost:8788/preview?path=<filepath>`.
+Interactive file preview resource registered on the MCP Server (`text/html;profile=mcp-app`). MCP client apps and web browsers use the verified active local gateway endpoint, for example `http://localhost:8788/preview?path=<filepath>` on an unchanged fixed-port installation; automatic-topology installs must use their resolved local port.
 
 ---
 

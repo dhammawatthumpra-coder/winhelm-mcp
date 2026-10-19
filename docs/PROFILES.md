@@ -28,36 +28,22 @@ When using schema-v2 (`schemaVersion: 2` in configuration or via `winhelm setup`
 Designed for code auditing, documentation search, read-only telemetry, and small language models.
 - **Folder Permission:** `read` (strictly read-only across all configured folders).
 - **Terminal Mode:** `off` (terminal execution is disabled).
-- **Tool Policies:**
-  - **R0 (Read-only tools):** `auto` (except background task listing/logs which are `off`).
-  - **R1 (Mutating tools):** `off`.
-  - **R2 (Network tools):** `off`.
-  - **R3 (Desktop/Clipboard tools):** `off`.
-  - **R4 (System mutation tools):** `off`.
-  - **R5 (Shell tools):** `off`.
-  - **Recovery tools:** `auto` (`winhelm_status`, `winhelm_job_status`).
+- **Capability policy:** R0 and recovery tools are permitted; R1–R5 state-changing/network/desktop/system/command capabilities are blocked.
+- **R0 behavior:** read-only tools, including `terminal_task_list` and `terminal_task_logs`, are automatic in every Approval Mode.
 
 ### 2. `balanced` (Interactive Engineering — Recommended Default)
-The default profile for daily software engineering with AI coding assistants (Claude Desktop, Cursor). Strikes a pragmatic balance between autonomous execution and human oversight.
-- **Folder Permission:** `readwrite` (file modifications permitted within configured folders).
-- **Terminal Mode:** `ask` (every shell command or script execution prompts for human approval).
-- **Tool Policies:**
-  - **R0 (Read-only) & R1 (Local file edits/creates):** `auto` within allowed folders.
-  - **R2 (Network requests):** `ask` (human approval required).
-  - **R3 (Clipboard & screen capture):** `ask` (human approval required).
-  - **R4 (Process kill & service control):** `ask` (human approval required).
-  - **R5 (Shell / commands):** Gated by terminal mode (`ask`).
-  - **Recovery tools:** `auto`.
-
-### 3. `power` (Autonomous Full-Stack Development)
-Designed for trusted automation scripts and end-to-end development workflows where continuous prompts would disrupt long-running tasks.
+The default profile for daily software engineering with AI coding assistants (Claude Desktop, Cursor). It permits ordinary development capabilities while denying R4 host-control capability.
 - **Folder Permission:** `readwrite`.
-- **Terminal Mode:** `full` (PowerShell and command execution run autonomously).
-- **Tool Policies:**
-  - **R0, R1, and R2 (Network):** `auto`.
-  - **R3 (Desktop) & R4 (Process/Service mutation):** `ask` (retains approval gating for high-impact host operations).
-  - **R5 (Shell / commands):** `auto`.
-  - **Recovery tools:** `auto`.
+- **Terminal Mode:** `full` (direct command execution is available to the profile; this setting alone does not remove Approval Mode prompts).
+- **Capability policy:** R0, R1, R2, R3, and R5 are permitted; **R4 (`process_kill`, `service_control`) is blocked**.
+- **Default Approval Mode:** `smart` — R0 and R1 are automatic; R2 network, R3 desktop/user-data, and direct R5 command execution ask. Confirmation floors remain stronger than this default.
+
+### 3. `power` (Broad Capability Development)
+Designed for trusted end-to-end development workflows that require host-control capability in addition to the Balanced surface.
+- **Folder Permission:** `readwrite`.
+- **Terminal Mode:** `full`.
+- **Capability policy:** R0–R5 are permitted, subject to protected boundaries and non-bypassable security floors.
+- **Default Approval Mode:** `smart` — R0 and R1 are automatic; R2 network, R3 desktop/user-data, R4 host control, and direct R5 command execution ask. Switching to `trusted` may remove routine prompts for already-permitted actions, but never bypasses capability denial, Absolute Deny, explicit-confirmation, or mandatory-confirmation floors.
 
 ### Unrestricted `dangerous` mode
 > ⚠️ **Notice:** An unrestricted `dangerous` profile is **not shipped** in v1.4.1. Safe / Balanced / Power are the supported product profiles.
@@ -95,18 +81,20 @@ In schema-v2, passing a legacy preset name configures tool authorization policie
 | Capability / Category | `safe` | `balanced` | `power` |
 | :--- | :---: | :---: | :---: |
 | **Folder Permission** | `read` | `readwrite` | `readwrite` |
-| **Terminal Runner (`terminal_run`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **No-Shell Runner (`command_run`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **Background Tasks (`terminal_task_*`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **File Reading (`file_read`, `file_list`, etc.)** | ✅ Auto | ✅ Auto | ✅ Auto |
-| **File Writing / Editing (`file_write`, `file_edit`)** | ❌ Blocked | ✅ Auto | ✅ Auto |
-| **Recycle Bin Deletion (`file_delete_safe`)** | ❌ Blocked | ✅ Auto | ✅ Auto |
-| **Code Search Ripgrep (`file_search_ripgrep`)** | ✅ Auto | ✅ Auto | ✅ Auto |
-| **Network Requests (`http_ping`, `http_request`)** | ❌ Blocked | 🛡️ Approval | ✅ Auto |
-| **Desktop Automation (`clipboard_*`, `screen_capture`)** | ❌ Blocked | 🛡️ Approval | 🛡️ Approval |
-| **Process Termination (`process_kill`)** | ❌ Blocked | 🛡️ Approval | 🛡️ Approval |
-| **System Info Telemetry (`system_info`, `gpu_info`)** | ✅ Auto | ✅ Auto | ✅ Auto |
-| **Recovery Status (`winhelm_status`, `winhelm_job_status`)** | ✅ Auto | ✅ Auto | ✅ Auto |
+| **Terminal configuration** | `off` | `full` | `full` |
+| **Direct command capability (`terminal_run`, `command_run`, task start/send/kill)** | ❌ Blocked | ✅ Permitted | ✅ Permitted |
+| **Task inspection (`terminal_task_list`, `terminal_task_logs`)** | ✅ R0 | ✅ R0 | ✅ R0 |
+| **File Reading (`file_read`, `file_list`, etc.)** | ✅ R0 | ✅ R0 | ✅ R0 |
+| **File Writing / Editing (`file_write`, `file_edit`)** | ❌ Blocked | ✅ R1 | ✅ R1 |
+| **Recycle Bin Deletion (`file_delete_safe`)** | ❌ Blocked | ✅ R1 | ✅ R1 |
+| **Code Search Ripgrep (`file_search_ripgrep`)** | ✅ R0 | ✅ R0 | ✅ R0 |
+| **Network Requests (`http_ping`, `http_request`)** | ❌ Blocked | ✅ R2 | ✅ R2 |
+| **Desktop / user-data tools (`clipboard_*`, `screen_capture`, `system_open`)** | ❌ Blocked | ✅ R3 | ✅ R3 |
+| **Host control (`process_kill`, `service_control`)** | ❌ Blocked | ❌ Blocked | ✅ R4 |
+| **System Info Telemetry (`system_info`, `gpu_info`)** | ✅ R0 | ✅ R0 | ✅ R0 |
+| **Recovery Status (`winhelm_status`, `winhelm_job_status`)** | ✅ R0 | ✅ R0 | ✅ R0 |
+
+The matrix above describes **capability**, not whether a prompt appears. With the default `smart` Approval Mode, R0/R1 are automatic while R2/R3/R4 and direct R5 execution ask; only rows permitted by the selected profile can reach Approval Mode evaluation. Manual asks for permitted state-changing actions. Trusted removes routine prompts for permitted actions, subject to explicit- and mandatory-confirmation floors.
 
 ---
 

@@ -243,11 +243,13 @@ WinHelm supports two distinct configuration operating modes:
 
 In schema-v2, profiles represent policy presets that configure folder permissions, terminal modes, and tool authorization policies:
 
-| Profile | Folder Mode | Terminal Mode | Tool Policies | Target Use Case |
+| Profile | Folder Mode | Terminal Config | Capability Policy | Default Smart prompting |
 | :--- | :---: | :---: | :--- | :--- |
-| **`safe`** | `read` (read-only) | `off` | R0 tools `auto`; all mutating, network, and desktop tools `off` | Code exploration, audits, small LLMs, zero mutation risk |
-| **`balanced`** (Recommended) | `readwrite` | `ask` (approval required) | R0/R1 `auto`; R2/R3/R4 `ask` (approval); shell execution gated by terminal policy | Daily interactive engineering with human approval for elevated actions |
-| **`power`** | `readwrite` | `full` (autonomous) | R0/R1/R2 `auto`; R3/R4 `ask`; terminal & command execution `auto` | Trusted automated agent pipelines requiring unrestricted shell workflows |
+| **`safe`** | `read` | `off` | R0/recovery allowed; R1–R5 blocked | R0/recovery auto; mutating actions unavailable |
+| **`balanced`** (Recommended) | `readwrite` | `full` | R0/R1/R2/R3/R5 permitted; R4 host control blocked | R0/R1 auto; R2 network, R3 desktop/user-data, and direct R5 execution ask |
+| **`power`** | `readwrite` | `full` | R0–R5 permitted, subject to stronger security floors | R0/R1 auto; R2/R3/R4 and direct R5 execution ask |
+
+> Profile capability is evaluated before Approval Mode. `full` terminal configuration means command execution is available to the profile; it does **not** mean prompts are bypassed. Manual asks for permitted state-changing work, Smart is risk-sensitive as summarized above, and Trusted removes routine prompts only for already-permitted actions. Explicit- and mandatory-confirmation floors still ask in every Approval Mode.
 
 > ⚠️ **Note on Dangerous Mode:** An unrestricted `dangerous` mode is **not shipped** in v1.4.1. Safe / Balanced / Power remain the supported product profiles, with Manual / Smart / Trusted as a separate Approval Mode dimension.
 > 💡 **Legacy Presets:** Named presets (`minimal`, `core`, `dev`, `sysadmin`, `full`) remain supported in schema-v2 as compatibility presets that map to specific tool policy subsets.
@@ -404,7 +406,7 @@ The following items remain deferred or separately gated for v1.4.1:
 
 ## Documentation & Deep Dive
 
-- 📖 **[Tools Reference](docs/TOOLS.md)**: Full parameter specifications for all 56 canonical public tools.
+- 📖 **[Tools Reference](docs/TOOLS.md)**: Canonical 56-tool surface, risk/tier organization, and the detailed per-tool specifications currently documented there.
 - ⚙️ **[Tool Profiles](docs/PROFILES.md)**: Safe, Balanced, Power profiles and legacy preset mapping.
 - 🛡️ **[Security Architecture](docs/SECURITY.md)**: Permissions model, approval lifecycle, and cross-process architecture.
 - 🎯 **[Threat Model](docs/THREAT_MODEL.md)**: STRIDE analysis and trust boundary diagrams.
