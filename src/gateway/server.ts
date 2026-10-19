@@ -586,7 +586,7 @@ export function createServer(options: ServerOptions): {
     logger.info("Public network mode active (No auth token set)");
   }
 
-  const sendProductShell = (req: Request, res: Response): void => {
+  const sendProductShell = async (req: Request, res: Response): Promise<void> => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader(
       "Content-Security-Policy",
@@ -595,7 +595,7 @@ export function createServer(options: ServerOptions): {
     const activeProfile = configManager.getConfig().profile || "full";
     const profileStatus = getProfileStatus(configManager);
     const focusJobId = req.params?.jobId || null;
-    const adapters = getCrossTrancheAdapters(options);
+    const adapters = await getCrossTrancheAdapters(options);
     res.send(
       getProductShellHtml(activeProfile, {
         schemaMode: profileStatus.schemaMode,

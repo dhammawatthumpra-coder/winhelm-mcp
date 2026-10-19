@@ -20,9 +20,9 @@ import { getProductShellHtml } from "../../src/gateway/product-shell-html.js";
 import { createServer } from "../../src/gateway/server.js";
 
 describe("Phase 2 Runtime Adapter Wiring Suite", () => {
-  it("1. Dynamic Internal Ports adapter reflects Auto and Fixed modes truthfully", () => {
+  it("1. Dynamic Internal Ports adapter reflects Auto and Fixed modes truthfully", async () => {
     // 1.1 Automatic mode
-    const autoStatus = getDynamicInternalPortsStatus({
+    const autoStatus = await getDynamicInternalPortsStatus({
       port: 8788,
       host: "127.0.0.1",
       internalPortSelection: { mode: "auto" },
@@ -37,7 +37,7 @@ describe("Phase 2 Runtime Adapter Wiring Suite", () => {
     assert.ok(!urls.some((u) => u.includes(":18820") || u.includes(":18821") || u.includes(":18822")));
 
     // 1.2 Fixed mode
-    const fixedStatus = getDynamicInternalPortsStatus({
+    const fixedStatus = await getDynamicInternalPortsStatus({
       port: 9999,
       host: "127.0.0.1",
       internalPortSelection: { mode: "fixed", port: 9999 },
@@ -46,8 +46,8 @@ describe("Phase 2 Runtime Adapter Wiring Suite", () => {
     assert.ok(fixedStatus.endpoints.length >= 1);
   });
 
-  it("2. Native Approval adapter probes live state truthfully", () => {
-    const status = getNativeApprovalStatus(true);
+  it("2. Native Approval adapter probes live state truthfully", async () => {
+    const status = await getNativeApprovalStatus(true);
     // On the current clean/unmutated test environment, registry/shortcut are not installed globally
     // Therefore, status must truthfully be 'unavailable' or 'needs_repair', never falsely 'ready'
     assert.ok(
@@ -56,11 +56,11 @@ describe("Phase 2 Runtime Adapter Wiring Suite", () => {
     );
   });
 
-  it("3. Setup Assistant adapter reports truthfully and launch remains safely disabled", () => {
+  it("3. Setup Assistant adapter reports truthfully and launch remains safely disabled", async () => {
     const status = getSetupAssistantStatus();
     assert.strictEqual(status, "unavailable");
 
-    const adapters = getCrossTrancheAdapters();
+    const adapters = await getCrossTrancheAdapters();
     const html = getProductShellHtml("full", {
       schemaMode: "v2",
       preset: "balanced",

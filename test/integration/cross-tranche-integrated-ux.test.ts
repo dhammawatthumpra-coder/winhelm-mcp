@@ -272,9 +272,9 @@ describe("WinHelm v1.4.1 Cross-Tranche Integrated UX Qualification Suite", () =>
   // -------------------------------------------------------------------------
   // Criteria 11, 12, 13, 20, 21: Installer Live State, Non-Authoritative Receipt
   // -------------------------------------------------------------------------
-  it("Items 11, 12, 13, 20, 21: Installer Live State, Non-Authoritative Receipt & Clean Uninstall", () => {
+  it("Items 11, 12, 13, 20, 21: Installer Live State, Non-Authoritative Receipt & Clean Uninstall", async () => {
     // 11. Live state controls operational status
-    const liveStatus = getNativeApprovalStatus(true);
+    const liveStatus = await getNativeApprovalStatus(true);
     assert.ok(liveStatus === "unavailable" || liveStatus === "needs_repair");
 
     // 12. Forged receipt cannot grant destructive mutation authority

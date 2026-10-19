@@ -1,21 +1,25 @@
 /**
- * WinHelm v1.4.1 Cross-Tranche Operational Adapters
+ * WinHelm v1.4.1 Cross-Tranche Authoritative Operational Adapters (Corrective R1)
  * 
- * Provides truthful, non-fabricated operational status bridges across:
- * - Tranche A: Dynamic Internal Port Allocation
- * - Tranche B: Approval UX & Windows Native Toast Integration
+ * Provides truthful, authoritative, non-fabricated operational status bridges across:
+ * - Tranche A: Dynamic Internal Port Allocation (via resolveVerifiedInternalTopology / resolveVerifiedRuntimeEndpoint)
+ * - Tranche B: Approval UX & Windows Native Toast Integration (via accepted R5 Get-WinHelmApprovalIntegrationStatus)
  * - Tranche C: Product Shell & Dashboard Refresh
  * 
  * Invariants:
- * - No fabricated ready states.
- * - No hard-coded fake ports in Auto mode.
- * - Live OS registry & shortcut state determines native approval operational state.
- * - Non-authoritative receipt metadata never controls operational status.
+ * - No unverified runtime hints promoted to Active.
+ * - No mock or hard-coded fallback ports (18820/18821/18822) in live runtime.
+ * - Deterministic live OS registry & shortcut state determines native approval operational state.
+ * - Substring checks and arbitrary file existence heuristics are completely eliminated.
+ * - Non-authoritative receipt metadata never controls operational ownership.
+ * - Setup Assistant remains truthfully unavailable with launch disabled.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { ConfigManager } from "../config/config-manager.js";
 import type { ServerOptions } from "../gateway/server.js";
 import type {
@@ -26,18 +30,48 @@ import type {
   DynamicEndpointInfo,
 } from "../gateway/ui/common.js";
 import {
-  readRuntimeEndpointHint,
-  defaultRuntimeEndpointPath,
+  resolveVerifiedRuntimeEndpoint,
+  type ResolveVerifiedRuntimeEndpointOptions,
+  type VerifiedRuntimeEndpoint,
 } from "./endpoint-registry.js";
+import {
+  resolveVerifiedInternalTopology,
+  type TrustedRuntimeTopologyIdentities,
+  type VerifiedInternalTopology,
+} from "./launcher-contract.js";
+
+const execFileAsync = promisify(execFile);
+
+export interface NativeApprovalOptions {
+  installRoot?: string;
+  approvalClassifier?: (
+    installRoot?: string
+  ) => Promise<NativeApprovalIntegrationStatus> | NativeApprovalIntegrationStatus;
+}
+
+export interface OperationalAdaptersOptions extends ServerOptions {
+  trustedIdentities?: TrustedRuntimeTopologyIdentities;
+  topologyResolver?: (
+    identities: TrustedRuntimeTopologyIdentities,
+    resolver?: (options: ResolveVerifiedRuntimeEndpointOptions) => Promise<VerifiedRuntimeEndpoint | undefined>
+  ) => Promise<VerifiedInternalTopology>;
+  endpointResolver?: (
+    options: ResolveVerifiedRuntimeEndpointOptions
+  ) => Promise<VerifiedRuntimeEndpoint | undefined>;
+  approvalClassifier?: (
+    installRoot?: string
+  ) => Promise<NativeApprovalIntegrationStatus> | NativeApprovalIntegrationStatus;
+}
 
 /**
  * Returns dynamic internal ports operational status.
- * Factual: in automatic mode, lists only verified active endpoints.
+ * Authoritative: in automatic mode, lists only verified active endpoints.
  * In fixed mode, reports fixed port allocation.
+ * Stale hints or hints with mismatched process/listener/health are NEVER promoted to Active.
  */
-export function getDynamicInternalPortsStatus(
-  options?: ServerOptions
-): DynamicInternalPortsStatus {
+export async function getDynamicInternalPortsStatus(
+  options?: OperationalAdaptersOptions
+): Promise<DynamicInternalPortsStatus> {
   const selectionMode = options?.internalPortSelection?.mode;
   const isAuto = selectionMode === "auto";
   const mode = isAuto ? "automatic" : "fixed";
@@ -55,28 +89,43 @@ export function getDynamicInternalPortsStatus(
     },
   ];
 
-  // In auto or fixed mode, verify downstream component runtime hints if present
-  for (const role of ["r7", "r8"]) {
+  // Consume accepted runtime topology verifier when identities or resolver are available
+  if (options?.trustedIdentities) {
+    const topologyResolver = options.topologyResolver ?? resolveVerifiedInternalTopology;
+    const endpointResolver = options.endpointResolver ?? resolveVerifiedRuntimeEndpoint;
     try {
-      const hint = readRuntimeEndpointHint(defaultRuntimeEndpointPath(role));
-      if (hint && typeof hint.pid === "number") {
-        let isAlive = false;
-        try {
-          process.kill(hint.pid, 0);
-          isAlive = true;
-        } catch {
-          isAlive = false;
-        }
-        if (isAlive) {
+      const topology = await topologyResolver(options.trustedIdentities, endpointResolver);
+      for (const role of ["r7", "r8"] as const) {
+        const ep = topology.internal[role];
+        if (ep && ep.state === "ready" && ep.host && ep.port) {
           endpoints.push({
             service: role.toUpperCase(),
-            url: `http://${hint.host}:${hint.port}`,
+            url: `http://${ep.host}:${ep.port}`,
             status: "Active",
           });
         }
       }
     } catch {
-      // Never fabricate unverified endpoints
+      // Fail closed: never fabricate active endpoints on resolver failure
+    }
+  } else if (options?.endpointResolver) {
+    for (const role of ["r7", "r8"] as const) {
+      try {
+        const verified = await options.endpointResolver({
+          role,
+          expectedExecutablePath: "",
+          expectedEntrypointPath: "",
+        });
+        if (verified && verified.host && verified.port) {
+          endpoints.push({
+            service: role.toUpperCase(),
+            url: `http://${verified.host}:${verified.port}`,
+            status: "Active",
+          });
+        }
+      } catch {
+        // Fail closed
+      }
     }
   }
 
@@ -90,13 +139,19 @@ interface CachedNativeStatus {
 let nativeStatusCache: CachedNativeStatus | null = null;
 const CACHE_TTL_MS = 2500;
 
+export function clearNativeApprovalStatusCache(): void {
+  nativeStatusCache = null;
+}
+
 /**
  * Returns live Windows Native Approval integration status.
- * Directly probes live OS Registry and Start Menu shortcut.
+ * Authoritative: Consumes accepted R5 Get-WinHelmApprovalIntegrationStatus classifier.
+ * Never uses substring heuristics or loose file existence checks.
  */
-export function getNativeApprovalStatus(
-  forceFresh: boolean = false
-): NativeApprovalIntegrationStatus {
+export async function getNativeApprovalStatus(
+  forceFresh: boolean = false,
+  options?: NativeApprovalOptions
+): Promise<NativeApprovalIntegrationStatus> {
   if (process.platform !== "win32") {
     return "unavailable";
   }
@@ -105,54 +160,66 @@ export function getNativeApprovalStatus(
   if (
     !forceFresh &&
     nativeStatusCache &&
-    now - nativeStatusCache.timestamp < CACHE_TTL_MS
+    now - nativeStatusCache.timestamp < CACHE_TTL_MS &&
+    !options?.approvalClassifier
   ) {
     return nativeStatusCache.status;
   }
 
+  // 1. Dependency injection / custom classifier for adversarial testing
+  if (options?.approvalClassifier) {
+    try {
+      const status = await options.approvalClassifier(options.installRoot);
+      return status;
+    } catch {
+      return "unavailable"; // fail-closed
+    }
+  }
+
+  // 2. Consume accepted R5 operational classifier via installer/scripts/Get-ApprovalStatus.ps1
   let status: NativeApprovalIntegrationStatus = "unavailable";
   try {
-    let regExists = false;
-    let regMatches = false;
+    const installRoot = options?.installRoot ?? process.cwd();
+    let scriptPath = path.resolve(installRoot, "installer", "scripts", "Get-ApprovalStatus.ps1");
+    if (!fs.existsSync(scriptPath)) {
+      const currentDir = path.dirname(fileURLToPath(import.meta.url));
+      scriptPath = path.resolve(currentDir, "..", "..", "installer", "scripts", "Get-ApprovalStatus.ps1");
+    }
 
-    try {
-      const out = execFileSync(
-        "reg.exe",
-        ["query", "HKCU\\Software\\Classes\\winhelm-approval\\shell\\open\\command", "/ve"],
+    if (!fs.existsSync(scriptPath)) {
+      status = "unavailable";
+    } else {
+      const { stdout } = await execFileAsync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          scriptPath,
+          "-InstallRoot",
+          installRoot,
+        ],
         {
+          timeout: 4000,
+          windowsHide: true,
           encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-          timeout: 1000,
         }
       );
-      regExists = true;
-      if (out.includes("winhelm") && out.includes("approval-activate")) {
-        regMatches = true;
+
+      const parsed = JSON.parse(stdout.trim());
+      if (parsed.status === "ready") {
+        status = "ready";
+      } else if (parsed.status === "needs_repair" || parsed.status === "conflict") {
+        status = "needs_repair";
+      } else {
+        status = "unavailable";
       }
-    } catch {
-      regExists = false;
-    }
-
-    const appData = process.env.APPDATA || "";
-    const shortcutPath = path.join(
-      appData,
-      "Microsoft",
-      "Windows",
-      "Start Menu",
-      "Programs",
-      "WinHelm.lnk"
-    );
-    const shortcutExists = fs.existsSync(shortcutPath);
-
-    if (regMatches && shortcutExists) {
-      status = "ready";
-    } else if (regExists || shortcutExists) {
-      status = "needs_repair";
-    } else {
-      status = "unavailable";
     }
   } catch {
-    status = "unknown";
+    // Fail-closed on any classifier execution or timeout error
+    status = "unavailable";
   }
 
   nativeStatusCache = { timestamp: now, status };
@@ -170,12 +237,20 @@ export function getSetupAssistantStatus(): SetupAssistantIntegrationStatus {
 /**
  * Aggregates all cross-tranche operational adapters for Product Shell consumption.
  */
-export function getCrossTrancheAdapters(
-  options?: ServerOptions
-): CrossTrancheAdapters {
+export async function getCrossTrancheAdapters(
+  options?: OperationalAdaptersOptions
+): Promise<CrossTrancheAdapters> {
+  const [dynamicPorts, nativeApproval] = await Promise.all([
+    getDynamicInternalPortsStatus(options),
+    getNativeApprovalStatus(false, {
+      installRoot: options?.runtimeIdentity ? process.cwd() : undefined,
+      approvalClassifier: options?.approvalClassifier,
+    }),
+  ]);
+
   return {
-    dynamicPorts: getDynamicInternalPortsStatus(options),
-    nativeApproval: getNativeApprovalStatus(),
+    dynamicPorts,
+    nativeApproval,
     setupAssistant: getSetupAssistantStatus(),
   };
 }
