@@ -11,16 +11,23 @@ export function renderApprovalsView(ctx: ShellRenderContext): string {
   const { messages } = ctx;
   const nativeStatus = ctx.adapters?.nativeApproval ?? "unknown";
   const isNativeReady = nativeStatus === "ready";
+  const isNeedsRepair = nativeStatus === "needs_repair";
 
   const nativeStatusBadge = isNativeReady
     ? escapeHtml(messages.shellApprovalsNativeReady)
+    : isNeedsRepair
+    ? escapeHtml(messages.shellApprovalsNativeNeedsRepair)
     : escapeHtml(messages.shellApprovalsNativeUnavailable);
 
   const nativeStatusDesc = isNativeReady
     ? escapeHtml(messages.shellApprovalsNativeReadyDesc)
     : escapeHtml(messages.shellApprovalsNativeUnavailableDesc);
 
-  const nativeBannerClass = isNativeReady ? "banner banner-info" : "banner banner-info";
+  const nativeBannerClass = isNativeReady
+    ? "banner banner-info"
+    : isNeedsRepair
+    ? "banner banner-warning"
+    : "banner banner-info";
 
   return `
     <section id="panel-approvals" class="panel" aria-labelledby="heading-approvals">

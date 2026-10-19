@@ -24,6 +24,7 @@ import {
   bindInternalListener,
   type InternalPortSelection,
 } from "../runtime/internal-port.js";
+import { getCrossTrancheAdapters } from "../runtime/operational-adapters.js";
 
 export interface ServerOptions {
   port: number;
@@ -594,6 +595,7 @@ export function createServer(options: ServerOptions): {
     const activeProfile = configManager.getConfig().profile || "full";
     const profileStatus = getProfileStatus(configManager);
     const focusJobId = req.params?.jobId || null;
+    const adapters = getCrossTrancheAdapters(options);
     res.send(
       getProductShellHtml(activeProfile, {
         schemaMode: profileStatus.schemaMode,
@@ -602,6 +604,7 @@ export function createServer(options: ServerOptions): {
         terminalMode: profileStatus.terminalMode,
         approvalMode: profileStatus.approvalMode,
         focusJobId,
+        adapters,
       })
     );
   };
