@@ -1,0 +1,18 @@
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [Parameter(Mandatory)] [string] $Root,
+    [switch] $Apply
+)
+
+$ErrorActionPreference = 'Stop'
+$serviceName = 'WinHelmGoTlsIngressHardeningR1'
+$root = (Get-Item -LiteralPath $Root).FullName
+$target = Join-Path $root 'winhelm-go-tls-ingress-hardening-r1.exe'
+$backup = $target + '.rollback'
+if (-not (Test-Path -LiteralPath $backup -PathType Leaf)) { throw 'rollback artifact missing' }
+if (-not $Apply) { Write-Output "DRY_RUN service=$serviceName target=$target"; exit 0 }
+if ($PSCmdlet.ShouldProcess($serviceName, 'restore bounded upgrade rollback artifact')) {
+    Stop-Service -Name $serviceName
+    Copy-Item -LiteralPath $backup -Destination $target -Force
+    Start-Service -Name $serviceName
+}

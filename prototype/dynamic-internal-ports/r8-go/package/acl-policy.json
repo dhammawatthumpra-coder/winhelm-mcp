@@ -1,0 +1,77 @@
+{
+  "model": "WINHELM_R7_R3_ACL_MODEL",
+  "principals": {
+    "administrative": ["SYSTEM", "BUILTIN\\Administrators"],
+    "serviceIdentity": "NT SERVICE\\WinHelmGoTlsIngressHardeningR1",
+    "operatorIdentity": "optional, explicit, read-only (ReadAndExecute) on the runtime tree; no write; state gated behind -OperatorStateRead"
+  },
+  "forbiddenBroadWritePrincipals": ["Authenticated Users", "Users", "Everyone", "Anonymous"],
+  "surfaces": {
+    "candidateRoot": {
+      "inheritance": "disabled",
+      "serviceIdentity": "ReadAndExecute",
+      "operatorIdentity": "ReadAndExecute-explicit-no-write",
+      "broadWrite": "forbidden"
+    },
+    "config": {
+      "inheritance": "disabled",
+      "serviceIdentity": "Read",
+      "operatorIdentity": "ReadAndExecute-explicit-no-write",
+      "broadWrite": "forbidden"
+    },
+    "executable": {
+      "inheritance": "disabled",
+      "serviceIdentity": "ReadAndExecute",
+      "operatorIdentity": "ReadAndExecute-explicit-no-write",
+      "broadWrite": "forbidden"
+    },
+    "packageFiles": {
+      "inheritance": "disabled",
+      "serviceIdentity": "ReadAndExecute-no-write",
+      "operatorIdentity": "ReadAndExecute-explicit-no-write",
+      "broadWrite": "forbidden"
+    },
+    "state": {
+      "inheritance": "disabled",
+      "serviceIdentity": "Modify-mutable-only",
+      "operatorIdentity": "none-by-default-read-only-only-with-OperatorStateRead",
+      "broadWrite": "forbidden"
+    },
+    "hostState": {
+      "path": "<candidate-root>\\state\\<host>",
+      "hostSource": "config.json host, trimmed + lowercased, validated as a single DNS label; never hard-coded",
+      "inheritance": "disabled",
+      "serviceIdentity": "Modify-structural-only",
+      "operatorIdentity": "same-gating-as-state",
+      "broadWrite": "forbidden",
+      "runtimeDescendants": "inherited ACL permitted beneath the protected host-state root; effective ACL must stay broad-write-free with the exact service identity and no reparse path"
+    },
+    "logs": {
+      "inheritance": "disabled",
+      "serviceIdentity": "Modify-mutable-only",
+      "operatorIdentity": "ReadAndExecute-when-explicitly-configured",
+      "broadWrite": "forbidden"
+    }
+  },
+  "snapshot": {
+    "path": "package\\acl-rollback-snapshot.json",
+    "content": "exact pre-apply SDDL for every touched path",
+    "restore": "prepare-acl.ps1 -RestoreFrom <snapshot> -Apply",
+    "restoreScope": "DACL of every captured path (owner/group are never altered by -Apply); paths created by -Apply are removed again, including the pre-staged host-state directory",
+    "restoreOrder": "existing paths top-down so each parent is restored before its children, then apply-created paths children-first so a created parent is empty before removal",
+    "applyOrder": "deepest-first so directory protection never blocks traversal of not-yet-processed children",
+    "failureBehavior": "self-rollback from snapshot when -Apply fails"
+  },
+  "dryRun": "no ACL or filesystem mutation without -Apply",
+  "stateRoot": "<candidate-root>\\state",
+  "hostStateRoot": "<candidate-root>\\state\\<host>",
+  "logsRoot": "<candidate-root>\\logs",
+  "stateChildAcl": {
+    "canonicalRoot": "the exact host-state directory must exist and carry SE_DACL_PROTECTED",
+    "descendants": "runtime children of the protected host-state root (and of logs) may inherit; their effective ACL must remain broad-write-free and contain the exact service SID",
+    "reparse": "reparse/symlink paths stay forbidden anywhere under state/logs",
+    "note": "a missing per-child SE_DACL_PROTECTED flag alone is not reported for runtime descendants beneath host-state/logs"
+  },
+  "startupAction": "fail-closed on mismatch",
+  "secretLogging": "forbidden"
+}

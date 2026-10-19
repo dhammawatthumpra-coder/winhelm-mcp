@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigManager } from "./config/config-manager.js";
 import { createServer } from "./gateway/server.js";
@@ -28,6 +29,15 @@ import {
   getToolRiskPresentation,
 } from "./permissions/risk.js";
 import { readStoredAuthToken, resolveStartupAuthToken } from "./config/auth-token-store.js";
+import {
+  readPreferredInternalPort,
+  resolveInternalPortSelection,
+  writePreferredInternalPort,
+} from "./runtime/internal-port.js";
+import {
+  createRuntimeGeneration,
+  publishCurrentRuntimeEndpoint,
+} from "./runtime/endpoint-registry.js";
 import {
   getRunManager,
   initializeRunManager,
@@ -79,7 +89,7 @@ Setup:
 
 Options:
   --config <path>       Load configuration from a specific JSON file (e.g. project-specific config)
-  --port <number>       Port to listen on (default: 8788 or PORT env)
+  --port <number|auto>  Internal port selector (default: 8788 or PORT env; auto is loopback-only)
   --host <string>       Host interface (default: 127.0.0.1 or HOST env)
   --profile, -p <name>  Tool profile: minimal (6), core (15), dev (28), sysadmin (37), full (38) (default: full)
   --stdio               Run in stdio mode for local MCP clients (OpenAI tunnel-client, Claude, Cursor)
@@ -185,8 +195,15 @@ async function main() {
     );
   }
 
-  const PORT = parseInt(getArg("--port", process.env.PORT || "8788")!, 10);
   const HOST = getArg("--host", process.env.HOST || "127.0.0.1")!;
+  const PORT_SELECTION = resolveInternalPortSelection({
+    cliPort: getArg("--port"),
+    envPort: process.env.PORT,
+    host: HOST,
+  });
+  const PORT = PORT_SELECTION.mode === "fixed" ? PORT_SELECTION.port : 0;
+  const PREFERRED_PORT =
+    PORT_SELECTION.mode === "auto" ? readPreferredInternalPort() : undefined;
   const CLI_AUTH_TOKEN = getArg("--auth");
   const CLI_ALLOWED_DIRS = getArg("--allowed-dirs");
   const CLI_READ_ONLY = args.includes("--read-only");
@@ -390,13 +407,59 @@ async function main() {
     return;
   }
 
+  const runtimeGeneration = createRuntimeGeneration();
+  const coreEntrypointPath = fileURLToPath(import.meta.url);
   const { start, stop } = createServer({
     port: PORT,
     host: HOST,
     authToken: effectiveAuthToken,
+    internalPortSelection: PORT_SELECTION,
+    preferredPort: PREFERRED_PORT,
+    runtimeIdentity:
+      PORT_SELECTION.mode === "auto"
+        ? {
+            role: "core",
+            generation: runtimeGeneration,
+          }
+        : undefined,
   });
 
   const server = await start();
+
+  if (PORT_SELECTION.mode === "auto") {
+    const boundAddress = server.address();
+    if (!boundAddress || typeof boundAddress === "string") {
+      await stop(server).catch(() => {});
+      throw new Error(
+        "Automatic internal port startup failed: bound Core listener did not report an IP endpoint."
+      );
+    }
+
+    try {
+      await publishCurrentRuntimeEndpoint({
+        role: "core",
+        generation: runtimeGeneration,
+        host: boundAddress.address,
+        port: boundAddress.port,
+        expectedExecutablePath: process.execPath,
+        expectedEntrypointPath: coreEntrypointPath,
+      });
+    } catch (err) {
+      await stop(server).catch(() => {});
+      throw new Error(
+        `Automatic internal port startup failed: runtime endpoint identity could not be verified and published: ${(err as Error).message}`
+      );
+    }
+
+    try {
+      await writePreferredInternalPort(boundAddress.port);
+    } catch (err) {
+      console.error(
+        "[WinHelm] Warning: could not persist the automatic internal-port preference:",
+        (err as Error).message
+      );
+    }
+  }
 
   let isShuttingDown = false;
   const shutdown = async () => {
