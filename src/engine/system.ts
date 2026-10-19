@@ -705,6 +705,21 @@ export async function getNetworkInfo(includeListeningPorts = false): Promise<Net
   };
 }
 
+export interface ToastActionItem {
+  content: string;
+  arguments: string;
+  activationType?: "protocol" | "foreground" | "background";
+}
+
+export interface ApprovalNotificationPayload {
+  url?: string;
+  title?: string;
+  message?: string;
+  actionLabel?: string;
+  sound?: boolean;
+  actions?: ToastActionItem[];
+}
+
 /**
  * Build the approval toast XML. Unlike AI-authored notifications this one is
  * never written by the model: the text comes from the catalog and only the
@@ -716,7 +731,8 @@ export function buildApprovalToastXml(
   message: string,
   actionLabel: string,
   activationUrl?: string,
-  sound = true
+  sound = true,
+  customActions?: ToastActionItem[]
 ): string {
   const escapeXml = (value: string): string =>
     value
@@ -732,9 +748,19 @@ export function buildApprovalToastXml(
   const launch = activationUrl
     ? ` activationType='protocol' launch='${escapeXml(activationUrl)}'`
     : "";
-  const actions = activationUrl
-    ? `<actions><action content='${escapeXml(actionLabel)}' activationType='protocol' arguments='${escapeXml(activationUrl)}' /></actions>`
-    : "";
+
+  let actions = "";
+  if (customActions && customActions.length > 0) {
+    const actionTags = customActions
+      .map((a) => {
+        const actType = a.activationType || "protocol";
+        return `<action content='${escapeXml(a.content)}' activationType='${actType}' arguments='${escapeXml(a.arguments)}' />`;
+      })
+      .join("");
+    actions = `<actions>${actionTags}</actions>`;
+  } else if (activationUrl) {
+    actions = `<actions><action content='${escapeXml(actionLabel)}' activationType='protocol' arguments='${escapeXml(activationUrl)}' /></actions>`;
+  }
 
   return (
     `<toast${launch}><visual><binding template='ToastGeneric'>` +
@@ -744,22 +770,44 @@ export function buildApprovalToastXml(
 }
 
 /**
- * WinHelm's own approval notification. The title, body and action label come
- * from the message catalog, so no AI-supplied text can reach the toast.
+ * WinHelm's own approval notification. Accepts either a legacy activationUrl
+ * or a rich ApprovalNotificationPayload. The title, body and action labels are
+ * sanitized and XML-escaped so no unsafe text can reach the toast.
  */
 export async function sendWinHelmApprovalNotification(
-  activationUrl?: string
+  activationUrlOrPayload?: string | ApprovalNotificationPayload,
+  optionalPayload?: ApprovalNotificationPayload
 ): Promise<NotificationResult> {
-  const title = sanitizeNotificationMessage(t("notify.approval.title"));
-  const message = sanitizeNotificationMessage(t("notify.approval.body"));
-  const actionLabel = sanitizeNotificationMessage(
-    t("notify.approval.action")
+  let activationUrl: string | undefined;
+  let payload: ApprovalNotificationPayload | undefined;
+
+  if (typeof activationUrlOrPayload === "string") {
+    activationUrl = activationUrlOrPayload;
+    payload = optionalPayload;
+  } else if (typeof activationUrlOrPayload === "object" && activationUrlOrPayload !== null) {
+    payload = activationUrlOrPayload;
+    activationUrl = payload.url;
+  }
+
+  const title = sanitizeNotificationMessage(
+    payload?.title || t("notify.approval.title")
   );
+  const message = sanitizeNotificationMessage(
+    payload?.message || t("notify.approval.body")
+  );
+  const actionLabel = sanitizeNotificationMessage(
+    payload?.actionLabel || t("notify.approval.action")
+  );
+  const sound = payload?.sound ?? true;
+  const customActions = payload?.actions;
+
   const toastXml = buildApprovalToastXml(
     title,
     message,
     actionLabel,
-    activationUrl
+    activationUrl,
+    sound,
+    customActions
   );
 
   const psScript = `
