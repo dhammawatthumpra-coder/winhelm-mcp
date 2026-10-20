@@ -3,6 +3,8 @@
 #include <psapi.h>
 #include <node_api.h>
 
+#include "guarded_marker_commit.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -2952,20 +2954,24 @@ napi_value Init(napi_env env, napi_value exports) {
       {"stableReadOpen", nullptr, StableReadOpen, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"createExclusive", nullptr, CreateExclusive, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"atomicReplace", nullptr, AtomicReplace, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"guardedMarkerCommitBegin", nullptr, winhelm::guarded_marker::Begin, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"guardedMarkerCommitAcknowledge", nullptr, winhelm::guarded_marker::Acknowledge, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"spawnContained", nullptr, SpawnContained, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"memoryStatus", nullptr, MemoryStatus, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
-  napi_define_properties(env, exports, 5, props);
+  napi_define_properties(env, exports, 7, props);
 
 #ifdef WINHELM_NATIVE_TEST_HOOKS
   napi_property_descriptor test_props[] = {
       {"atomicReplaceTest", nullptr, AtomicReplaceTest, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"guardedMarkerCommitBeginTest", nullptr, winhelm::guarded_marker::BeginTest, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"guardedMarkerAttemptDeleteDirectoryTest", nullptr, winhelm::guarded_marker::AttemptDeleteDirectoryTest, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"spawnContainedTest", nullptr, SpawnContainedTest, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"getCurrentProcessHandleCount", nullptr, CurrentProcessHandleCount, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"createTestInheritableSentinel", nullptr, CreateTestInheritableSentinel, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"releaseTestInheritableSentinel", nullptr, ReleaseTestInheritableSentinel, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
-  napi_define_properties(env, exports, 5, test_props);
+  napi_define_properties(env, exports, 7, test_props);
 #endif
 
   SetProp(env, exports, "abi", MakeString(env, "node-api"));

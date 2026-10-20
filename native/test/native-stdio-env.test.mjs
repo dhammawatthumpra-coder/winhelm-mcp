@@ -97,12 +97,14 @@ function assertInvalid(call, code, label) {
   );
 }
 
-test("production addon still exports only the narrow NB1 top-level surface", () => {
+test("production addon still exports only the narrow internal top-level surface", () => {
   const names = Object.getOwnPropertyNames(prod).sort();
   assert.deepEqual(names, [
     "abi",
     "atomicReplace",
     "createExclusive",
+    "guardedMarkerCommitAcknowledge",
+    "guardedMarkerCommitBegin",
     // Spec 3.4 Tier B narrow extension: GlobalMemoryStatusEx read-only
     // memory counters (WO-sanctioned native boundary addition).
     "memoryStatus",

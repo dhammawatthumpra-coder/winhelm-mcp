@@ -70,6 +70,8 @@ function validateAddonShape(value: unknown): WinHelmNativeBoundary {
     "stableReadOpen",
     "createExclusive",
     "atomicReplace",
+    "guardedMarkerCommitBegin",
+    "guardedMarkerCommitAcknowledge",
     "spawnContained",
   ] as const) {
     if (typeof addon[key] !== "function") missing.push(key);

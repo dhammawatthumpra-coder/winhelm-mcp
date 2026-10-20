@@ -15,6 +15,10 @@ $test = Join-Path $buildDir "$Configuration\winhelm_native_test.node"
 $child = Join-Path $buildDir "$Configuration\a4_child.exe"
 if (-not (Test-Path -LiteralPath $child)) { throw "Missing a4_child.exe test helper: $child" }
 
+$prod = (Resolve-Path -LiteralPath $prod).Path
+$test = (Resolve-Path -LiteralPath $test).Path
+$child = (Resolve-Path -LiteralPath $child).Path
+
 $env:WINHELM_NATIVE_PROD_ADDON = $prod
 $env:WINHELM_NATIVE_TEST_ADDON = $test
 $env:WINHELM_A4_CHILD = $child
@@ -22,6 +26,7 @@ $env:WINHELM_A4_CHILD = $child
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $testFiles = @(
     (Join-Path $repoRoot "native\test\native-boundary.test.mjs"),
+    (Join-Path $repoRoot "native\test\guarded-marker-commit.test.mjs"),
     (Join-Path $repoRoot "native\test\native-stdio-env.test.mjs")
 )
 & node --test @testFiles

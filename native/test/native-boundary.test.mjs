@@ -110,6 +110,8 @@ test("production addon exports only the narrow native capability surface", () =>
     "abi",
     "atomicReplace",
     "createExclusive",
+    "guardedMarkerCommitAcknowledge",
+    "guardedMarkerCommitBegin",
     // Spec 3.4 Tier B narrow extension: GlobalMemoryStatusEx read-only
     // memory counters (WO-sanctioned native boundary addition).
     "memoryStatus",
@@ -120,6 +122,8 @@ test("production addon exports only the narrow native capability surface", () =>
   assert.equal(prod.abi, "node-api");
   assert.equal(prod.napiVersion, 10);
   assert.equal("atomicReplaceTest" in prod, false);
+  assert.equal("guardedMarkerCommitBeginTest" in prod, false);
+  assert.equal("guardedMarkerAttemptDeleteDirectoryTest" in prod, false);
   assert.equal("spawnContainedTest" in prod, false);
   assert.equal("getCurrentProcessHandleCount" in prod, false);
   const cmd = join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");

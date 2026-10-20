@@ -26,7 +26,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 function(configure_winhelm_native target_name)
-  add_library(${target_name} MODULE src/winhelm_native.cpp)
+  add_library(${target_name} MODULE
+    src/winhelm_native.cpp
+    src/guarded_marker_commit.cpp
+  )
   target_include_directories(${target_name} PRIVATE "${NODE_INCLUDE_DIR}")
   target_link_libraries(${target_name} PRIVATE "${NODE_LIB_FILE}" bcrypt)
   target_compile_definitions(${target_name} PRIVATE

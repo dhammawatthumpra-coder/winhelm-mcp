@@ -33,6 +33,20 @@ export interface AtomicMutationResult {
   targetDirectory: string;
 }
 
+export interface GuardedMarkerFileIdentity {
+  volumeSerialNumber: number;
+  fileIndexHigh: number;
+  fileIndexLow: number;
+}
+
+export interface GuardedMarkerCommitResult extends GuardedMarkerFileIdentity {
+  transactionId: string;
+  outcome: "SUCCESS";
+  sha256: string;
+  backupPath: string;
+  bytesWritten: number;
+}
+
 export interface ContainedWaitResult {
   status: "timeout" | "exited";
   exitCode?: number;
@@ -113,6 +127,17 @@ export interface WinHelmNativeBoundary {
     flushed: true;
   };
   atomicReplace(path: string, content: Buffer): AtomicMutationResult;
+  guardedMarkerCommitBegin(
+    targetPath: string,
+    replacementBuffer: Buffer,
+    expectedCurrentSha256: string,
+    expectedVolumeSerialNumber: number,
+    expectedFileIndexHigh: number,
+    expectedFileIndexLow: number,
+  ): GuardedMarkerCommitResult;
+  guardedMarkerCommitAcknowledge(transactionId: string): {
+    acknowledged: true;
+  };
   spawnContained(command: string, args: string[], cwd?: string | null): ContainedProcess;
   spawnContained(
     command: string,
