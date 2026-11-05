@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-11-05
+
+### Changed
+- Synchronized WinHelm product/package/runtime identity at `1.4.2`.
+- Sanitized public repository documentation: removed internal planning, design artifacts, contracts, and test evidence files from `docs/`.
+- Preserved the canonical public MCP surface at **56 tools**.
+
 ## [1.4.1] - 2026-10-20 — Release candidate, publication pending final gates
 
 ### Added
